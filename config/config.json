@@ -1,0 +1,262 @@
+{
+  // ===========================================================================
+  //  AI System Optimizer - default configuration
+  // ===========================================================================
+  //  This file is a *template*. At first run the application copies it to
+  //    %LOCALAPPDATA%\AISystemOptimizer\config.json
+  //  and reads it from there. Edit either copy; changes are picked up on start.
+  //
+  //  Anything you remove keeps its built-in default, so a partially edited file
+  //  is always valid.
+  // ===========================================================================
+
+  "version": "1.0.0",
+
+  // ---------------- Application ----------------
+  "checkForUpdates": true,
+  "runAtStartup": false,
+  "playSounds": true,
+
+  // ---------------- Appearance ----------------
+  "darkMode": true,
+  "useAnimations": true,
+  "useFluentDesign": true,
+  "windowTransparency": 95,
+  "defaultView": "Dashboard",
+  "showAdvancedOptions": false,
+  "showNotifications": true,
+  "minimizeToTray": true,
+  "language": "en-US",
+
+  // ---------------- Optimisation ----------------
+  "defaultOptimizationMode": "Manual",
+  "targetRamUsage": 35,               // your goal; the app tells you honestly if it is unreachable
+  "autoOptimizeEnabled": false,
+  "autoOptimizeInterval": 30,         // minutes
+  "autoOptimizeOnIdle": true,
+  "idleThreshold": 60,                // seconds of no input before "idle" counts
+  "minRamUsageToOptimize": 50,
+  "minCpuUsageToOptimize": 10,
+  "optimizeOnBattery": true,
+  "aggressiveOnBattery": false,
+  "scanSkipCpuSampling": false,
+  "scanCacheSeconds": 5,
+  "preferredPowerModeOnAc": "HighPerformance",
+  "preferredPowerModeOnBattery": "PowerSaver",
+  "managePowerSettings": false,
+
+  // ---------------- AI (optional, local only) ----------------
+  "aiEnabled": true,
+  "aiProvider": "Ollama",
+  "aiModel": "llama3.2:3b",
+  "ollamaServerUrl": "http://localhost:11434",
+
+  // The AI server must be on this machine. Setting this to true also allows a private
+  // network address (192.168.x.x, 10.x.x.x, 172.16-31.x.x). Public addresses are refused
+  // by the endpoint policy whatever this is set to.
+  "allowRemoteAiServer": false,
+
+  "aiConfidenceThreshold": 0.7,
+  "requireAiConfirmation": true,
+  "maxConcurrentAiRequests": 1,
+  "maxAiProcessAnalyses": 10,
+  "aiRequestTimeout": 30,
+
+  // ---------------- Safety ----------------
+  "safetyLayerEnabled": true,
+  "maxAutoRiskLevel": "Low",              // Low | Medium | High | Critical
+  "requireConfirmationForMediumRisk": true,
+  "allowHighRiskActions": false,
+  "allowCriticalRiskActions": false,      // ignored by the validator: critical is always refused
+  "createRestorePoints": true,
+  "backupBeforeOptimization": true,
+  "backupVersionsToKeep": 5,
+
+  // How long an application is politely asked to close itself (WM_CLOSE) before the optimiser
+  // gives up on it. Milliseconds, 500-15000. Longer = a better chance the program saves your work.
+  "closeGracePeriodMs": 3000,
+
+  // How long the verifier waits after optimising before it measures the result, in seconds.
+  // Measuring straight away invents improvements that have not happened yet. 5-30.
+  "verificationSettleSeconds": 8,
+
+  // ---------------- Logging ----------------
+  "loggingEnabled": true,
+  "logLevel": "Info",                     // Verbose | Debug | Info | Warning | Error
+  "logFilePath": "",                       // empty = %LOCALAPPDATA%\AISystemOptimizer\Logs
+  "maxLogFileSizeMB": 10,
+  "maxLogFiles": 5,
+  "logToConsole": false,
+
+  // ---------------- Game mode ----------------
+  "gameModeEnabled": true,
+  "autoDetectGames": true,
+
+  // Additional hints used when deciding whether a process is a game. Matching is one signal
+  // among several (full-screen state, GPU load, install path, launcher); a match alone never
+  // causes anything to be closed.
+  "knownGameExecutables": [
+      "game",
+      "launch",
+      "client",
+      "steam",
+      "epicgames",
+      "origin",
+      "uplay",
+      "battle.net",
+      "riotclient",
+      "valorant",
+      "fortnite",
+      "apex",
+      "callofduty",
+      "cod",
+      "gta",
+      "gta5",
+      "gtav",
+      "minecraft",
+      "javaw",
+      "bedrock",
+      "wow",
+      "worldofwarcraft",
+      "overwatch",
+      "diablo",
+      "starcraft",
+      "hearthstone",
+      "heroes",
+      "dota",
+      "dota2",
+      "csgo",
+      "cs2",
+      "pubg",
+      "battlegrounds",
+      "destiny",
+      "destiny2",
+      "division",
+      "thedivision",
+      "assassin",
+      "ac",
+      "far cry",
+      "farcry",
+      "watch dogs",
+      "watchdogs",
+      "rainbow",
+      "r6",
+      "siege",
+      "forza",
+      "halo",
+      "gears",
+      "gearsofwar",
+      "fallout",
+      "skyrim",
+      "elder scrolls",
+      "elderscrolls",
+      "bethesda",
+      "rockstar",
+      "rstar",
+      "ea",
+      "electronic arts",
+      "activision",
+      "blizzard",
+      "ubisoft",
+      "take2",
+      "2k",
+      "square enix",
+      "capcom",
+      "bandai",
+      "namco",
+      "konami",
+      "sega"
+    ],
+
+  // Applications Game Mode asks to close before a game starts. Anything the user is actively
+  // using is skipped, and nothing on this list is ever force-terminated without the window and
+  // foreground checks passing first.
+  "gameModeCloseList": [
+      "Discord",
+      "Spotify",
+      "Steam",
+      "EpicGamesLauncher",
+      "GalaxyClient",
+      "UbisoftGameLauncher",
+      "Battle.net",
+      "Origin",
+      "Uplay",
+      "GOG Galaxy",
+      "Telegram",
+      "WhatsApp",
+      "Skype",
+      "Slack",
+      "Microsoft Teams",
+      "Zoom",
+      "Chrome",
+      "Firefox",
+      "Edge",
+      "Opera",
+      "Brave",
+      "Vivaldi",
+      "OneDrive",
+      "Dropbox",
+      "GoogleDrive",
+      "Nextcloud",
+      "OwnCloud",
+      "Adobe Creative Cloud",
+      "AdobeCC",
+      "CCLibrary",
+      "NVIDIA GeForce Experience",
+      "NVIDIA Share",
+      "AMD Software",
+      "RadeonSoftware",
+      "Intel Graphics Command Center",
+      "IGCC",
+      "MSI Afterburner",
+      "RivaTuner",
+      "HWMonitor",
+      "CPU-Z",
+      "GPU-Z",
+      "Speccy",
+      "HWiNFO",
+      "OpenHardwareMonitor"
+    ],
+  "gameModeBoostPriority": true,
+  "gameModeSetAffinity": false,
+  "gameModeDisableDefenderScans": false,  // deliberately inert: security is never weakened
+
+  // ---------------- Game & App Optimizer ----------------
+  // This section only reads settings here. Adding a game or application never changes the system;
+  // it writes one profile file. Everything below controls whether a profile is *allowed* to act.
+  "gameAppOptimizerEnabled": true,
+  "gameAppAutoOptimizeOnLaunch": false,       // off by default: a profile never acts on its own
+  "gameAppWatchForLaunches": true,            // watch for launches; acting still needs a profile's consent
+  "gameAppAllowPowerModeChanges": true,       // a profile must still opt in before the power mode is touched
+  "gameAppAllowGraphicsPreferenceChanges": true,
+  "gameAppMaxBenchmarksPerProfile": 50,
+  "gameAppMaxSessionsPerProfile": 50,
+  "gameAppBenchmarkSettleSeconds": 10,        // wait before measuring the result; 5-30s is enforced
+  "gameAppAllowLaunchingApplications": true,
+
+  // ---------------- Never touch these ----------------
+  //  Any program listed here is excluded from every automatic and manual action.
+  //  This is the "Never touch" list in the interface.
+  "excludedProcesses": [],
+
+  // ---------------- Blacklist: never touch these ----------------
+  //  Extend this list if you have a program the optimiser should always ignore.
+  //  The built-in protection for Windows components cannot be removed.
+  "blacklistedProcesses": [
+    "System", "Registry", "smss", "csrss", "wininit", "services", "lsass",
+    "winlogon", "dwm", "explorer", "svchost", "MsMpEng", "NisSrv",
+    "SearchIndexer", "WindowsSearch", "ShellExperienceHost",
+    "StartMenuExperienceHost", "RuntimeBroker", "ApplicationFrameHost",
+    "SystemSettings", "SecurityHealthService", "SecurityHealthSystray"
+  ],
+
+  "blacklistedServices": [
+    "WinDefend", "wscsvc", "MpsSvc", "BFE", "RpcSs", "DcomLaunch",
+    "RpcEptMapper", "PlugPlay", "Power", "Schedule", "Themes", "UserManager",
+    "Winmgmt", "AudioSrv", "AudioEndpointBuilder", "SysMain", "WSearch"
+  ],
+
+  "blacklistedStartupItems": [
+    "Windows Defender", "SecurityHealth", "OneDrive"
+  ]
+}

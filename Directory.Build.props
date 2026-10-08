@@ -1,0 +1,55 @@
+<Project>
+
+  <!--
+    AI System Optimizer - Common Build Properties
+    =============================================
+    Applied to all projects in this solution.
+  -->
+
+  <PropertyGroup>
+    <!-- Language / framework -->
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TargetFramework>net8.0-windows</TargetFramework>
+
+    <!-- Quality / analysis -->
+    <AnalysisLevel>latest</AnalysisLevel>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!--
+      Suppressed on purpose:
+        CA1416  - platform compatibility warnings (this solution is Windows-only)
+        CA1305  - IFormatProvider (log strings are not user facing)
+        CA1031  - catch general exception (every catch in this codebase is defensive and logged)
+        CS1998  - async without await (interface symmetry)
+        CS0169/CS0414 - unused fields kept for schema compatibility
+        CS86xx  - "possible null" family: the older service classes are written in a
+                  defensive style with explicit null checks; the compiler cannot see them.
+                  New code in this repository is written nullable-clean.
+    -->
+    <NoWarn>$(NoWarn);CA1416;CA1305;CA1303;CA1848;CA2000;CA1031;CA1062;SYSLIB1054;CS1998;CS0169;CS0414;NU1701;CS8600;CS8601;CS8602;CS8603;CS8604;CS8618;CS8619;CS8625;CS8629;CS8632</NoWarn>
+
+    <!-- Assembly metadata -->
+    <Product>AI System Optimizer</Product>
+    <Company>AI System Optimizer Team</Company>
+    <Authors>AI System Optimizer Team</Authors>
+    <Copyright>© 2026 AI System Optimizer Team</Copyright>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Description>Intelligent Windows System Optimization Tool - Real, safe, measurable system optimization.</Description>
+
+    <!-- Deterministic / reproducible builds -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+
+    <!-- Runtime behaviour -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+
+    <!-- Windows compatibility: gives us Registry, WMI, PerformanceCounters, Services, WinForms SystemInformation -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,35 @@
+# Build output
+bin/
+obj/
+dist/
+publish/
+*.user
+*.suo
+.vs/
+
+# Test results
+TestResults/
+*.trx
+*.coverage
+
+# Portable / runtime data (created next to the executable in portable mode)
+Logs/
+Backups/
+Reports/
+Cache/
+optimization_history.json
+config.local.json
+
+# OS noise
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# NuGet
+*.nupkg
+packages/
+
+# The portable build is published as a GitHub release asset (see README → Download).
+# It is a 66 MB self-contained binary; committing it would bloat every clone.
+portable/*.exe
+portable/*.pdb

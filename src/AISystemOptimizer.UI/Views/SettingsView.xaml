@@ -1,0 +1,226 @@
+<UserControl x:Class="AISystemOptimizer.UI.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:conv="clr-namespace:AISystemOptimizer.UI.Converters"
+             mc:Ignorable="d"
+             d:DesignHeight="760" d:DesignWidth="980">
+
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
+    </UserControl.Resources>
+
+    <ScrollViewer Style="{StaticResource FluentScrollViewerStyle}">
+        <StackPanel Margin="20,16,20,24">
+
+            <Grid Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Settings" Style="{StaticResource PageTitleStyle}"/>
+                    <TextBlock Text="{Binding ConfigPath}" Margin="0,4,0,0"
+                               Foreground="{DynamicResource TertiaryTextBrush}"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="Open config folder" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,0"
+                            Command="{Binding OpenConfigFolderCommand}"/>
+                    <Button Content="Reset defaults" Style="{StaticResource DangerButtonStyle}" Margin="0,0,8,0"
+                            Command="{Binding ResetDefaultsCommand}"/>
+                    <Button Content="Save" Style="{StaticResource AccentButtonStyle}"
+                            Command="{Binding SaveCommand}"/>
+                </StackPanel>
+            </Grid>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Left column -->
+                <StackPanel Grid.Column="0" Margin="0,0,8,0">
+
+                    <Border Style="{StaticResource CardStyle}" Margin="0,0,0,16">
+                        <StackPanel>
+                            <TextBlock Text="MEMORY TARGET" Style="{StaticResource CardTitleTextStyle}"/>
+                            <TextBlock Text="Target memory usage (percent)" Margin="0,10,0,4"
+                                       Style="{StaticResource CaptionTextStyle}"/>
+                            <Slider Minimum="10" Maximum="90" TickFrequency="5" IsSnapToTickEnabled="True"
+                                    Value="{Binding TargetRamUsage}"
+                                    Foreground="{StaticResource AccentBrush}"/>
+                            <TextBlock Margin="0,4,0,0">
+                                <Run Text="{Binding TargetRamUsage, Mode=OneWay}"/>
+                                <Run Text="%"/>
+                            </TextBlock>
+                            <TextBlock Text="{Binding TargetRamReachability}" Margin="0,8,0,0"
+                                       TextWrapping="Wrap" Style="{StaticResource CardBodyTextStyle}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardStyle}" Margin="0,0,0,16">
+                        <StackPanel>
+                            <TextBlock Text="AUTOMATION" Style="{StaticResource CardTitleTextStyle}"/>
+
+                            <CheckBox Margin="0,12,0,0" Content="Enable automatic optimisation"
+                                      Foreground="{DynamicResource WindowForegroundBrush}"
+                                      IsChecked="{Binding AutoOptimizeEnabled}"/>
+                            <CheckBox Margin="0,8,0,0" Content="Only optimise while the system is idle"
+                                      Foreground="{DynamicResource WindowForegroundBrush}"
+                                      IsChecked="{Binding AutoOptimizeOnIdle}"/>
+                            <CheckBox Margin="0,8,0,0" Content="Optimise when running on battery"
+                                      Foreground="{DynamicResource WindowForegroundBrush}"
+                                      IsChecked="{Binding OptimizeOnBattery}"/>
+
+                            <TextBlock Text="Interval (minutes)" Margin="0,12,0,4" Style="{StaticResource CaptionTextStyle}"/>
+                            <TextBox Style="{StaticResource FluentTextBoxStyle}" Width="100" HorizontalAlignment="Left"
+                                     Text="{Binding AutoOptimizeInterval}"/>
+
+                            <TextBlock Text="Idle threshold (seconds)" Margin="0,12,0,4" Style="{StaticResource CaptionTextStyle}"/>
+                            <TextBox Style="{StaticResource FluentTextBoxStyle}" Width="100" HorizontalAlignment="Left"
+                                     Text="{Binding IdleThreshold}"/>
+
+                            <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" FontSize="11"
+                                       Foreground="{DynamicResource TertiaryTextBrush}"
+                                       Text="Automatic mode still shows a preview before changing anything. It never makes risky changes on its own."/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardStyle}" Margin="0,0,0,16">
+                        <StackPanel>
+                            <TextBlock Text="PROTECTED PROCESSES (WHITELIST)" Style="{StaticResource CardTitleTextStyle}"/>
+                            <TextBlock Text="{Binding ProtectedSummary}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                       Style="{StaticResource CaptionTextStyle}"/>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                <TextBox Width="200" Style="{StaticResource FluentTextBoxStyle}"
+                                         Text="{Binding NewWhitelistEntry, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Process name, e.g. chrome.exe"/>
+                                <Button Content="Add" Margin="8,0,0,0" Style="{StaticResource SecondaryButtonStyle}"
+                                        Command="{Binding AddWhitelistCommand}"/>
+                            </StackPanel>
+
+                            <ItemsControl ItemsSource="{Binding Whitelist}" Margin="0,10,0,0">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" Style="{StaticResource CardBodyTextStyle}" Margin="0,2"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Right column -->
+                <StackPanel Grid.Column="1" Margin="8,0,0,0">
+
+                    <Border Style="{StaticResource CardStyle}" Margin="0,0,0,16">
+                        <StackPanel>
+                            <TextBlock Text="LOCAL AI (OPTIONAL)" Style="{StaticResource CardTitleTextStyle}"/>
+                            <TextBlock Text="{Binding AiConfigurationHint}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                       Style="{StaticResource CaptionTextStyle}"/>
+
+                            <CheckBox Margin="0,12,0,0" Content="Use the local AI for explanations and second opinions"
+                                      Foreground="{DynamicResource WindowForegroundBrush}"
+                                      IsChecked="{Binding AiEnabled}"/>
+
+                            <TextBlock Text="Ollama server URL" Margin="0,12,0,4" Style="{StaticResource CaptionTextStyle}"/>
+                            <TextBox Style="{StaticResource FluentTextBoxStyle}" Text="{Binding OllamaUrl}"/>
+
+                            <TextBlock Text="Model name" Margin="0,10,0,4" Style="{StaticResource CaptionTextStyle}"/>
+                            <TextBox Style="{StaticResource FluentTextBoxStyle}" Text="{Binding AiModel}"/>
+
+                            <Button Content="Test connection" Margin="0,12,0,0"
+                                    HorizontalAlignment="Left"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding TestAiCommand}"/>
+
+                            <TextBlock Text="{Binding AiStatus}" Margin="0,10,0,0" TextWrapping="Wrap"
+                                       Style="{StaticResource CardBodyTextStyle}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardStyle}" Margin="0,0,0,16">
+                        <StackPanel>
+                            <TextBlock Text="SAFETY" Style="{StaticResource CardTitleTextStyle}"/>
+
+                            <CheckBox Margin="0,12,0,0" Content="Safety layer enabled (recommended)"
+                                      Foreground="{DynamicResource WindowForegroundBrush}"
+                                      IsChecked="{Binding SafetyLayerEnabled}"/>
+                            <CheckBox Margin="0,8,0,0" Content="Ask for confirmation on medium-risk actions"
+                                      Foreground="{DynamicResource WindowForegroundBrush}"
+                                      IsChecked="{Binding RequireConfirmationForMediumRisk}"/>
+                            <CheckBox Margin="0,8,0,0" Content="Create a restore point before changing system settings"
+                                      Foreground="{DynamicResource WindowForegroundBrush}"
+                                      IsChecked="{Binding CreateRestorePoints}"/>
+                            <CheckBox Margin="0,8,0,0" Content="Allow high-risk actions (not recommended)"
+                                      Foreground="{DynamicResource WindowForegroundBrush}"
+                                      IsChecked="{Binding AllowHighRiskActions}"
+                                      ToolTip="Even when enabled, actions against critical Windows components remain blocked."/>
+
+                            <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" FontSize="11"
+                                       Foreground="{DynamicResource TertiaryTextBrush}"
+                                       Text="Critical-risk actions cannot be enabled at all. The list of protected components is built into the application."/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardStyle}" Margin="0,0,0,16">
+                        <StackPanel>
+                            <TextBlock Text="APPEARANCE" Style="{StaticResource CardTitleTextStyle}"/>
+                            <CheckBox Margin="0,12,0,0" Content="Dark mode"
+                                      Foreground="{DynamicResource WindowForegroundBrush}"
+                                      IsChecked="{Binding DarkMode}"/>
+                            <CheckBox Margin="0,8,0,0" Content="Animations"
+                                      Foreground="{DynamicResource WindowForegroundBrush}"
+                                      IsChecked="{Binding UseAnimations}"/>
+                            <CheckBox Margin="0,8,0,0" Content="Notifications"
+                                      Foreground="{DynamicResource WindowForegroundBrush}"
+                                      IsChecked="{Binding ShowNotifications}"/>
+                            <CheckBox Margin="0,8,0,0" Content="Minimise to tray on close"
+                                      Foreground="{DynamicResource WindowForegroundBrush}"
+                                      IsChecked="{Binding MinimizeToTray}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardStyle}" Margin="0,0,0,16">
+                        <StackPanel>
+                            <TextBlock Text="LOGGING" Style="{StaticResource CardTitleTextStyle}"/>
+                            <CheckBox Margin="0,12,0,0" Content="Enable logging"
+                                      Foreground="{DynamicResource WindowForegroundBrush}"
+                                      IsChecked="{Binding LoggingEnabled}"/>
+
+                            <TextBlock Text="Log level" Margin="0,10,0,4" Style="{StaticResource CaptionTextStyle}"/>
+                            <ComboBox Width="140" HorizontalAlignment="Left"
+                                      Style="{StaticResource FluentComboBoxStyle}"
+                                      ItemsSource="{Binding LogLevels}"
+                                      SelectedItem="{Binding LogLevel}"/>
+
+                            <TextBlock Text="{Binding LogPath}" Margin="0,10,0,0" TextWrapping="Wrap"
+                                       Style="{StaticResource CaptionTextStyle}"/>
+                            <Button Content="Open log folder" Margin="0,8,0,0" HorizontalAlignment="Left"
+                                    Style="{StaticResource LinkButtonStyle}"
+                                    Command="{Binding OpenConfigFolderCommand}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="GAME MODE" Style="{StaticResource CardTitleTextStyle}"/>
+                            <CheckBox Margin="0,12,0,0" Content="Enable Game Mode"
+                                      Foreground="{DynamicResource WindowForegroundBrush}"
+                                      IsChecked="{Binding GameModeEnabled}"/>
+                            <CheckBox Margin="0,8,0,0" Content="Detect games automatically"
+                                      Foreground="{DynamicResource WindowForegroundBrush}"
+                                      IsChecked="{Binding AutoDetectGames}"/>
+                            <CheckBox Margin="0,8,0,0" Content="Raise game priority (AboveNormal maximum)"
+                                      Foreground="{DynamicResource WindowForegroundBrush}"
+                                      IsChecked="{Binding GameModeBoostPriority}"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

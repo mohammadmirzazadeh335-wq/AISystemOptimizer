@@ -1,0 +1,391 @@
+<UserControl x:Class="AISystemOptimizer.UI.Views.DashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="clr-namespace:AISystemOptimizer.UI.Controls"
+             xmlns:conv="clr-namespace:AISystemOptimizer.UI.Converters"
+             mc:Ignorable="d"
+             d:DesignHeight="700" d:DesignWidth="960">
+
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
+        <conv:PercentToBrushConverter x:Key="PercentToBrush"/>
+        <conv:ScoreToBrushConverter x:Key="ScoreToBrush"/>
+        <conv:BytesToReadableConverter x:Key="BytesToReadable"/>
+    </UserControl.Resources>
+
+    <ScrollViewer Style="{StaticResource FluentScrollViewerStyle}">
+        <StackPanel Margin="20,16,20,24" Style="{StaticResource PageTransitionStyle}">
+
+            <!-- ==================== Header ==================== -->
+            <Grid Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="System Dashboard" Style="{StaticResource PageTitleStyle}"/>
+                    <TextBlock Text="{Binding HardwareSummary}"
+                               Margin="0,4,0,0"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{Binding SecuritySummary}"
+                               Margin="0,2,0,0"
+                               FontSize="11.5"
+                               Foreground="{DynamicResource TertiaryTextBrush}"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="Analyze System"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Margin="0,0,8,0"
+                            Command="{Binding StartAnalysisCommand}"/>
+                    <Button Content="Smart Optimize"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Margin="0,0,8,0"
+                            Command="{Binding SmartOptimizeCommand}"/>
+                    <Button Content="Stop"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            ToolTip="Stop the analysis or plan build that is running."
+                            Command="{Binding CancelCommand}"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- ==================== Live metric cards ==================== -->
+            <UniformGrid Rows="1" Margin="0,0,0,16">
+                <!-- RAM -->
+                <Border Style="{StaticResource MetricCardStyle}" Margin="0,0,8,0">
+                    <StackPanel>
+                        <TextBlock Text="MEMORY" Style="{StaticResource CaptionTextStyle}"/>
+                        <TextBlock Text="{Binding RamPercentText}" Style="{StaticResource MetricValueStyle}"/>
+                        <TextBlock Text="{Binding RamUsedText}" Style="{StaticResource CardBodyTextStyle}"/>
+                        <controls:SparklineControl Height="34" Margin="0,6,0,0"
+                                                   Values="{Binding RamSamples}"
+                                                   LineBrush="#FF744DA9"
+                                                   Maximum="100"/>
+                        <ProgressBar Style="{StaticResource MetricProgressBarStyle}"
+                                     Margin="0,6,0,0"
+                                     Value="{Binding RamPercent, Mode=OneWay}"
+                                     Maximum="100"
+                                     Foreground="{Binding RamPercent, Converter={StaticResource PercentToBrush}}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- CPU -->
+                <Border Style="{StaticResource MetricCardStyle}" Margin="4,0,4,0">
+                    <StackPanel>
+                        <TextBlock Text="CPU" Style="{StaticResource CaptionTextStyle}"/>
+                        <TextBlock Text="{Binding CpuPercentText}" Style="{StaticResource MetricValueStyle}"/>
+                        <TextBlock Text="{Binding SystemInfo.CpuName}"
+                                   Style="{StaticResource CardBodyTextStyle}"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <controls:SparklineControl Height="34" Margin="0,6,0,0"
+                                                   Values="{Binding CpuSamples}"
+                                                   LineBrush="#FF0F6CBD"
+                                                   Maximum="100"/>
+                        <ProgressBar Style="{StaticResource MetricProgressBarStyle}"
+                                     Margin="0,6,0,0"
+                                     Value="{Binding CpuPercent, Mode=OneWay}"
+                                     Maximum="100"
+                                     Foreground="{Binding CpuPercent, Converter={StaticResource PercentToBrush}}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- GPU -->
+                <Border Style="{StaticResource MetricCardStyle}" Margin="4,0,4,0">
+                    <StackPanel>
+                        <TextBlock Text="GPU" Style="{StaticResource CaptionTextStyle}"/>
+                        <TextBlock Text="{Binding GpuPercentText}" Style="{StaticResource MetricValueStyle}"/>
+                        <TextBlock Text="{Binding SystemInfo.PrimaryGpu.Name, TargetNullValue='Not detected'}"
+                                   Style="{StaticResource CardBodyTextStyle}"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <controls:SparklineControl Height="34" Margin="0,6,0,0"
+                                                   Values="{Binding GpuSamples}"
+                                                   LineBrush="#FF00838F"
+                                                   Maximum="100"/>
+                        <TextBlock Text="GPU temperature: N/A on this hardware"
+                                   Margin="0,6,0,0"
+                                   Style="{StaticResource CaptionTextStyle}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Disk -->
+                <Border Style="{StaticResource MetricCardStyle}" Margin="8,0,0,0">
+                    <StackPanel>
+                        <TextBlock Text="DISK ACTIVITY" Style="{StaticResource CaptionTextStyle}"/>
+                        <TextBlock Text="{Binding DiskPercentText}" Style="{StaticResource MetricValueStyle}"/>
+                        <TextBlock Text="{Binding SystemInfo.SystemDisk.Type, TargetNullValue='Unknown'}"
+                                   Style="{StaticResource CardBodyTextStyle}"/>
+                        <controls:SparklineControl Height="34" Margin="0,6,0,0"
+                                                   Values="{Binding DiskSamples}"
+                                                   LineBrush="#FFCA5010"
+                                                   Maximum="100"/>
+                        <TextBlock Style="{StaticResource CaptionTextStyle}"
+                                   Margin="0,6,0,0">
+                            <Run Text="Free:"/>
+                            <Run Text="{Binding SystemInfo.SystemDisk.FormattedFreeSpace, Mode=OneWay}"/>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+            </UniformGrid>
+
+            <!-- ==================== Health + target ==================== -->
+            <Grid Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Health score -->
+                <Border Grid.Column="0" Style="{StaticResource CardStyle}" Margin="0,0,8,0">
+                    <StackPanel>
+                        <TextBlock Text="SYSTEM HEALTH SCORE" Style="{StaticResource CaptionTextStyle}"/>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,8">
+                            <TextBlock Text="{Binding HealthScoreText}"
+                                       FontSize="38"
+                                       FontWeight="SemiBold"
+                                       Foreground="{Binding HealthScore, Converter={StaticResource ScoreToBrush}}"/>
+                            <TextBlock Text="overall"
+                                       Margin="10,0,0,6"
+                                       VerticalAlignment="Bottom"
+                                       Foreground="{DynamicResource TertiaryTextBrush}"/>
+                        </StackPanel>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Memory" Style="{StaticResource CardBodyTextStyle}"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding RamScore}" Style="{StaticResource CardBodyTextStyle}"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="CPU" Style="{StaticResource CardBodyTextStyle}"/>
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding CpuScore}" Style="{StaticResource CardBodyTextStyle}"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Disk" Style="{StaticResource CardBodyTextStyle}"/>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding DiskScore}" Style="{StaticResource CardBodyTextStyle}"/>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Start-up" Style="{StaticResource CardBodyTextStyle}"/>
+                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding StartupScore}" Style="{StaticResource CardBodyTextStyle}"/>
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Background apps" Style="{StaticResource CardBodyTextStyle}"/>
+                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding BackgroundScore}" Style="{StaticResource CardBodyTextStyle}"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- RAM target -->
+                <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="8,0,0,0">
+                    <StackPanel>
+                        <TextBlock Text="MEMORY TARGET" Style="{StaticResource CaptionTextStyle}"/>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,4">
+                            <TextBlock Text="{Binding RamPercentText}"
+                                       FontSize="38"
+                                       FontWeight="SemiBold"
+                                       Foreground="{Binding RamPercent, Converter={StaticResource PercentToBrush}}"/>
+                            <TextBlock Text="currently used"
+                                       Margin="10,0,0,6"
+                                       VerticalAlignment="Bottom"
+                                       Foreground="{DynamicResource TertiaryTextBrush}"/>
+                        </StackPanel>
+
+                        <TextBlock Text="{Binding RamTargetMessage}"
+                                   Style="{StaticResource CardBodyTextStyle}"
+                                   Margin="0,4,0,8"/>
+
+                        <TextBlock Text="Progress towards a safely reachable target"
+                                   Style="{StaticResource CaptionTextStyle}"/>
+                        <ProgressBar Style="{StaticResource MetricProgressBarStyle}"
+                                     Margin="0,4,0,0"
+                                     Maximum="100"
+                                     Value="{Binding RamTargetProgress, Mode=OneWay}"
+                                     Foreground="{StaticResource AccentBrush}"/>
+                        <TextBlock Text="{Binding RamTargetProgress, StringFormat='{}{0}% of the target is achievable without touching Windows internals'}"
+                                   Margin="0,4,0,0"
+                                   Style="{StaticResource CaptionTextStyle}"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- ==================== Actions + recommendations ==================== -->
+            <Grid Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Quick actions -->
+                <Border Grid.Column="0" Style="{StaticResource CardStyle}" Margin="0,0,8,0">
+                    <StackPanel>
+                        <TextBlock Text="QUICK ACTIONS" Style="{StaticResource CaptionTextStyle}"/>
+                        <TextBlock Text="{Binding OptimizationSummary}"
+                                   Style="{StaticResource CardBodyTextStyle}"
+                                   Margin="0,8,0,12"/>
+
+                        <Button Content="Run Smart Optimize"
+                                Style="{StaticResource AccentButtonStyle}"
+                                HorizontalAlignment="Stretch"
+                                Margin="0,0,0,8"
+                                Command="{Binding SmartOptimizeCommand}"/>
+
+                        <Button Content="Smart RAM clean (safe caches only)"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                HorizontalAlignment="Stretch"
+                                Margin="0,0,0,8"
+                                Command="{Binding SmartRamCleanCommand}"
+                                ToolTip="Removes user temp files, the thumbnail cache and the DNS cache. It never clears the standby list or working sets, because that makes Windows slower."/>
+
+                        <Button Content="Show all processes"
+                                Style="{StaticResource LinkButtonStyle}"
+                                HorizontalAlignment="Left"
+                                Command="{Binding ShowProcessesCommand}"/>
+
+                        <Border Margin="0,12,0,0"
+                                Padding="10"
+                                CornerRadius="4"
+                                Background="{DynamicResource RiskLowBackgroundBrush}"
+                                Visibility="{Binding HasCleanResult, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{Binding CleanResultMessage}"
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource CardForegroundBrush}"/>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <!-- Recommendations -->
+                <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="8,0,0,0">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Text="WHAT THE ANALYSER RECOMMENDS" Style="{StaticResource CaptionTextStyle}"/>
+
+                        <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto" Margin="0,8,0,0">
+                            <ItemsControl ItemsSource="{Binding Recommendations}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,0,0,8"
+                                                Padding="10"
+                                                CornerRadius="4"
+                                                Background="{DynamicResource ControlBackgroundBrush}">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Title}"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource CardTitleBrush}"
+                                                           TextWrapping="Wrap"/>
+                                                <TextBlock Text="{Binding Description}"
+                                                           Margin="0,4,0,0"
+                                                           Style="{StaticResource CardBodyTextStyle}"/>
+                                                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                                    <TextBlock Text="{Binding Category}"
+                                                               Style="{StaticResource CaptionTextStyle}"/>
+                                                    <TextBlock Text="  \u2022  "
+                                                               Style="{StaticResource CaptionTextStyle}"/>
+                                                    <TextBlock Text="{Binding EstimatedImprovement}"
+                                                               Style="{StaticResource CaptionTextStyle}"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Border>
+            </Grid>
+
+            <!-- ==================== Top processes + memory detail ==================== -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Style="{StaticResource CardStyle}" Margin="0,0,8,0">
+                    <StackPanel>
+                        <TextBlock Text="LARGEST MEMORY USERS" Style="{StaticResource CaptionTextStyle}"/>
+                        <ItemsControl ItemsSource="{Binding TopProcesses}" Margin="0,8,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,3">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0"
+                                                   Text="{Binding DisplayName}"
+                                                   Style="{StaticResource CardBodyTextStyle}"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding FormattedWorkingSet}"
+                                                   Style="{StaticResource CardBodyTextStyle}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="8,0,0,0">
+                    <StackPanel>
+                        <TextBlock Text="MEMORY BREAKDOWN (REAL NUMBERS)" Style="{StaticResource CaptionTextStyle}"/>
+
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="In use by processes" Style="{StaticResource CardBodyTextStyle}"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Memory.FormattedUsed}" Style="{StaticResource CardBodyTextStyle}"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Available" Style="{StaticResource CardBodyTextStyle}"/>
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Memory.FormattedAvailable}" Style="{StaticResource CardBodyTextStyle}"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Cached" Style="{StaticResource CardBodyTextStyle}"/>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Memory.FormattedCached}" Style="{StaticResource CardBodyTextStyle}"/>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Standby" Style="{StaticResource CardBodyTextStyle}"/>
+                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Memory.FormattedStandby}" Style="{StaticResource CardBodyTextStyle}"/>
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Committed" Style="{StaticResource CardBodyTextStyle}"/>
+                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Memory.FormattedCommitted}" Style="{StaticResource CardBodyTextStyle}"/>
+
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Paged / non-paged pool" Style="{StaticResource CardBodyTextStyle}"/>
+                            <TextBlock Grid.Row="5" Grid.Column="1" Style="{StaticResource CardBodyTextStyle}">
+                                <Run Text="{Binding Memory.FormattedPagedPool, Mode=OneWay}"/>
+                                <Run Text=" / "/>
+                                <Run Text="{Binding Memory.FormattedNonPagedPool, Mode=OneWay}"/>
+                            </TextBlock>
+                        </Grid>
+
+                        <TextBlock Text="{Binding MemoryFootnote}"
+                                   Margin="0,10,0,0"
+                                   TextWrapping="Wrap"
+                                   FontSize="11.5"
+                                   Foreground="{DynamicResource TertiaryTextBrush}"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

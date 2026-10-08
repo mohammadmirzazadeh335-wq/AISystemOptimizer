@@ -1,0 +1,17 @@
+<Application x:Class="AISystemOptimizer.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="pack://application:,,,/AISystemOptimizer.UI;component/Views/MainWindow.xaml"
+             ShutdownMode="OnMainWindowClose">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Theme resources live in the UI assembly so both can be reused/tested separately -->
+                <ResourceDictionary Source="pack://application:,,,/AISystemOptimizer.UI;component/Styles/Colors.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/AISystemOptimizer.UI;component/Styles/FluentDesign.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/AISystemOptimizer.UI;component/Styles/DarkTheme.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/AISystemOptimizer.UI;component/Styles/Animations.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

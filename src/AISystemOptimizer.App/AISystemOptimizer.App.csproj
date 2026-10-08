@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>AISystemOptimizer.App</RootNamespace>
+    <!--
+      AssemblyName defaults to AISystemOptimizer. The portable publish passes -p:PortableName=AIOptimizer
+      which we consume here. A dedicated property is used instead of overriding AssemblyName globally,
+      because a global AssemblyName override confuses project-reference resolution between the
+      Core / UI / App projects.
+    -->
+    <AssemblyName Condition="'$(PortableName)' == ''">AISystemOptimizer</AssemblyName>
+    <AssemblyName Condition="'$(PortableName)' != ''">$(PortableName)</AssemblyName>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <StartupObject>AISystemOptimizer.App.App</StartupObject>
+
+    <!-- Portable single-file build support (see scripts/publish-portable.ps1) -->
+    <PublishSingleFile Condition="'$(PublishSingleFile)' == ''">false</PublishSingleFile>
+    <SelfContained Condition="'$(SelfContained)' == ''">false</SelfContained>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+    <PublishReadyToRun Condition="'$(PublishReadyToRun)' == ''">false</PublishReadyToRun>
+    <!-- Single-file compression is only legal for self-contained bundles. -->
+    <EnableCompressionInSingleFile Condition="'$(PublishSingleFile)' == 'true' and '$(SelfContained)' == 'true'">true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AISystemOptimizer.Core\AISystemOptimizer.Core.csproj" />
+    <ProjectReference Include="..\AISystemOptimizer.UI\AISystemOptimizer.UI.csproj" />
+  </ItemGroup>
+
+</Project>

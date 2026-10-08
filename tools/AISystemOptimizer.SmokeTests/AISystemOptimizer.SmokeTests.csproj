@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Console harness for real-Windows validation.
+
+    It references Core directly so that the checks drive the production code paths rather than a
+    re-implementation of them. Everything it does is read-only except the checks that create and
+    destroy their own throwaway child processes; it never touches a process it did not start.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>AISystemOptimizer.SmokeTests</AssemblyName>
+    <RootNamespace>AISystemOptimizer.SmokeTests</RootNamespace>
+    <Nullable>disable</Nullable>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AISystemOptimizer.Core\AISystemOptimizer.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The harness reads the registry and WMI itself, to cross-check what the application reports. -->
+    <PackageReference Include="Microsoft.Windows.Compatibility" Version="8.0.0" />
+    <PackageReference Include="System.Management" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      The shipped configuration template is copied next to the harness so that "the template this build
+      ships can actually be loaded by this build" is checked on the target machine, not only in the
+      unit tests.
+    -->
+    <None Include="..\..\config\config.defaults.json"
+          Link="config.defaults.json"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

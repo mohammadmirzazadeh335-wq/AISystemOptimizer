@@ -1,0 +1,292 @@
+<UserControl x:Class="AISystemOptimizer.UI.Views.GameAppOptimizerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:conv="clr-namespace:AISystemOptimizer.UI.Converters"
+             mc:Ignorable="d"
+             d:DesignHeight="720" d:DesignWidth="1000">
+
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
+    </UserControl.Resources>
+
+    <ScrollViewer Style="{StaticResource FluentScrollViewerStyle}">
+        <StackPanel Margin="20,16,20,24">
+
+            <!-- Title and the one-line promise this page makes. -->
+            <TextBlock Text="🎮 Game &amp; App Optimizer" Style="{StaticResource PageTitleStyle}"/>
+            <TextBlock Text="Create safe, application-specific performance profiles."
+                       Margin="0,4,0,0"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource SecondaryTextBrush}"/>
+
+            <TextBlock Margin="0,8,0,0"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource TertiaryTextBrush}"
+                       Text="Adding an application only creates a profile - it changes nothing on this machine. Every change a profile makes is recorded before it happens, and put back when the application exits."/>
+
+            <!-- The interrupted-session banner. It appears only when there is something real to say. -->
+            <Border Style="{StaticResource CardStyle}"
+                    Margin="0,16,0,0"
+                    Visibility="{Binding HasInterruptedSession, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="AN OPTIMIZATION SESSION WAS INTERRUPTED"
+                               Style="{StaticResource CaptionTextStyle}"
+                               Foreground="{DynamicResource WarningBrush}"/>
+                    <TextBlock Text="{Binding InterruptedDescription}"
+                               Margin="0,8,0,0"
+                               TextWrapping="Wrap"
+                               Style="{StaticResource CardBodyTextStyle}"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button Content="Restore" Style="{StaticResource AccentButtonStyle}"
+                                Margin="0,0,8,0" Command="{Binding RestoreInterruptedCommand}"/>
+                        <Button Content="Review" Style="{StaticResource SecondaryButtonStyle}"
+                                Margin="0,0,8,0" Command="{Binding ShowInterruptedDetailsCommand}"/>
+                        <Button Content="Keep the changes" Style="{StaticResource SecondaryButtonStyle}"
+                                Command="{Binding DismissInterruptedCommand}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Add / refresh and the current status line. -->
+            <Grid Margin="0,16,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Button Grid.Column="0"
+                        Content="+ Add Game / App"
+                        Style="{StaticResource AccentButtonStyle}"
+                        Command="{Binding AddApplicationCommand}"/>
+
+                <Button Grid.Column="1"
+                        Content="Refresh"
+                        Margin="8,0,0,0"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        Command="{Binding RefreshCommand}"/>
+
+                <TextBlock Grid.Column="2"
+                           Text="{Binding StatusMessage}"
+                           Margin="12,0,0,0"
+                           VerticalAlignment="Center"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource SecondaryTextBrush}"/>
+            </Grid>
+
+            <!-- Sub-areas. -->
+            <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                <RadioButton Content="My Games &amp; Apps" GroupName="GameAppArea"
+                             Style="{StaticResource NavigationRadioButtonStyle}"
+                             Command="{Binding ShowAreaCommand}" CommandParameter="MyApps"
+                             IsChecked="{Binding IsMyAppsArea, Mode=OneWay}"/>
+                <RadioButton Content="Running" GroupName="GameAppArea"
+                             Style="{StaticResource NavigationRadioButtonStyle}"
+                             Command="{Binding ShowAreaCommand}" CommandParameter="Running"
+                             IsChecked="{Binding IsRunningArea, Mode=OneWay}"/>
+                <RadioButton Content="Profiles" GroupName="GameAppArea"
+                             Style="{StaticResource NavigationRadioButtonStyle}"
+                             Command="{Binding ShowAreaCommand}" CommandParameter="Profiles"
+                             IsChecked="{Binding IsProfilesArea, Mode=OneWay}"/>
+                <RadioButton Content="Benchmarks" GroupName="GameAppArea"
+                             Style="{StaticResource NavigationRadioButtonStyle}"
+                             Command="{Binding ShowAreaCommand}" CommandParameter="Benchmarks"
+                             IsChecked="{Binding IsBenchmarksArea, Mode=OneWay}"/>
+                <RadioButton Content="History" GroupName="GameAppArea"
+                             Style="{StaticResource NavigationRadioButtonStyle}"
+                             Command="{Binding ShowAreaCommand}" CommandParameter="History"
+                             IsChecked="{Binding IsHistoryArea, Mode=OneWay}"/>
+            </StackPanel>
+
+            <!-- Empty state: what to do, and what will not happen. -->
+            <Border Style="{StaticResource CardStyle}" Margin="0,16,0,0"
+                    Visibility="{Binding HasNoApplications, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="NO APPLICATIONS YET" Style="{StaticResource CaptionTextStyle}"/>
+                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Style="{StaticResource CardBodyTextStyle}"
+                               Text="Choose an executable with &quot;+ Add Game / App&quot;. The file is read and hashed to identify it - it is never started in order to inspect it, and its name alone is never treated as proof of what it is."/>
+                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Style="{StaticResource CardBodyTextStyle}"
+                               Text="A profile created here has mode Balanced: a conservative priority change and a temporary power mode, both restored afterwards. Automatic optimisation is off until you turn it on for a specific application."/>
+                </StackPanel>
+            </Border>
+
+            <!-- The application cards. -->
+            <ItemsControl ItemsSource="{Binding Cards}" Margin="0,8,0,0"
+                          Visibility="{Binding HasApplications, Converter={StaticResource BoolToVisibility}}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource CardStyle}" Margin="0,8,0,0">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="{Binding DisplayName}" Style="{StaticResource CardTitleTextStyle}"/>
+                                        <TextBlock Text="{Binding ExecutablePath}" Margin="0,2,0,0"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource TertiaryTextBrush}"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="1" HorizontalAlignment="Right">
+                                        <TextBlock Text="{Binding StatusText}" HorizontalAlignment="Right"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource AccentBrush}"/>
+                                        <TextBlock Text="{Binding ProfileModeText}" HorizontalAlignment="Right"
+                                                   Margin="0,2,0,0"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <TextBlock Text="{Binding StatusDetail}" Margin="0,6,0,0"
+                                           TextWrapping="Wrap"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"/>
+
+                                <!-- Metadata read from the file, all of it factual. -->
+                                <WrapPanel Margin="0,8,0,0">
+                                    <TextBlock Text="{Binding PublisherText}" Margin="0,0,16,0"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"/>
+                                    <TextBlock Text="{Binding SignatureText}" Margin="0,0,16,0"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"/>
+                                    <TextBlock Text="{Binding ArchitectureText}" Margin="0,0,16,0"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"/>
+                                    <TextBlock Text="{Binding FileSizeText}" Margin="0,0,16,0"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"/>
+                                    <TextBlock Text="{Binding HashText}"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"/>
+                                </WrapPanel>
+
+                                <TextBlock Text="{Binding HealthText}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"/>
+
+                                <ItemsControl ItemsSource="{Binding HealthFindings}" Margin="6,4,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource TertiaryTextBrush}"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <TextBlock Text="{Binding PerformanceSummary}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource TertiaryTextBrush}"/>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                    <Button Content="Optimize" Style="{StaticResource AccentButtonStyle}"
+                                            Margin="0,0,8,0" Command="{Binding OptimizeCommand}"/>
+                                    <Button Content="Launch" Style="{StaticResource SecondaryButtonStyle}"
+                                            Margin="0,0,8,0" Command="{Binding LaunchCommand}"/>
+                                    <Button Content="Profile" Style="{StaticResource SecondaryButtonStyle}"
+                                            Margin="0,0,8,0" Command="{Binding OpenProfileCommand}"/>
+                                    <Button Content="Remove" Style="{StaticResource DangerButtonStyle}"
+                                            Command="{Binding RemoveCommand}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- What the selected profile would do. -->
+            <Border Style="{StaticResource CardStyle}" Margin="0,16,0,0"
+                    Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="WHAT THIS PROFILE WOULD DO" Style="{StaticResource CaptionTextStyle}"/>
+                    <TextBlock Text="{Binding PlanPreview}" Margin="0,8,0,0" TextWrapping="Wrap"
+                               Style="{StaticResource CardBodyTextStyle}"/>
+
+                    <Button Content="AI Analyze" Style="{StaticResource SecondaryButtonStyle}"
+                            HorizontalAlignment="Left" Margin="0,10,0,0"
+                            Command="{Binding AnalyzeWithAiCommand}"/>
+
+                    <TextBlock Margin="0,6,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TertiaryTextBrush}"
+                               Text="The model is asked with the application, system and runtime measurements above. It may only recommend from a fixed list of actions - close an approved background application, change this application's priority, use a performance power mode, or set its graphics preference. Anything else is refused with a reason, and no suggestion is ever applied without your confirmation."/>
+                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TertiaryTextBrush}"
+                               Text="Nothing here can be applied without your confirmation, and everything reversible is restored when the session ends."/>
+                </StackPanel>
+            </Border>
+
+            <!-- RAM section: the three figures, kept apart on purpose. -->
+            <Border Style="{StaticResource CardStyle}" Margin="0,16,0,0">
+                <StackPanel>
+                    <TextBlock Text="RAM OPTIMIZATION" Style="{StaticResource CaptionTextStyle}"/>
+
+                    <ItemsControl ItemsSource="{Binding MemoryLines}" Margin="0,8,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" Margin="0,1,0,1"
+                                           Style="{StaticResource CardBodyTextStyle}"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Text="{Binding RamTargetText}" Margin="0,10,0,0" TextWrapping="Wrap"
+                               Style="{StaticResource CardBodyTextStyle}"/>
+
+                    <ItemsControl ItemsSource="{Binding RamStatements}" Margin="0,6,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" Margin="0,2,0,2" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TertiaryTextBrush}"
+                               Text="Not done here, and not offered: emptying working sets, clearing caches, clearing the standby list or closing processes by name. Those do not free memory for long, and some of them make the machine slower."/>
+                </StackPanel>
+            </Border>
+
+            <!-- Optimization potential: itemised, addable by hand. -->
+            <Border Style="{StaticResource CardStyle}" Margin="0,16,0,0">
+                <StackPanel>
+                    <TextBlock Text="OPTIMIZATION POTENTIAL" Style="{StaticResource CaptionTextStyle}"/>
+
+                    <TextBlock Text="{Binding PotentialText}" Margin="0,6,0,0"
+                               Style="{StaticResource MetricValueStyle}"/>
+
+                    <TextBlock Text="{Binding PotentialSummary}" Margin="0,6,0,0" TextWrapping="Wrap"
+                               Style="{StaticResource CardBodyTextStyle}"/>
+
+                    <ItemsControl ItemsSource="{Binding PotentialBreakdown}" Margin="0,8,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" Margin="0,1,0,1"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- The session and the running account of what this page has done. -->
+            <Border Style="{StaticResource CardStyle}" Margin="0,16,0,0">
+                <StackPanel>
+                    <TextBlock Text="SESSION" Style="{StaticResource CaptionTextStyle}"/>
+
+                    <TextBlock Text="{Binding SessionText}" Margin="0,8,0,0" TextWrapping="Wrap"
+                               Style="{StaticResource CardBodyTextStyle}"/>
+
+                    <Button Content="End session and restore" Style="{StaticResource AccentButtonStyle}"
+                            HorizontalAlignment="Left" Margin="0,12,0,0"
+                            Command="{Binding EndSessionCommand}"/>
+
+                    <TextBlock Text="WHAT THIS PAGE HAS DONE" Style="{StaticResource CaptionTextStyle}"
+                               Margin="0,16,0,0"/>
+
+                    <TextBlock Text="{Binding ActionLog}" Margin="0,8,0,0" TextWrapping="Wrap"
+                               FontFamily="Consolas"
+                               Foreground="{DynamicResource SecondaryTextBrush}"/>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

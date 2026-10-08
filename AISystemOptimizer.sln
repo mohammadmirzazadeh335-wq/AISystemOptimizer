@@ -1,0 +1,59 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{ED55DD0A-47A2-4ED5-A2C0-1F91989690DE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AISystemOptimizer.Core", "src\AISystemOptimizer.Core\AISystemOptimizer.Core.csproj", "{B70A2130-1568-42B1-847E-0E97F3350B69}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AISystemOptimizer.UI", "src\AISystemOptimizer.UI\AISystemOptimizer.UI.csproj", "{E236BA9F-D0E0-464B-AF7F-946C2A5B8971}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AISystemOptimizer.App", "src\AISystemOptimizer.App\AISystemOptimizer.App.csproj", "{4428419A-8A41-494B-9CE3-B689F00A8E40}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{D251A127-9E21-4BA3-B3E4-1236E025C76D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AISystemOptimizer.Tests", "tests\AISystemOptimizer.Tests\AISystemOptimizer.Tests.csproj", "{BFE46E4E-65EF-487C-8976-C099FA8AE5A7}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{FF277FB2-B557-4D6B-82F0-482FA38136A4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AISystemOptimizer.SmokeTests", "tools\AISystemOptimizer.SmokeTests\AISystemOptimizer.SmokeTests.csproj", "{70B81405-AC69-4023-A920-D517483EBD6C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B70A2130-1568-42B1-847E-0E97F3350B69}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B70A2130-1568-42B1-847E-0E97F3350B69}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B70A2130-1568-42B1-847E-0E97F3350B69}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B70A2130-1568-42B1-847E-0E97F3350B69}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E236BA9F-D0E0-464B-AF7F-946C2A5B8971}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E236BA9F-D0E0-464B-AF7F-946C2A5B8971}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E236BA9F-D0E0-464B-AF7F-946C2A5B8971}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E236BA9F-D0E0-464B-AF7F-946C2A5B8971}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4428419A-8A41-494B-9CE3-B689F00A8E40}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4428419A-8A41-494B-9CE3-B689F00A8E40}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4428419A-8A41-494B-9CE3-B689F00A8E40}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4428419A-8A41-494B-9CE3-B689F00A8E40}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BFE46E4E-65EF-487C-8976-C099FA8AE5A7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BFE46E4E-65EF-487C-8976-C099FA8AE5A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BFE46E4E-65EF-487C-8976-C099FA8AE5A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BFE46E4E-65EF-487C-8976-C099FA8AE5A7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{70B81405-AC69-4023-A920-D517483EBD6C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{70B81405-AC69-4023-A920-D517483EBD6C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{70B81405-AC69-4023-A920-D517483EBD6C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{70B81405-AC69-4023-A920-D517483EBD6C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{B70A2130-1568-42B1-847E-0E97F3350B69} = {ED55DD0A-47A2-4ED5-A2C0-1F91989690DE}
+		{E236BA9F-D0E0-464B-AF7F-946C2A5B8971} = {ED55DD0A-47A2-4ED5-A2C0-1F91989690DE}
+		{4428419A-8A41-494B-9CE3-B689F00A8E40} = {ED55DD0A-47A2-4ED5-A2C0-1F91989690DE}
+		{BFE46E4E-65EF-487C-8976-C099FA8AE5A7} = {D251A127-9E21-4BA3-B3E4-1236E025C76D}
+		{70B81405-AC69-4023-A920-D517483EBD6C} = {FF277FB2-B557-4D6B-82F0-482FA38136A4}
+	EndGlobalSection
+EndGlobal

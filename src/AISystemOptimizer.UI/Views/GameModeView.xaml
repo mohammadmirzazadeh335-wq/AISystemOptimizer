@@ -1,0 +1,116 @@
+<UserControl x:Class="AISystemOptimizer.UI.Views.GameModeView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:conv="clr-namespace:AISystemOptimizer.UI.Converters"
+             mc:Ignorable="d"
+             d:DesignHeight="700" d:DesignWidth="960">
+
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
+    </UserControl.Resources>
+
+    <ScrollViewer Style="{StaticResource FluentScrollViewerStyle}">
+        <StackPanel Margin="20,16,20,24">
+
+            <TextBlock Text="Game Mode" Style="{StaticResource PageTitleStyle}"/>
+            <TextBlock Text="A session-only optimisation: nothing is permanently changed, and the guarantees below are enforced in code."
+                       Margin="0,4,0,0"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource SecondaryTextBrush}"/>
+
+            <Grid Margin="0,16,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Style="{StaticResource CardStyle}" Margin="0,0,8,0">
+                    <StackPanel>
+                        <TextBlock Text="DETECTED GAME" Style="{StaticResource CaptionTextStyle}"/>
+                        <TextBlock Text="{Binding GameSummary}" Margin="0,10,0,0"
+                                   TextWrapping="Wrap"
+                                   Style="{StaticResource CardBodyTextStyle}"/>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                            <Button Content="Detect game" Style="{StaticResource SecondaryButtonStyle}"
+                                    Margin="0,0,8,0" Command="{Binding DetectGameCommand}"/>
+                            <Button Content="Prepare game plan" Style="{StaticResource AccentButtonStyle}"
+                                    Command="{Binding PreparePlanCommand}"
+                                    ToolTip="Builds a plan you can review on the Optimization page. Nothing runs until you confirm it."/>
+                        </StackPanel>
+
+                        <TextBlock Text="{Binding StatusText}" Margin="0,12,0,0"
+                                   TextWrapping="Wrap"
+                                   Style="{StaticResource CaptionTextStyle}"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="8,0,0,0">
+                    <StackPanel>
+                        <TextBlock Text="SESSION OPTIONS" Style="{StaticResource CaptionTextStyle}"/>
+
+                        <CheckBox Margin="0,12,0,0" Content="Raise the game's CPU priority (to AboveNormal)"
+                                  Foreground="{DynamicResource WindowForegroundBrush}"
+                                  IsChecked="{Binding BoostGamePriority}"/>
+
+                        <CheckBox Margin="0,10,0,0" Content="Close game launchers and store clients"
+                                  Foreground="{DynamicResource WindowForegroundBrush}"
+                                  IsChecked="{Binding CloseLaunchers}"/>
+
+                        <CheckBox Margin="0,10,0,0" Content="Pause cloud sync clients"
+                                  Foreground="{DynamicResource WindowForegroundBrush}"
+                                  IsChecked="{Binding PauseCloudSync}"/>
+
+                        <TextBlock Text="{Binding PotentialRecoveryText}" Margin="0,12,0,0"
+                                   TextWrapping="Wrap"
+                                   Style="{StaticResource CaptionTextStyle}"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <Border Style="{StaticResource CardStyle}" Margin="0,16,0,0">
+                <StackPanel>
+                    <TextBlock Text="WHAT GAME MODE NEVER DOES" Style="{StaticResource CaptionTextStyle}"/>
+                    <ItemsControl ItemsSource="{Binding Guarantees}" Margin="0,10,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="0,3">
+                                    <TextBlock Text="&#x2713;" Foreground="{StaticResource RiskLowBrush}" Margin="0,0,8,0"/>
+                                    <TextBlock Text="{Binding}" TextWrapping="Wrap"
+                                               Style="{StaticResource CardBodyTextStyle}"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardStyle}" Margin="0,16,0,0">
+                <StackPanel>
+                    <TextBlock Text="BACKGROUND PROGRAMS THAT COULD BE PAUSED" Style="{StaticResource CaptionTextStyle}"/>
+                    <TextBlock Text="A game plan will only ever close programs with no visible window that you are not currently using."
+                               Margin="0,6,0,8" TextWrapping="Wrap" Style="{StaticResource CaptionTextStyle}"/>
+                    <ItemsControl ItemsSource="{Binding BackgroundCandidates}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,3">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding DisplayName}"
+                                               Style="{StaticResource CardBodyTextStyle}" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding FormattedWorkingSet}"
+                                               Style="{StaticResource CardBodyTextStyle}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

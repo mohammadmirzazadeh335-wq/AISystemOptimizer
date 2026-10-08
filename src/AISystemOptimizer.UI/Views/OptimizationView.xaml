@@ -1,0 +1,386 @@
+<UserControl x:Class="AISystemOptimizer.UI.Views.OptimizationView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:conv="clr-namespace:AISystemOptimizer.UI.Converters"
+             xmlns:controls="clr-namespace:AISystemOptimizer.UI.Controls"
+             mc:Ignorable="d"
+             d:DesignHeight="760" d:DesignWidth="980">
+
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
+        <conv:RiskLevelToBrushConverter x:Key="RiskToBrush"/>
+        <conv:RiskLevelToTextConverter x:Key="RiskToText"/>
+        <conv:ScoreToBrushConverter x:Key="ScoreToBrush"/>
+        <conv:PercentToBrushConverter x:Key="PercentToBrush"/>
+    </UserControl.Resources>
+
+    <ScrollViewer Style="{StaticResource FluentScrollViewerStyle}">
+        <StackPanel Margin="20,16,20,24">
+
+            <!-- Header -->
+            <Grid Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Optimization &amp; Memory" Style="{StaticResource PageTitleStyle}"/>
+                    <TextBlock Text="{Binding RamUsageText}"
+                               Margin="0,4,0,0"
+                               FontSize="15"
+                               Foreground="{DynamicResource SecondaryTextBrush}"/>
+                    <TextBlock Text="{Binding RamDetailText}"
+                               Margin="0,2,0,0"
+                               Foreground="{DynamicResource TertiaryTextBrush}"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <Button Content="Refresh information"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Command="{Binding RefreshSystemInfoCommand}"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Memory detail -->
+            <Border Style="{StaticResource CardStyle}" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="MEMORY — WHAT THE NUMBERS ACTUALLY MEAN" Style="{StaticResource CaptionTextStyle}"/>
+
+                    <Grid Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                            <TextBlock Text="Working sets (what programs hold)" Style="{StaticResource CaptionTextStyle}"/>
+                            <TextBlock Text="{Binding Memory.FormattedWorkingSetTotal}" Style="{StaticResource SectionTitleStyle}"/>
+                            <TextBlock Text="The sum of every process's resident memory. This is the part that can  actually be recovered by closing programs."
+                                       TextWrapping="Wrap" Style="{StaticResource CardBodyTextStyle}"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Margin="12,0">
+                            <TextBlock Text="Standby / cache" Style="{StaticResource CaptionTextStyle}"/>
+                            <TextBlock Text="{Binding Memory.FormattedStandby}" Style="{StaticResource SectionTitleStyle}"/>
+                            <TextBlock Text="Idle RAM Windows uses to cache files. It is handed back instantly when  an application needs it."
+                                       TextWrapping="Wrap" Style="{StaticResource CardBodyTextStyle}"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" Margin="12,0,0,0">
+                            <TextBlock Text="Committed vs commit limit" Style="{StaticResource CaptionTextStyle}"/>
+                            <TextBlock Style="{StaticResource SectionTitleStyle}">
+                                <Run Text="{Binding Memory.FormattedCommitted, Mode=OneWay}"/>
+                                <Run Text=" / "/>
+                                <Run Text="{Binding Memory.FormattedCommitLimit, Mode=OneWay}"/>
+                            </TextBlock>
+                            <TextBlock Text="How much memory the system has promised to applications, including  the pagefile. This application never changes the pagefile."
+                                       TextWrapping="Wrap" Style="{StaticResource CardBodyTextStyle}"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Border Margin="0,14,0,0" Padding="12" CornerRadius="4"
+                            Background="{DynamicResource ControlBackgroundBrush}">
+                        <TextBlock Text="{Binding RamExplanation}" TextWrapping="Wrap"
+                                   Style="{StaticResource CardBodyTextStyle}"/>
+                    </Border>
+
+                    <TextBlock Text="{Binding PageFileText}" Margin="0,10,0,0"
+                               Style="{StaticResource CaptionTextStyle}"/>
+                    <TextBlock Text="{Binding ProcessMemoryText}" Margin="0,2,0,0"
+                               Style="{StaticResource CaptionTextStyle}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Target + score -->
+            <Grid Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Style="{StaticResource CardStyle}" Margin="0,0,8,0">
+                    <StackPanel>
+                        <TextBlock Text="YOUR MEMORY TARGET" Style="{StaticResource CaptionTextStyle}"/>
+                        <TextBlock Text="{Binding RamTargetMessage}"
+                                   Margin="0,10,0,10"
+                                   TextWrapping="Wrap"
+                                   Style="{StaticResource CardBodyTextStyle}"/>
+                        <ProgressBar Style="{StaticResource MetricProgressBarStyle}"
+                                     Maximum="100"
+                                     Value="{Binding RamTargetProgress, Mode=OneWay}"
+                                     Foreground="{StaticResource AccentBrush}"/>
+                        <TextBlock Margin="0,6,0,0" Style="{StaticResource CaptionTextStyle}">
+                            <Run Text="{Binding RamTargetProgress, Mode=OneWay}"/>
+                            <Run Text="% of the configured target can be reached using only safe actions."/>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="8,0,0,0">
+                    <StackPanel>
+                        <TextBlock Text="SCORE BREAKDOWN" Style="{StaticResource CaptionTextStyle}"/>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,10">
+                            <TextBlock Text="{Binding HealthScoreText}"
+                                       FontSize="32" FontWeight="SemiBold"
+                                       Foreground="{Binding HealthScore, Converter={StaticResource ScoreToBrush}}"/>
+                            <TextBlock Text="overall health"
+                                       VerticalAlignment="Bottom" Margin="10,0,0,6"
+                                       Foreground="{DynamicResource TertiaryTextBrush}"/>
+                        </StackPanel>
+
+                        <ItemsControl ItemsSource="{Binding ScoreRows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,3">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="140"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Name}" Style="{StaticResource CardBodyTextStyle}"/>
+                                        <ProgressBar Grid.Column="1" Margin="8,6"
+                                                     Style="{StaticResource MetricProgressBarStyle}"
+                                                     Maximum="100"
+                                                     Value="{Binding Score, Mode=OneWay}"
+                                                     Foreground="{Binding Score, Converter={StaticResource ScoreToBrush}}"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding ScoreText}" Style="{StaticResource CardBodyTextStyle}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Plan preview -->
+            <Border Style="{StaticResource CardStyle}" Margin="0,0,0,16">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="OPTIMIZATION PREVIEW" Style="{StaticResource CaptionTextStyle}"/>
+                            <TextBlock Text="{Binding PlanTitle}" Margin="0,6,0,0"
+                                       FontSize="16" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource CardTitleBrush}"/>
+                            <TextBlock Text="{Binding PlanSummary}" Margin="0,6,0,0"
+                                       TextWrapping="Wrap" Style="{StaticResource CardBodyTextStyle}"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                            <Button Content="Create plan"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Margin="0,0,8,0"
+                                    Command="{Binding CreatePlanCommand}"/>
+                            <Button Content="Undo last"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Margin="0,0,8,0"
+                                    Command="{Binding UndoCommand}"/>
+                            <Button Content="Discard plan"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Margin="0,0,8,0"
+                                    ToolTip="Throw away the reviewed plan without changing anything."
+                                    Command="{Binding CancelPlanCommand}"/>
+                            <Button Content="Stop"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Margin="0,0,8,0"
+                                    ToolTip="Stop the running scan or optimisation. The action that is already in flight finishes first, so the system is never left half-changed."
+                                    Command="{Binding CancelExecutionCommand}"/>
+                            <Button Content="Optimize"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    Command="{Binding OptimizeCommand}"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Plan metrics -->
+                    <Grid Margin="0,14,0,0"
+                          Visibility="{Binding HasPlan, Converter={StaticResource BoolToVisibility}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Padding="10" Margin="0,0,6,0" CornerRadius="4"
+                                Background="{DynamicResource ControlBackgroundBrush}">
+                            <StackPanel>
+                                <TextBlock Text="Estimated memory" Style="{StaticResource CaptionTextStyle}"/>
+                                <TextBlock Text="{Binding PlanEstimatedRam}" FontSize="18" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource CardTitleBrush}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Column="1" Padding="10" Margin="3,0" CornerRadius="4"
+                                Background="{DynamicResource ControlBackgroundBrush}">
+                            <StackPanel>
+                                <TextBlock Text="Estimated CPU" Style="{StaticResource CaptionTextStyle}"/>
+                                <TextBlock Text="{Binding PlanCpuEstimate}" FontSize="18" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource CardTitleBrush}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Column="2" Padding="10" Margin="3,0" CornerRadius="4"
+                                Background="{DynamicResource ControlBackgroundBrush}">
+                            <StackPanel>
+                                <TextBlock Text="Actions" Style="{StaticResource CaptionTextStyle}"/>
+                                <TextBlock Text="{Binding PlanActionCountText}" FontSize="18" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource CardTitleBrush}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Column="3" Padding="10" Margin="6,0,0,0" CornerRadius="4"
+                                Background="{Binding PlanRiskLevel, Converter={StaticResource RiskToBrush}}">
+                            <StackPanel>
+                                <TextBlock Text="Overall risk" Foreground="White" FontSize="11"/>
+                                <TextBlock Text="{Binding PlanRiskText}" Foreground="White" FontWeight="SemiBold"
+                                           TextWrapping="Wrap" FontSize="12"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- Restore point option -->
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0"
+                                Visibility="{Binding HasPlan, Converter={StaticResource BoolToVisibility}}">
+                        <CheckBox Content="Create a Windows restore point before applying changes"
+                                  Foreground="{DynamicResource WindowForegroundBrush}"
+                                  IsChecked="{Binding CreateRestorePoint}"/>
+                        <TextBlock Text="(recommended whenever services or start-up items are changed)"
+                                   Margin="8,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Style="{StaticResource CaptionTextStyle}"/>
+                    </StackPanel>
+
+                    <!-- Action list -->
+                    <Grid Margin="0,14,0,0"
+                          Visibility="{Binding HasPlan, Converter={StaticResource BoolToVisibility}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                            <TextBlock Text="WILL BE PERFORMED" Style="{StaticResource CaptionTextStyle}"/>
+                            <ScrollViewer MaxHeight="260" Margin="0,8,0,0" VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding Actions}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Margin="0,0,0,6" Padding="10" CornerRadius="4"
+                                                    Background="{DynamicResource ControlBackgroundBrush}">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Text="{Binding Description}" TextWrapping="Wrap"
+                                                                   Foreground="{DynamicResource CardTitleBrush}"/>
+                                                        <TextBlock Text="{Binding Reason}" TextWrapping="Wrap"
+                                                                   Margin="0,3,0,0"
+                                                                   Style="{StaticResource CaptionTextStyle}"/>
+                                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                            <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                                                                     Fill="{Binding RiskLevel, Converter={StaticResource RiskToBrush}}"/>
+                                                            <TextBlock Margin="5,0,0,0"
+                                                                       Text="{Binding RiskLevel}"
+                                                                       Style="{StaticResource CaptionTextStyle}"/>
+                                                            <TextBlock Text="  •  " Style="{StaticResource CaptionTextStyle}"/>
+                                                            <TextBlock Text="{Binding FormattedEstimatedRecovery}"
+                                                                       Style="{StaticResource CaptionTextStyle}"/>
+                                                            <TextBlock Text="  •  " Style="{StaticResource CaptionTextStyle}"/>
+                                                            <TextBlock Text="{Binding Status}"
+                                                                       Style="{StaticResource CaptionTextStyle}"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{Binding Priority, StringFormat='priority {0}'}"
+                                                               VerticalAlignment="Top"
+                                                               Style="{StaticResource CaptionTextStyle}"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                            <TextBlock Text="SKIPPED (AND WHY)" Style="{StaticResource CaptionTextStyle}"/>
+                            <ScrollViewer MaxHeight="260" Margin="0,8,0,0" VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding SkippedActions}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Margin="0,0,0,6" Padding="10" CornerRadius="4"
+                                                    Background="{DynamicResource ControlBackgroundBrush}">
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Target}" TextWrapping="Wrap"
+                                                               Foreground="{DynamicResource CardTitleBrush}"/>
+                                                    <TextBlock Text="{Binding SkipReason}" TextWrapping="Wrap"
+                                                               Margin="0,3,0,0"
+                                                               Style="{StaticResource CaptionTextStyle}"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+
+                            <TextBlock Text="Windows core processes, drivers, Defender, the firewall and the pagefile  are excluded from every plan by design."
+                                       Margin="0,8,0,0"
+                                       TextWrapping="Wrap"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource TertiaryTextBrush}"/>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Report -->
+            <Border Style="{StaticResource CardStyle}"
+                    Visibility="{Binding HasReport, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Text="OPTIMIZATION REPORT" Style="{StaticResource CaptionTextStyle}"/>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <Button Content="Copy" Style="{StaticResource LinkButtonStyle}"
+                                    Command="{Binding CopyReportCommand}"/>
+                            <Button Content="Save &amp; open" Margin="10,0,0,0"
+                                    Style="{StaticResource LinkButtonStyle}"
+                                    Command="{Binding OpenReportCommand}"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBox Text="{Binding ReportText, Mode=OneWay}"
+                             Margin="0,10,0,0"
+                             MinHeight="220"
+                             MaxHeight="360"
+                             IsReadOnly="True"
+                             AcceptsReturn="True"
+                             TextWrapping="NoWrap"
+                             VerticalScrollBarVisibility="Auto"
+                             HorizontalScrollBarVisibility="Auto"
+                             FontFamily="Cascadia Mono, Consolas, Courier New"
+                             FontSize="12"
+                             Background="{DynamicResource ControlBackgroundBrush}"
+                             Foreground="{DynamicResource WindowForegroundBrush}"
+                             BorderBrush="{DynamicResource ControlBorderBrush}"/>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

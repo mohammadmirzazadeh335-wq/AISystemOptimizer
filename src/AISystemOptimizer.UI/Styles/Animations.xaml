@@ -1,0 +1,34 @@
+<!--
+    AI System Optimizer - Animations
+    =================================
+    Short, subtle motion (Fluent guidance: 150-250 ms, ease-out).
+    Animations are opt-out through AppConfig.UseAnimations; the animation
+    duration tokens here are referenced by the views.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+    <Duration x:Key="FastAnimationDuration">0:0:0.15</Duration>
+    <Duration x:Key="NormalAnimationDuration">0:0:0.25</Duration>
+
+    <CubicEase x:Key="FluentEase" EasingMode="EaseOut"/>
+    <CubicEase x:Key="FluentEaseIn" EasingMode="EaseIn"/>
+
+    <!-- Fade-in used when a page becomes visible -->
+    <Style x:Key="PageTransitionStyle" TargetType="FrameworkElement">
+        <Style.Triggers>
+            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                <BeginStoryboard>
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                         From="0" To="1"
+                                         Duration="{StaticResource NormalAnimationDuration}"
+                                         EasingFunction="{StaticResource FluentEase}"/>
+                    </Storyboard>
+                </BeginStoryboard>
+            </EventTrigger>
+        </Style.Triggers>
+    </Style>
+
+</ResourceDictionary>

@@ -1,0 +1,277 @@
+<Window x:Class="AISystemOptimizer.UI.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:AISystemOptimizer.UI.ViewModels"
+        xmlns:views="clr-namespace:AISystemOptimizer.UI.Views"
+        xmlns:conv="clr-namespace:AISystemOptimizer.UI.Converters"
+        mc:Ignorable="d"
+        Title="AI System Optimizer"
+        Height="760" Width="1240"
+        MinHeight="560" MinWidth="980"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        FontFamily="Segoe UI"
+        FontSize="13"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True">
+
+    <Window.DataContext>
+        <vm:MainViewModel/>
+    </Window.DataContext>
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/AISystemOptimizer.UI;component/Styles/FluentDesign.xaml"/>
+                <ResourceDictionary Source="/AISystemOptimizer.UI;component/Styles/DarkTheme.xaml"/>
+                <ResourceDictionary Source="/AISystemOptimizer.UI;component/Styles/Animations.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <conv:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
+            <conv:InverseBoolConverter x:Key="InverseBool"/>
+            <conv:NullToVisibilityConverter x:Key="NullToVisibility"/>
+            <conv:PercentToBrushConverter x:Key="PercentToBrush"/>
+            <conv:ScoreToBrushConverter x:Key="ScoreToBrush"/>
+            <conv:RiskLevelToBrushConverter x:Key="RiskToBrush"/>
+            <conv:RiskLevelToTextConverter x:Key="RiskToText"/>
+            <conv:BytesToReadableConverter x:Key="BytesToReadable"/>
+            <conv:BytesPerSecondConverter x:Key="BytesPerSecond"/>
+
+            <!-- Page templates: the shell simply displays whatever view model is current. -->
+            <DataTemplate DataType="{x:Type vm:DashboardViewModel}">
+                <views:DashboardView/>
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:ProcessesViewModel}">
+                <views:ProcessesView/>
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:OptimizationViewModel}">
+                <views:OptimizationView/>
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:StartupViewModel}">
+                <views:StartupView/>
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:ServicesViewModel}">
+                <views:ServicesView/>
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:GameModeViewModel}">
+                <views:GameModeView/>
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:GameAppOptimizerViewModel}">
+                <views:GameAppOptimizerView/>
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:HistoryViewModel}">
+                <views:HistoryView/>
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
+                <views:SettingsView/>
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:AboutViewModel}">
+                <views:AboutView/>
+            </DataTemplate>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Window.Template>
+        <ControlTemplate TargetType="Window">
+            <Border x:Name="RootBorder"
+                    BorderThickness="1"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    CornerRadius="{StaticResource WindowCornerRadius}"
+                    Background="{DynamicResource WindowBackgroundBrush}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="40"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="30"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- ==================== Title bar ==================== -->
+                    <Grid Grid.Row="0"
+                          Background="{DynamicResource TitleBarBrush}"
+                          MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="&#xE945;"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="16"
+                                       Foreground="{StaticResource AccentLightBrush}"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="AI System Optimizer"
+                                       Margin="10,0,0,0"
+                                       VerticalAlignment="Center"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TitleBarForegroundBrush}"/>
+                            <TextBlock Text="{Binding CurrentViewTitle}"
+                                       Margin="14,0,0,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TertiaryTextBrush}"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Style="{StaticResource MinimizeButtonStyle}" Click="MinimizeButton_Click"/>
+                            <Button Style="{StaticResource MaximizeButtonStyle}" Click="MaximizeButton_Click"/>
+                            <Button Style="{StaticResource CloseButtonStyle}" Click="CloseButton_Click"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- ==================== Body ==================== -->
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="248" MinWidth="200"/>
+                            <ColumnDefinition Width="*" MinWidth="640"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Navigation pane -->
+                        <Border Grid.Column="0"
+                                Background="{DynamicResource NavigationPaneBackgroundBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="0,1,1,0">
+                            <DockPanel>
+                                <!-- Machine / user card -->
+                                <Border DockPanel.Dock="Top" Margin="8,8,8,4" Padding="10"
+                                        Background="{DynamicResource CardBackgroundBrush}"
+                                        CornerRadius="6">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding UserName}"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource CardTitleBrush}"/>
+                                        <TextBlock Text="{Binding SystemSummary}"
+                                                   Margin="0,3,0,0"
+                                                   FontSize="11"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource TertiaryTextBrush}"/>
+                                        <TextBlock Text="{Binding ElevationText}"
+                                                   Margin="0,4,0,0"
+                                                   FontSize="10.5"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource TertiaryTextBrush}"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Game mode quick action -->
+                                <Button DockPanel.Dock="Bottom"
+                                        Margin="8,6,8,10"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Command="{Binding ToggleGameModeCommand}"
+                                        Content="{Binding GameModeButtonText}"/>
+
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel Margin="0,4,0,8">
+
+                                        <TextBlock Text="MAIN" Style="{StaticResource CaptionTextStyle}" Margin="14,8,0,4"/>
+                                        <RadioButton Content="Dashboard" GroupName="Nav"
+                                                     Style="{StaticResource NavigationRadioButtonStyle}"
+                                                     Command="{Binding NavigateCommand}" CommandParameter="Dashboard"
+                                                     IsChecked="{Binding IsDashboardView, Mode=OneWay}"/>
+                                        <RadioButton Content="Processes" GroupName="Nav"
+                                                     Style="{StaticResource NavigationRadioButtonStyle}"
+                                                     Command="{Binding NavigateCommand}" CommandParameter="Processes"
+                                                     IsChecked="{Binding IsProcessesView, Mode=OneWay}"/>
+                                        <RadioButton Content="Optimization &amp; Memory" GroupName="Nav"
+                                                     Style="{StaticResource NavigationRadioButtonStyle}"
+                                                     Command="{Binding NavigateCommand}" CommandParameter="Optimization"
+                                                     IsChecked="{Binding IsOptimizationView, Mode=OneWay}"/>
+
+                                        <TextBlock Text="MANAGEMENT" Style="{StaticResource CaptionTextStyle}" Margin="14,12,0,4"/>
+                                        <RadioButton Content="Start-up Programs" GroupName="Nav"
+                                                     Style="{StaticResource NavigationRadioButtonStyle}"
+                                                     Command="{Binding NavigateCommand}" CommandParameter="Startup"
+                                                     IsChecked="{Binding IsStartupView, Mode=OneWay}"/>
+                                        <RadioButton Content="Windows Services" GroupName="Nav"
+                                                     Style="{StaticResource NavigationRadioButtonStyle}"
+                                                     Command="{Binding NavigateCommand}" CommandParameter="Services"
+                                                     IsChecked="{Binding IsServicesView, Mode=OneWay}"/>
+                                        <RadioButton Content="Game Mode" GroupName="Nav"
+                                                     Style="{StaticResource NavigationRadioButtonStyle}"
+                                                     Command="{Binding NavigateCommand}" CommandParameter="GameMode"
+                                                     IsChecked="{Binding IsGameModeView, Mode=OneWay}"/>
+
+                                        <TextBlock Text="RECORDS" Style="{StaticResource CaptionTextStyle}" Margin="14,12,0,4"/>
+                                        <TextBlock Text="GAMING" Style="{StaticResource CaptionTextStyle}" Margin="14,12,0,4"/>
+                                        <RadioButton Content="🎮 Game &amp; App Optimizer" GroupName="Nav"
+                                                     Style="{StaticResource NavigationRadioButtonStyle}"
+                                                     Command="{Binding NavigateCommand}" CommandParameter="GameAppOptimizer"
+                                                     IsChecked="{Binding IsGameAppOptimizerView, Mode=OneWay}"/>
+
+                                        <RadioButton Content="History &amp; Reports" GroupName="Nav"
+                                                     Style="{StaticResource NavigationRadioButtonStyle}"
+                                                     Command="{Binding NavigateCommand}" CommandParameter="History"
+                                                     IsChecked="{Binding IsHistoryView, Mode=OneWay}"/>
+
+                                        <TextBlock Text="APPLICATION" Style="{StaticResource CaptionTextStyle}" Margin="14,12,0,4"/>
+                                        <RadioButton Content="Settings" GroupName="Nav"
+                                                     Style="{StaticResource NavigationRadioButtonStyle}"
+                                                     Command="{Binding NavigateCommand}" CommandParameter="Settings"
+                                                     IsChecked="{Binding IsSettingsView, Mode=OneWay}"/>
+                                        <RadioButton Content="About &amp; Guarantees" GroupName="Nav"
+                                                     Style="{StaticResource NavigationRadioButtonStyle}"
+                                                     Command="{Binding NavigateCommand}" CommandParameter="About"
+                                                     IsChecked="{Binding IsAboutView, Mode=OneWay}"/>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </DockPanel>
+                        </Border>
+
+                        <!-- Hosted page -->
+                        <Grid Grid.Column="1">
+                            <ContentControl Content="{Binding CurrentView}"/>
+
+                            <!-- Busy overlay -->
+                            <Border Background="#99000000"
+                                    Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}">
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <ProgressBar Width="240" Height="4" IsIndeterminate="True"
+                                                 Style="{StaticResource MetricProgressBarStyle}"/>
+                                    <TextBlock Text="{Binding BusyMessage}"
+                                               Margin="0,14,0,0"
+                                               HorizontalAlignment="Center"
+                                               Foreground="White"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Grid>
+
+                    <!-- ==================== Status bar ==================== -->
+                    <Border Grid.Row="2"
+                            Background="{DynamicResource TitleBarBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="0,1,0,0">
+                        <Grid Margin="12,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       Foreground="{DynamicResource TertiaryTextBrush}"
+                                       Text="{Binding StatusMessage}"/>
+
+                            <TextBlock Grid.Column="1"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TertiaryTextBrush}"
+                                       Text="{Binding OptimizerResourceUsage}"/>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <ControlTemplate.Triggers>
+                <Trigger Property="WindowState" Value="Maximized">
+                    <Setter TargetName="RootBorder" Property="CornerRadius" Value="0"/>
+                    <Setter TargetName="RootBorder" Property="BorderThickness" Value="0"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+    </Window.Template>
+</Window>

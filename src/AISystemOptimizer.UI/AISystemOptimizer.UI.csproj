@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>AISystemOptimizer.UI</RootNamespace>
+    <AssemblyName>AISystemOptimizer.UI</AssemblyName>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AISystemOptimizer.Core\AISystemOptimizer.Core.csproj" />
+  </ItemGroup>
+
+</Project>

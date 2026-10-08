@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>AISystemOptimizer.Core</RootNamespace>
+    <AssemblyName>AISystemOptimizer.Core</AssemblyName>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Microsoft.Windows.Compatibility provides the Windows-only BCL surface we need:
+      System.Management (WMI), System.Diagnostics.PerformanceCounter,
+      System.ServiceProcess.ServiceController, Microsoft.Win32.Registry,
+      System.Windows.Forms (SystemInformation - power/battery state), etc.
+    -->
+    <PackageReference Include="Microsoft.Windows.Compatibility" Version="8.0.0" />
+    <PackageReference Include="System.Management" Version="8.0.0" />
+    <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="8.0.0" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+</Project>

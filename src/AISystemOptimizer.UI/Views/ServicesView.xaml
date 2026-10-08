@@ -1,0 +1,125 @@
+<UserControl x:Class="AISystemOptimizer.UI.Views.ServicesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:conv="clr-namespace:AISystemOptimizer.UI.Converters"
+             mc:Ignorable="d"
+             d:DesignHeight="700" d:DesignWidth="960">
+
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
+        <conv:RiskLevelToBrushConverter x:Key="RiskToBrush"/>
+    </UserControl.Resources>
+
+    <Grid Margin="20,16,20,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="Windows Services" Style="{StaticResource PageTitleStyle}"/>
+                <TextBlock Text="{Binding Summary}" Margin="0,4,0,0"
+                           Foreground="{DynamicResource SecondaryTextBrush}"/>
+            </StackPanel>
+            <Button Grid.Column="1" Content="Refresh" Style="{StaticResource SecondaryButtonStyle}"
+                    VerticalAlignment="Center" Command="{Binding RefreshCommand}"/>
+        </Grid>
+
+        <Border Grid.Row="1" Style="{StaticResource CardStyle}" Padding="12" Margin="0,0,0,12">
+            <StackPanel Orientation="Horizontal">
+                <TextBox Width="280" Style="{StaticResource FluentTextBoxStyle}"
+                         Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Filter by service name"/>
+                <CheckBox Margin="14,0,0,0" VerticalAlignment="Center" Content="Running only"
+                          Foreground="{DynamicResource WindowForegroundBrush}"
+                          IsChecked="{Binding ShowOnlyRunning}"/>
+                <CheckBox Margin="14,0,0,0" VerticalAlignment="Center" Content="Third-party only"
+                          Foreground="{DynamicResource WindowForegroundBrush}"
+                          IsChecked="{Binding ShowOnlyThirdParty}"/>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*"/>
+                <ColumnDefinition Width="2*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource CardStyle}" Padding="4" Margin="0,0,8,0">
+                <DataGrid Style="{StaticResource FluentDataGridStyle}"
+                          ItemsSource="{Binding FilteredServices}"
+                          SelectedItem="{Binding SelectedService}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Service" Width="*" Binding="{Binding DisplayName}"/>
+                        <DataGridTextColumn Header="Name" Width="150" Binding="{Binding Name}"/>
+                        <DataGridTextColumn Header="Status" Width="90" Binding="{Binding Status}"/>
+                        <DataGridTextColumn Header="Start type" Width="100" Binding="{Binding StartType}"/>
+                        <DataGridTemplateColumn Header="Risk" Width="100">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                                                 Fill="{Binding RiskLevel, Converter={StaticResource RiskToBrush}}"/>
+                                        <TextBlock Margin="6,0,0,0" Text="{Binding RiskLevel}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Border>
+
+            <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="8,0,0,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="SERVICE DETAILS" Style="{StaticResource CaptionTextStyle}"/>
+                        <TextBlock Text="{Binding SelectedSummary}" Margin="0,10,0,0"
+                                   TextWrapping="Wrap" Style="{StaticResource CardBodyTextStyle}"/>
+
+                        <Border Margin="0,12,0,0" Padding="10" CornerRadius="4"
+                                Background="{DynamicResource ControlBackgroundBrush}">
+                            <TextBlock Text="{Binding ProtectionNote}" TextWrapping="Wrap"
+                                       Style="{StaticResource CardBodyTextStyle}"/>
+                        </Border>
+
+                        <Grid Margin="0,14,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <Button Grid.Row="0" Grid.Column="0" Margin="0,0,4,6" Content="Stop"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding StopServiceCommand}"/>
+                            <Button Grid.Row="0" Grid.Column="1" Margin="4,0,0,6" Content="Start"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding StartServiceCommand}"/>
+                            <Button Grid.Row="1" Grid.Column="0" Margin="0,0,4,0" Content="Disable"
+                                    Style="{StaticResource DangerButtonStyle}"
+                                    Command="{Binding DisableServiceCommand}"/>
+                            <Button Grid.Row="1" Grid.Column="1" Margin="4,0,0,0" Content="Re-enable"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding EnableServiceCommand}"/>
+                        </Grid>
+
+                        <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" FontSize="11"
+                                   Foreground="{DynamicResource TertiaryTextBrush}"
+                                   Text="Critical Windows services and everything on the protected list cannot be stopped or disabled from here. Service changes require administrator rights and are logged."/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

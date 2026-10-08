@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>AISystemOptimizer.Tests</RootNamespace>
+    <!-- Test projects legitimately use underscores in method names -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AISystemOptimizer.Core\AISystemOptimizer.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      The shipped configuration template is linked in so that a test can prove it still round-trips
+      through AppConfig. Adding a setting in code without updating the file (or renaming a key in the
+      file without updating the code) would otherwise go unnoticed until a user hit it.
+    -->
+    <None Include="..\..\config\config.defaults.json"
+          Link="config.defaults.json"
+          CopyToOutputDirectory="PreserveNewest" />
+
+    <!--
+      The commented template the installer ships is linked in as well, under a name that cannot be
+      confused with the plain JSON defaults. Both files must describe the same set of settings.
+    -->
+    <None Include="..\..\config\config.json"
+          Link="config.template.json"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
