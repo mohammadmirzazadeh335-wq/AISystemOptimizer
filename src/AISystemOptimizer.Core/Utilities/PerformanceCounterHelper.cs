@@ -27,6 +27,18 @@ namespace AISystemOptimizer.Core.Utilities
         private static DateTime _lastCacheReset = DateTime.UtcNow;
         private static readonly TimeSpan CacheLifetime = TimeSpan.FromMinutes(2);
 
+        // Hardware identity never changes while Windows runs; once a WMI read of it succeeds it is
+        // cached for good, and a failed read is retried at most once a minute. This keeps the
+        // two-second live sampler from re-asking a broken WMI repository on every tick.
+        private static string? _cpuNameCache;
+        private static DateTime _cpuNameNextAttempt = DateTime.MinValue;
+        private static string? _cpuManufacturerCache;
+        private static DateTime _cpuManufacturerNextAttempt = DateTime.MinValue;
+        private static int _coreCountCache;
+        private static DateTime _coreCountNextAttempt = DateTime.MinValue;
+        private static (double, double)? _cpuClockCache;
+        private static DateTime _cpuClockNextAttempt = DateTime.MinValue;
+
         /// <summary>
         /// Last error raised by a counter/WMI call (empty when the last call succeeded).
         /// </summary>
@@ -41,6 +53,10 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         private static PerformanceCounter? GetCounter(string category, string counter, string? instance = null)
         {
+            var key = string.IsNullOrEmpty(instance)
+                ? $"{category}|{counter}"
+                : $"{category}|{counter}|{instance}";
+
             lock (SyncRoot)
             {
                 if (DateTime.UtcNow - _lastCacheReset > CacheLifetime)
@@ -48,29 +64,40 @@ namespace AISystemOptimizer.Core.Utilities
                     ResetCacheInternal();
                 }
 
-                var key = string.IsNullOrEmpty(instance)
-                    ? $"{category}|{counter}"
-                    : $"{category}|{counter}|{instance}";
-
                 if (CounterCache.TryGetValue(key, out var cached))
                     return cached;
+            }
 
-                try
-                {
-                    var created = string.IsNullOrEmpty(instance)
-                        ? new PerformanceCounter(category, counter, readOnly: true)
-                        : new PerformanceCounter(category, counter, instance, readOnly: true);
+            // Creation and priming talk to the counter store, which on a corrupt machine can
+            // block for a long time. They therefore run OUTSIDE the cache lock and with a hard
+            // limit; if two threads race, the loser disposes its counter and uses the winner's.
+            var created = BoundedReader.Read<PerformanceCounter?>(() =>
+            {
+                var candidate = string.IsNullOrEmpty(instance)
+                    ? new PerformanceCounter(category, counter, readOnly: true)
+                    : new PerformanceCounter(category, counter, instance, readOnly: true);
 
-                    created.NextValue(); // prime the counter
-                    CounterCache[key] = created;
-                    LastError = string.Empty;
-                    return created;
-                }
-                catch (Exception ex)
+                candidate.NextValue(); // prime the counter
+                return candidate;
+            }, null, 2500, $"counter {category}\\{counter}");
+
+            if (created == null)
+            {
+                LastError = $"{category}\\{counter}: unavailable or timed out";
+                return null;
+            }
+
+            lock (SyncRoot)
+            {
+                if (CounterCache.TryGetValue(key, out var winner))
                 {
-                    LastError = $"{category}\\{counter}: {ex.Message}";
-                    return null;
+                    try { created.Dispose(); } catch { }
+                    return winner;
                 }
+
+                CounterCache[key] = created;
+                LastError = string.Empty;
+                return created;
             }
         }
 
@@ -106,11 +133,17 @@ namespace AISystemOptimizer.Core.Utilities
 
             try
             {
-                pc.NextValue();
+                // Both reads are bounded: a stuck counter store must cost this call at most a
+                // few seconds, never the thread that called it.
+                BoundedReader.Read(() => { pc.NextValue(); return 0f; }, 0f, 1500,
+                    $"prime {category}\\{counter}");
+
                 if (delayMs > 0)
                     System.Threading.Thread.Sleep(delayMs);
 
-                var value = pc.NextValue();
+                var value = BoundedReader.Read(() => pc.NextValue(), float.NaN, 1500,
+                    $"sample {category}\\{counter}");
+
                 return float.IsNaN(value) || float.IsInfinity(value) ? 0f : value;
             }
             catch (Exception ex)
@@ -124,6 +157,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// True when the given counter category is registered on this machine.
         /// </summary>
         public static bool CounterCategoryExists(string category)
+        {
+            return BoundedReader.Read(() => CounterCategoryExistsCore(category), false, 2000, "counter category probe");
+        }
+
+        private static bool CounterCategoryExistsCore(string category)
         {
             try
             {
@@ -182,6 +220,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         public static long GetCachedMemory()
         {
+            return BoundedReader.Read(GetCachedMemoryCore, 0, 2000, "cached memory");
+        }
+
+        private static long GetCachedMemoryCore()
+        {
             var value = SampleCounter("Memory", "Cache Bytes", null, 0);
             return (long)Math.Max(0, value);
         }
@@ -191,6 +234,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// Windows deliberately keeps RAM in standby - this is not a problem to "fix".
         /// </summary>
         public static long GetStandbyMemory()
+        {
+            return BoundedReader.Read(GetStandbyMemoryCore, 0, 3000, "standby memory");
+        }
+
+        private static long GetStandbyMemoryCore()
         {
             try
             {
@@ -223,6 +271,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         public static long GetFreeMemory()
         {
+            return BoundedReader.Read(GetFreeMemoryCore, 0, 4000, "free memory");
+        }
+
+        private static long GetFreeMemoryCore()
+        {
             var value = SampleCounter("Memory", "Free &amp; Zero Page List Bytes", null, 0);
             if (value <= 0)
                 value = SampleCounter("Memory", "Available Bytes", null, 0);
@@ -235,6 +288,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         public static long GetPagedPoolMemory()
         {
+            return BoundedReader.Read(GetPagedPoolMemoryCore, 0, 2000, "paged pool");
+        }
+
+        private static long GetPagedPoolMemoryCore()
+        {
             return (long)Math.Max(0, SampleCounter("Memory", "Pool Paged Bytes", null, 0));
         }
 
@@ -242,6 +300,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// Non-paged pool bytes.
         /// </summary>
         public static long GetNonPagedPoolMemory()
+        {
+            return BoundedReader.Read(GetNonPagedPoolMemoryCore, 0, 2000, "non-paged pool");
+        }
+
+        private static long GetNonPagedPoolMemoryCore()
         {
             return (long)Math.Max(0, SampleCounter("Memory", "Pool Nonpaged Bytes", null, 0));
         }
@@ -251,6 +314,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         public static long GetCommittedMemory()
         {
+            return BoundedReader.Read(GetCommittedMemoryCore, 0, 2000, "committed bytes");
+        }
+
+        private static long GetCommittedMemoryCore()
+        {
             return (long)Math.Max(0, SampleCounter("Memory", "Committed Bytes", null, 0));
         }
 
@@ -259,6 +327,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         public static long GetCommitLimit()
         {
+            return BoundedReader.Read(GetCommitLimitCore, 0, 2000, "commit limit");
+        }
+
+        private static long GetCommitLimitCore()
+        {
             return (long)Math.Max(0, SampleCounter("Memory", "Commit Limit", null, 0));
         }
 
@@ -266,6 +339,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// Page file usage in bytes.
         /// </summary>
         public static long GetPageFileUsage()
+        {
+            return BoundedReader.Read(GetPageFileUsageCore, 0, 5000, "page file usage");
+        }
+
+        private static long GetPageFileUsageCore()
         {
             var (_, available) = WindowsApiHelper.GetPageFileBytes();
             // "Available" from GlobalMemoryStatusEx refers to the commit charge,
@@ -297,6 +375,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         public static long GetPageFileLimit()
         {
+            return BoundedReader.Read(GetPageFileLimitCore, 0, 4000, "page file limit");
+        }
+
+        private static long GetPageFileLimitCore()
+        {
             try
             {
                 using (var searcher = new ManagementObjectSearcher(
@@ -321,6 +404,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         public static float GetPageFileUsagePercentage()
         {
+            return BoundedReader.Read(GetPageFileUsagePercentageCore, 0f, 9000, "page file percentage");
+        }
+
+        private static float GetPageFileUsagePercentageCore()
+        {
             var limit = GetPageFileLimit();
             if (limit <= 0) return 0f;
 
@@ -337,6 +425,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         public static float GetCpuUsage()
         {
+            return BoundedReader.Read(GetCpuUsageCore, 0f, 3000, "CPU usage");
+        }
+
+        private static float GetCpuUsageCore()
+        {
             return SampleCounter("Processor Information", "% Processor Utility", "_Total", 500) switch
             {
                 var utility when utility > 0 => Math.Min(100f, utility),
@@ -348,6 +441,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// Per-core CPU usage in percent.
         /// </summary>
         public static float[] GetCpuUsagePerCore()
+        {
+            return BoundedReader.Read(GetCpuUsagePerCoreCore, Array.Empty<float>(), 5000, "per-core CPU");
+        }
+
+        private static float[] GetCpuUsagePerCoreCore()
         {
             var coreCount = Environment.ProcessorCount;
             if (coreCount <= 0) return Array.Empty<float>();
@@ -393,6 +491,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         public static float GetCpuLoad()
         {
+            return BoundedReader.Read(GetCpuLoadCore, 0f, 6000, "CPU load");
+        }
+
+        private static float GetCpuLoadCore()
+        {
             var perCore = GetCpuUsagePerCore();
             return perCore.Length == 0 ? 0f : perCore.Average();
         }
@@ -402,6 +505,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         public static float GetContextSwitchesPerSecond()
         {
+            return BoundedReader.Read(GetContextSwitchesPerSecondCore, 0f, 2500, "context switches");
+        }
+
+        private static float GetContextSwitchesPerSecondCore()
+        {
             return SampleCounter("System", "Context Switches/sec", null, 500);
         }
 
@@ -409,6 +517,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// Run queue length - number of threads waiting for CPU.
         /// </summary>
         public static float GetProcessorQueueLength()
+        {
+            return BoundedReader.Read(GetProcessorQueueLengthCore, 0f, 2000, "processor queue");
+        }
+
+        private static float GetProcessorQueueLengthCore()
         {
             return SampleCounter("System", "Processor Queue Length", null, 0);
         }
@@ -421,6 +534,18 @@ namespace AISystemOptimizer.Core.Utilities
         /// CPU marketing name (empty when WMI is unavailable).
         /// </summary>
         public static string GetCpuName()
+        {
+            if (_cpuNameCache != null) return _cpuNameCache;
+            if (DateTime.UtcNow < _cpuNameNextAttempt) return string.Empty;
+
+            _cpuNameNextAttempt = DateTime.UtcNow.AddSeconds(60);
+            var value = BoundedReader.Read(GetCpuNameCore, string.Empty, 3000, "CPU name");
+
+            if (!string.IsNullOrEmpty(value)) _cpuNameCache = value;
+            return value;
+        }
+
+        private static string GetCpuNameCore()
         {
             try
             {
@@ -447,6 +572,18 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         public static string GetCpuManufacturer()
         {
+            if (_cpuManufacturerCache != null) return _cpuManufacturerCache;
+            if (DateTime.UtcNow < _cpuManufacturerNextAttempt) return string.Empty;
+
+            _cpuManufacturerNextAttempt = DateTime.UtcNow.AddSeconds(60);
+            var value = BoundedReader.Read(GetCpuManufacturerCore, string.Empty, 3000, "CPU manufacturer");
+
+            if (!string.IsNullOrEmpty(value)) _cpuManufacturerCache = value;
+            return value;
+        }
+
+        private static string GetCpuManufacturerCore()
+        {
             try
             {
                 using (var searcher = new ManagementObjectSearcher("SELECT Manufacturer FROM Win32_Processor"))
@@ -468,6 +605,18 @@ namespace AISystemOptimizer.Core.Utilities
         /// Physical core count (falls back to logical processor count).
         /// </summary>
         public static int GetPhysicalCoreCount()
+        {
+            if (_coreCountCache > 0) return _coreCountCache;
+            if (DateTime.UtcNow < _coreCountNextAttempt) return Environment.ProcessorCount;
+
+            _coreCountNextAttempt = DateTime.UtcNow.AddSeconds(60);
+            var value = BoundedReader.Read(GetPhysicalCoreCountCore, 0, 3000, "physical core count");
+
+            if (value > 0) _coreCountCache = value;
+            return value > 0 ? value : Environment.ProcessorCount;
+        }
+
+        private static int GetPhysicalCoreCountCore()
         {
             try
             {
@@ -492,6 +641,18 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         public static (double Current, double Max) GetCpuClockMhz()
         {
+            if (_cpuClockCache != null) return _cpuClockCache.Value;
+            if (DateTime.UtcNow < _cpuClockNextAttempt) return (0, 0);
+
+            _cpuClockNextAttempt = DateTime.UtcNow.AddSeconds(60);
+            var value = BoundedReader.Read(GetCpuClockMhzCore, (0.0, 0.0), 3000, "CPU clock");
+
+            if (value != (0.0, 0.0)) _cpuClockCache = value;
+            return value;
+        }
+
+        private static (double Current, double Max) GetCpuClockMhzCore()
+        {
             try
             {
                 using (var searcher = new ManagementObjectSearcher(
@@ -515,6 +676,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// NEVER fabricates a value - the UI must show "N/A" when this returns null.
         /// </summary>
         public static float? GetCpuTemperature()
+        {
+            return BoundedReader.Read(GetCpuTemperatureCore, (float?)null, 4000, "CPU temperature");
+        }
+
+        private static float? GetCpuTemperatureCore()
         {
             // MSAcpi_ThermalZoneTemperature reports tenths of Kelvin.
             try
@@ -558,6 +724,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// GPU list with name, vendor, driver version and (when available) usage/memory.
         /// </summary>
         public static List<GpuCounterInfo> GetGpuInformation()
+        {
+            return BoundedReader.Read(GetGpuInformationCore, new List<GpuCounterInfo>(), 10000, "GPU information");
+        }
+
+        private static List<GpuCounterInfo> GetGpuInformationCore()
         {
             var gpus = new List<GpuCounterInfo>();
 
@@ -616,6 +787,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// Returns 0 when the counters are unavailable - callers display N/A in that case.
         /// </summary>
         public static float GetGpuUsage()
+        {
+            return BoundedReader.Read(GetGpuUsageCore, 0f, 5000, "GPU usage");
+        }
+
+        private static float GetGpuUsageCore()
         {
             try
             {
@@ -688,6 +864,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         public static long GetGpuMemoryUsage()
         {
+            return BoundedReader.Read(GetGpuMemoryUsageCore, 0, 5000, "GPU memory");
+        }
+
+        private static long GetGpuMemoryUsageCore()
+        {
             try
             {
                 if (!CounterCategoryExists("GPU Adapter Memory"))
@@ -752,6 +933,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         public static long GetDiskReadBytesPerSecond()
         {
+            return BoundedReader.Read(GetDiskReadBytesPerSecondCore, 0, 2500, "disk read speed");
+        }
+
+        private static long GetDiskReadBytesPerSecondCore()
+        {
             return (long)Math.Max(0, SampleCounter("PhysicalDisk", "Disk Read Bytes/sec", "_Total", 400));
         }
 
@@ -760,6 +946,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         public static long GetDiskWriteBytesPerSecond()
         {
+            return BoundedReader.Read(GetDiskWriteBytesPerSecondCore, 0, 2500, "disk write speed");
+        }
+
+        private static long GetDiskWriteBytesPerSecondCore()
+        {
             return (long)Math.Max(0, SampleCounter("PhysicalDisk", "Disk Write Bytes/sec", "_Total", 400));
         }
 
@@ -767,6 +958,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// Total disk busy time in percent.
         /// </summary>
         public static float GetDiskActivity()
+        {
+            return BoundedReader.Read(GetDiskActivityCore, 0f, 2500, "disk activity");
+        }
+
+        private static float GetDiskActivityCore()
         {
             return Math.Min(100f, Math.Max(0f,
                 SampleCounter("PhysicalDisk", "% Disk Time", "_Total", 400)));
@@ -777,6 +973,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         public static float GetDiskQueueLength()
         {
+            return BoundedReader.Read(GetDiskQueueLengthCore, 0f, 2000, "disk queue");
+        }
+
+        private static float GetDiskQueueLengthCore()
+        {
             return Math.Max(0f, SampleCounter("PhysicalDisk", "Avg. Disk Queue Length", "_Total", 0));
         }
 
@@ -784,6 +985,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// Average disk response time in milliseconds.
         /// </summary>
         public static float GetDiskResponseTimeMs()
+        {
+            return BoundedReader.Read(GetDiskResponseTimeMsCore, 0f, 2000, "disk response time");
+        }
+
+        private static float GetDiskResponseTimeMsCore()
         {
             var seconds = SampleCounter("PhysicalDisk", "Avg. Disk sec/Transfer", "_Total", 0);
             return Math.Max(0f, seconds * 1000f);
@@ -793,6 +999,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// Logical drive information including capacity and where the OS is installed.
         /// </summary>
         public static List<DiskDriveInfo> GetDiskDriveInfo()
+        {
+            return BoundedReader.Read(GetDiskDriveInfoCore, new List<DiskDriveInfo>(), 6000, "disk drives");
+        }
+
+        private static List<DiskDriveInfo> GetDiskDriveInfoCore()
         {
             var result = new List<DiskDriveInfo>();
 
@@ -877,6 +1088,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         public static float? GetDiskTemperature()
         {
+            return BoundedReader.Read(GetDiskTemperatureCore, (float?)null, 4000, "disk temperature");
+        }
+
+        private static float? GetDiskTemperatureCore()
+        {
             try
             {
                 using (var searcher = new ManagementObjectSearcher(
@@ -908,6 +1124,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         public static long GetNetworkDownloadSpeed()
         {
+            return BoundedReader.Read(GetNetworkDownloadSpeedCore, 0, 2500, "network download");
+        }
+
+        private static long GetNetworkDownloadSpeedCore()
+        {
             return (long)Math.Max(0, SampleCounter("Network Interface", "Bytes Received/sec", "_Total", 400));
         }
 
@@ -916,6 +1137,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         public static long GetNetworkUploadSpeed()
         {
+            return BoundedReader.Read(GetNetworkUploadSpeedCore, 0, 2500, "network upload");
+        }
+
+        private static long GetNetworkUploadSpeedCore()
+        {
             return (long)Math.Max(0, SampleCounter("Network Interface", "Bytes Sent/sec", "_Total", 400));
         }
 
@@ -923,6 +1149,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// Per-adapter throughput for physical adapters.
         /// </summary>
         public static List<NetworkAdapterCounterInfo> GetNetworkAdapterInfo()
+        {
+            return BoundedReader.Read(GetNetworkAdapterInfoCore, new List<NetworkAdapterCounterInfo>(), 6000, "network adapters");
+        }
+
+        private static List<NetworkAdapterCounterInfo> GetNetworkAdapterInfoCore()
         {
             var result = new List<NetworkAdapterCounterInfo>();
 

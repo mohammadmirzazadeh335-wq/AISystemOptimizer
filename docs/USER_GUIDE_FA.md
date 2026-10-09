@@ -32,7 +32,7 @@ certutil -hashfile AIOptimizer.exe SHA256
 این فایل هش برای نسخهٔ فعلی این است:
 
 ```
-df254c8b02b38ab09f6b393b7cd974d8216e36a563aad05230b364b85cedb896
+4db1654bd3d7fa1ed37fca79e2faa0f39fdc2798eee2a0d16781d5edaed0a662
 ```
 
 اگر یکی نبود، فایل را دور بریزید و دوباره دانلود کنید.
@@ -181,6 +181,7 @@ $env:AISYSTEMOPTIMIZER_PORTABLE = "1"
 | GPU/Temperature نشان می‌دهد `N/A` | درایور آن شمارنده را ارائه نمی‌دهد؛ برنامه عدد نمی‌سازد |
 | AI Analyze چیزی پیشنهاد نمی‌کند | Ollama در حال اجرا نیست، یا پیشنهادهای مدل از فیلتر ایمنی رد شده‌اند (دلیلش نوشته می‌شود) |
 | می‌خواهم همه‌چیز را برگردانم | در بخش Optimization دکمهٔ **Undo**؛ در Game & App Optimizer دکمهٔ **End session and restore** |
+| برنامه روی «گرفتن اطلاعات سیستم» ماند | این باگ نسخهٔ ۱.۰.۰ بود (خواندن‌های WMI بدون timeout). در **v1.0.1** رفع شده؛ حتماً نسخهٔ جدید را از صفحهٔ Releases بگیرید |
 | فایل‌های لاگ کجاست | `%LOCALAPPDATA%\AISystemOptimizer\Logs` (یا کنار EXE در حالت Portable) |
 
 ---

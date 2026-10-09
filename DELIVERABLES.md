@@ -9,11 +9,11 @@ Everything requested in the project specification, and where to find it.
 | 3 | **Build instructions** | [`docs/BUILD.md`](docs/BUILD.md) | ✅ verified with .NET SDK 8.0.425 |
 | 4 | **README** | [`README.md`](README.md) | ✅ |
 | 5 | **Configuration** | [`config/config.json`](config/config.json) (documented template), `config/config.defaults.json` (clean), runtime copy in `%LOCALAPPDATA%\AISystemOptimizer` | ✅ |
-| 6 | **Portable EXE** | [`portable/AIOptimizer.exe`](portable) — self-contained single file, 65.7 MB (68,919,987 bytes), no installation, no .NET runtime needed. SHA-256 recorded in `portable/AIOptimizer.exe.sha256` | ⚠️ binary produced and reproducible (two independent publishes produced the same SHA-256); **execution not verified** — never run on Windows |
+| 6 | **Portable EXE** | [`portable/AIOptimizer.exe`](portable) — self-contained single file, 65.7 MB (68,923,208 bytes), no installation, no .NET runtime needed. SHA-256 recorded in `portable/AIOptimizer.exe.sha256` | ⚠️ binary produced and reproducible (two independent publishes produced the same SHA-256); **execution not verified** — never run on Windows |
 | 7 | **Installer** | [`installer/AISystemOptimizer.iss`](installer/AISystemOptimizer.iss) + `scripts/publish-installer.ps1` | ⚠️ script complete; **not compiled or tested** (needs Inno Setup 6 on Windows) |
 | 8 | **Logging** | `Logger.cs` (rotating file log), `%LOCALAPPDATA%\AISystemOptimizer\Logs` | ✅ |
 | 9 | **Restore / Undo** | `RecoveryService`, `SafetyValidator` + executor undo definitions, `UNDO LAST OPTIMIZATION`, Windows restore points | ✅ logic tested; live restore points **not verified** |
-| 10 | **Basic tests** | `tests/AISystemOptimizer.Tests` — **492 tests, all passing** | ✅ run & green |
+| 10 | **Basic tests** | `tests/AISystemOptimizer.Tests` — **500 tests, all passing** | ✅ run & green |
 | 11 | **Documentation set** | `docs/` — ARCHITECTURE, BUILD, USER_GUIDE, TESTING, SMOKE_TEST, **AUDIT**, plus **[`WINDOWS_VALIDATION.md`](WINDOWS_VALIDATION.md)** (the real-machine validation report and its verdict) | ✅ |
 | 12 | **Debug / audit / security review** | [`docs/AUDIT.md`](docs/AUDIT.md) — 23 defects found and fixed, with test evidence | ✅ |
 | 13 | **Real-machine validation harness** | `tools/AISystemOptimizer.SmokeTests` — 54 checks that drive the shipped code on the target machine and print PASS / FAIL / NOT VERIFIED per check (exit code = number of failures) | ⚠️ compiles clean in Debug and Release; runs; **the Windows checks are NOT VERIFIED** because no Windows machine was reachable |

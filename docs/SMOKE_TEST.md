@@ -37,7 +37,7 @@ steps 6–8 elevated.
 ```
 
 - [ ] Build: `0 Warning(s), 0 Error(s)`
-- [ ] Tests: `Failed: 0, Passed: 492`
+- [ ] Tests: `Failed: 0, Passed: 500`
 
 ---
 

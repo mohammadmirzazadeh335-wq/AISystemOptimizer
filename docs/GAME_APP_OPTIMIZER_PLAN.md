@@ -228,7 +228,7 @@ only route to closing anything is an `OptimizationAction` handed to the existing
 
 ### 62.18 Unit tests — DONE
 
-`dotnet test -c Release` → **492 passed, 0 failed** (273 existing + 219 added for this feature). No
+`dotnet test -c Release` → **500 passed, 0 failed** (273 existing + 219 added for this feature). No
 existing test was removed or weakened.
 
 ### 62.19 Windows smoke test — NOT VERIFIED

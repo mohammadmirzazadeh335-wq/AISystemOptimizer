@@ -58,7 +58,7 @@ work — the compiler really did check the code — but it is **not** evidence a
 dotnet clean                                  → 0 Error(s)
 dotnet build -c Release                       → Build succeeded.  0 Warning(s)  0 Error(s)
 dotnet build -c Debug                         → Build succeeded.  0 Warning(s)  0 Error(s)
-dotnet test  -c Release --no-build            → Passed!  - Failed: 0, Passed: 492, Skipped: 0, Total: 492
+dotnet test  -c Release --no-build            → Passed!  - Failed: 0, Passed: 500, Skipped: 0, Total: 500
 dotnet publish src/AISystemOptimizer.App -c Release -r win-x64 --self-contained true
         -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
         -p:PortableName=AIOptimizer -o portable
@@ -72,12 +72,12 @@ The Debug and Release matrices were both built, so the code is warning-free in b
 
 | Artefact | Path | Size | Status |
 |---|---|---|---|
-| Portable executable | `portable/AIOptimizer.exe` | 68,919,987 bytes | produced in this build |
-| Portable executable hash | `portable/AIOptimizer.exe.sha256` | — | `df254c8b02b38ab09f6b393b7cd974d8216e36a563aad05230b364b85cedb896` |
+| Portable executable | `portable/AIOptimizer.exe` | 68,923,208 bytes | produced in this build |
+| Portable executable hash | `portable/AIOptimizer.exe.sha256` | — | `4db1654bd3d7fa1ed37fca79e2faa0f39fdc2798eee2a0d16781d5edaed0a662` |
 | Validation harness | `tools/AISystemOptimizer.SmokeTests/` | 4 source files | builds clean in both configurations |
 | Machine script | `scripts/smoke-test.ps1` | 706 lines | parse-verified; executed on Linux (§ 2.4) |
 | Configuration template | `config/config.json`, `config/config.defaults.json` | 63 keys | both parse; both contain `allowRemoteAiServer` |
-| Test project | `tests/AISystemOptimizer.Tests` | 7 files | 492 tests, 0 failures |
+| Test project | `tests/AISystemOptimizer.Tests` | 7 files | 500 tests, 0 failures |
 
 `dotnet sln` now contains the harness, so `dotnet build -c Release` at the repository root builds the
 validators as well as the product. The harness is published **as source plus a build command** rather
@@ -116,13 +116,13 @@ false claim this project forbids. See § 10.
 |---|---|
 | Project baseline (start of the audit) | 64 |
 | Before this phase | 242 |
-| **Now** | **492** (Failed: 0, Skipped: 0) |
+| **Now** | **500** (Failed: 0, Skipped: 0) |
 
 No test was deleted. One test was **rewritten** (it asserted only default values, so it passed whether
 or not the configuration file was read at all — recorded in `docs/AUDIT.md` as part of the critical
 config defect), and its replacement is a stricter test with the reason written into the code.
 
-### 3.2 What the 492 tests do and do not cover
+### 3.2 What the 500 tests do and do not cover
 
 | Area | Covered | How |
 |---|---|---|
@@ -184,7 +184,7 @@ dotnet run --project tools\AISystemOptimizer.SmokeTests -c Release -- --monitor-
 
 ## 3.5 Game & App Optimizer (PHASE 62) — NOT VERIFIED
 
-PHASE 62 adds the Game & App Optimizer. Its logic is unit-tested here (219 new tests, 492 in total,
+PHASE 62 adds the Game & App Optimizer. Its logic is unit-tested here (219 new tests, 500 in total,
 0 failures) and its security surface was reviewed by grep for the forbidden constructs — no
 termination path, no shell execution, no placebo APIs, two reversible registry writes. **No Windows
 runtime check has been performed.**
@@ -207,6 +207,15 @@ runtime check has been performed.**
 
 Run it on Windows 11 x64 and record the results in that file. Until then the Game & App Optimizer is
 **PARTIALLY VALIDATED** at best, and **NOT VALIDATED** as a product claim.
+
+## 3.6 Real-world bug found on Windows and fixed (v1.0.0 → v1.0.1)
+
+A user ran v1.0.0 on Windows and reported: the application stays on gathering system information,
+even as administrator. Reproduction on this Linux host is impossible; the root cause was established
+by reading the startup path: unbounded WMI / performance-counter reads (see `docs/AUDIT.md` D-24).
+v1.0.1 bounds every external read, moves the live sampler off the UI thread and records abandoned
+reads in the log. **Whether v1.0.1 now starts cleanly on that machine is NOT VERIFIED here — the user
+must re-run it; that single check is the shortest remaining item in §3.4.**
 
 ## 4. Runtime
 
@@ -430,7 +439,7 @@ NOT VERIFIED by running § 3.4 on the target machine and filling in § 8.
 **Precisely what is validated, and by what:**
 
 - the solution **builds** in Debug and Release with 0 warnings and 0 errors (§ 2.1) — executed here;
-- **492 automated tests pass**, none deleted, one rewritten with its reason recorded (§ 3.1) — executed here;
+- **500 automated tests pass**, none deleted, one rewritten with its reason recorded (§ 3.1) — executed here;
 - the **portable executable was produced** by the documented publish command, and its SHA-256 is recorded
   (§ 2.2) — executed here;
 - the **validation tooling itself runs**: the PowerShell script executed end to end and produced a
@@ -452,7 +461,7 @@ NOT VERIFIED by running § 3.4 on the target machine and filling in § 8.
 observed results. They contain none.
 
 **Why PARTIALLY VALIDATED and not NOT VALIDATED:** a substantial part of the work *was* really executed
-and really passed — the build matrix, the 492 tests, the publish, the tooling, and a full static
+and really passed — the build matrix, the 500 tests, the publish, the tooling, and a full static
 security review with 21 fixed defects. Calling the whole thing unvalidated would understate what was
 actually run; calling it validated would overstate what was actually run. The one-word verdict that is
 true is PARTIAL.

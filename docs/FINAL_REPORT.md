@@ -32,12 +32,12 @@ before the final build. The final clean builds are genuinely zero-warning, not s
 ## TESTS
 
 ```
-Passed!  - Failed: 0, Passed: 492, Skipped: 0, Total: 492
+Passed!  - Failed: 0, Passed: 500, Skipped: 0, Total: 500
 ```
 
 | | Before the audit | After |
 | --- | --- | --- |
-| Test count | 64 | **492** |
+| Test count | 64 | **500** |
 | Test files | 2 | **5** |
 | Assertions covering the safety layer | partial | complete |
 
@@ -362,13 +362,13 @@ explicit "requires Windows" note where one is not.
 [AUDIT.md](AUDIT.md): real termination, UAC, counters, sensors, WPF rendering, the installer, and the
 portable EXE on a .NET-less machine. The program has never run.
 
-**How many tests, before and after?** 64 → 492. None deleted; one rewritten with the reason recorded.
+**How many tests, before and after?** 64 → 500. None deleted; one rewritten with the reason recorded.
 
 **Did the final build succeed?** Yes. Clean Debug and Release, 0 errors and 0 warnings each. Both
 publish variants produced a working image.
 
 **Does the claim "actually tested" still hold?** **No, and it did not before either.** The accurate
-statement is: *the logic is tested — 492 tests over the safety policy, the classification rules, the
+statement is: *the logic is tested — 500 tests over the safety policy, the classification rules, the
 AI parser, the measurement arithmetic, the configuration handling and the identity guard; the
 compilation is clean in both configurations and both publish modes; and the program has never been
 executed on Windows, so every runtime behaviour remains unverified.*
@@ -395,14 +395,14 @@ contains no termination path, no shell execution and no placebo API of its own.
 | Path validation, inspection, signature verification, storage, planning, sessions, restore, RAM advice, score, categorisation, AI vocabulary | `src/AISystemOptimizer.Core/GameApp/Services/` |
 | The page, the cards and the shell wiring | `src/AISystemOptimizer.UI/Views/GameAppOptimizerView.xaml`, `ViewModels/GameAppOptimizerViewModel.cs`, `ViewModels/MainViewModel.cs`, `Views/MainWindow.xaml` |
 | Configuration | nine new keys in `config/config.json` **and** `config/config.defaults.json` |
-| Tests | 219 new, 492 in total |
+| Tests | 219 new, 500 in total |
 | Documents | `docs/GAME_APP_OPTIMIZER_PLAN.md` (architecture, impact, files, risks, order, progress log), `docs/GAME_APP_OPTIMIZER_SMOKE_TEST.md` (the 20 Windows checks) |
 
 ## What was verified here
 
-Build (Debug and Release, 0 warnings, 0 errors), 492 unit tests, the security review by grep, and the
-portable build: `portable/AIOptimizer.exe`, 68,919,987 bytes, SHA-256
-`df254c8b02b38ab09f6b393b7cd974d8216e36a563aad05230b364b85cedb896`.
+Build (Debug and Release, 0 warnings, 0 errors), 500 unit tests, the security review by grep, and the
+portable build: `portable/AIOptimizer.exe`, 68,923,208 bytes, SHA-256
+`4db1654bd3d7fa1ed37fca79e2faa0f39fdc2798eee2a0d16781d5edaed0a662`.
 
 ## What was NOT verified
 

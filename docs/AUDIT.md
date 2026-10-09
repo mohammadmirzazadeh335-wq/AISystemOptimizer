@@ -6,13 +6,13 @@ output, and every defect found was reproduced, fixed and covered by a test.
 
 **The honest headline:** the build succeeding, the tests passing and the executable existing proved
 nothing about whether the program behaves correctly on a real Windows 11 machine. The audit found
-**23 defects** — 1 critical, 8 high, 12 medium, 2 low — five of them in the safety model itself. They
+**24 defects** — 1 critical, 8 high, 13 medium, 2 low — five of them in the safety model itself. They
 are listed below with the file, the root cause and the fix. D-23 was found while building the
 Game & App Optimizer (PHASE 62) and is recorded here rather than in a separate document, because it
 is a defect in the existing optimiser that the new feature exposed.
 
-Test count went from **64 to 492**: 211 at the end of the audit, then 273 after the PHASE 61 work, then
-492 once PHASE 62's own suites were added. No original test was deleted; one that was found to have
+Test count went from **64 to 500**: 211 at the end of the audit, then 273 after the PHASE 61 work, then
+500 once PHASE 62's own suites were added. No original test was deleted; one that was found to have
 been asserting a defect was rewritten and the reason is recorded here.
 
 ---
@@ -23,7 +23,7 @@ This project was developed and audited on Linux. That constrains what can honest
 
 | Area | Status |
 | --- | --- |
-| Compilation, static analysis, unit and integration tests | **Verified** — 492 tests, 0 warnings, 0 errors, Debug and Release |
+| Compilation, static analysis, unit and integration tests | **Verified** — 500 tests, 0 warnings, 0 errors, Debug and Release |
 | Logic of the safety policy, classification, parsing, measurement maths | **Verified** — pure functions, exercised directly by tests |
 | Termination actually happening on a real process | **Not verified** — requires Windows |
 | UAC prompting, elevation, access-denied handling | **Not verified** — requires Windows |
@@ -353,6 +353,28 @@ Recorded here because the review is part of the phase, not because a defect was 
 | Selected paths are untrusted | `ExecutablePathValidator` rejects device paths, drive-relative paths, control characters, over-long paths, non-`.exe` files and reparse points; the profile's stored path is re-validated on every health check, because a profile file is user-editable |
 
 ---
+
+### D-24 — Unbounded Windows reads froze the app on a real machine (found by a user, fixed in v1.0.1)
+
+**Report:** "the program stays on gathering system information, even as administrator."
+
+**Root cause (three reinforcing defects):** `ManagementObjectSearcher.Get()` and
+performance-counter creation have no timeout; on a machine with a busy or corrupt WMI repository a
+single call blocks forever. Version 1.0.0 called them directly, and the dashboard's two-second live
+sampler ran `QuickScan()` — which includes those calls — synchronously on the UI thread, so one stuck
+reading froze the whole window while the status said it was gathering system information.
+
+**Fix:** a new `BoundedReader` runs every external read on a worker thread with a hard limit and a
+fallback value; all 33 performance-counter/WMI getters in `PerformanceCounterHelper`, the five WMI
+readers in `WindowsApiHelper`, counter creation/priming (now outside the cache lock) and the live
+sampler (now off the UI thread, re-entrancy-guarded) go through it. Hardware identity reads are
+cached after the first success and retried at most once a minute, so a broken repository is asked at
+most once a minute instead of every two seconds. Abandoned reads are counted and named
+(`BoundedReader.AbandonedReads`) so the log tells the truth about what timed out.
+
+**Regression tests:** `BoundedReaderTests` (a stuck read returns the fallback inside the limit and is
+recorded; a throwing read returns the fallback; `TryRun` both ways) and `StartupScanTests` (the quick
+scan and the full scan always come back).
 
 ## Reviewed and found correct
 

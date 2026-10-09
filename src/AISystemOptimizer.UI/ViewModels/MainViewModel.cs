@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -22,6 +23,7 @@ namespace AISystemOptimizer.UI.ViewModels
 
         private readonly OptimizationEngine _engine;
         private readonly DispatcherTimer _liveTimer;
+        private int _sampleInFlight;
         private readonly Stopwatch _uptime = Stopwatch.StartNew();
 
         private SystemInfo _systemInfo = new SystemInfo();
@@ -389,20 +391,27 @@ namespace AISystemOptimizer.UI.ViewModels
         /// <summary>Cheap metric refresh for the live dashboard.</summary>
         private async Task SampleMetricsAsync()
         {
+            // The two-second tick must NEVER block the UI thread. v1.0.0 sampled the counters
+            // synchronously here, so one stuck Windows reading froze the whole window. The sample
+            // now runs on a worker thread, and a tick that finds the previous sample still in
+            // flight is simply skipped.
             if (IsBusy) return;
+            if (Interlocked.CompareExchange(ref _sampleInFlight, 1, 0) != 0) return;
 
             try
             {
-                var sample = _engine.SampleMetrics();
+                var sample = await Task.Run(() => _engine.SampleMetrics()).ConfigureAwait(true);
 
                 // Only the live values are replaced; the full snapshot stays as-is.
                 Dashboard.ApplyLiveSample(sample);
-
-                await Task.CompletedTask;
             }
             catch (Exception ex)
             {
                 Logger.Warning("MainViewModel", "Live metric sampling failed", null, ex);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _sampleInFlight, 0);
             }
         }
 

@@ -782,6 +782,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         public static string GetProcessCommandLine(int processId)
         {
+            return BoundedReader.Read(() => GetProcessCommandLineCore(processId), string.Empty, 3000, "process command line");
+        }
+
+        private static string GetProcessCommandLineCore(int processId)
+        {
             try
             {
                 using (var searcher = new System.Management.ManagementObjectSearcher(
@@ -805,6 +810,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// </summary>
         public static int GetParentProcessId(int processId)
         {
+            return BoundedReader.Read(() => GetParentProcessIdCore(processId), 0, 3000, "parent process id");
+        }
+
+        private static int GetParentProcessIdCore(int processId)
+        {
             try
             {
                 using (var searcher = new System.Management.ManagementObjectSearcher(
@@ -825,6 +835,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// Get the owning user (DOMAIN\user) of a process via WMI.
         /// </summary>
         public static string GetProcessOwner(int processId)
+        {
+            return BoundedReader.Read(() => GetProcessOwnerCore(processId), string.Empty, 3000, "process owner");
+        }
+
+        private static string GetProcessOwnerCore(int processId)
         {
             try
             {
@@ -1595,6 +1610,12 @@ namespace AISystemOptimizer.Core.Utilities
         private static void CollectWmiStartupItems(
             List<Models.SystemInfo.StartupItem> items, HashSet<string> seen)
         {
+            BoundedReader.TryRun(() => CollectWmiStartupItemsCore(items, seen), 5000, "WMI startup items");
+        }
+
+        private static void CollectWmiStartupItemsCore(
+            List<Models.SystemInfo.StartupItem> items, HashSet<string> seen)
+        {
             try
             {
                 using (var searcher = new System.Management.ManagementObjectSearcher(
@@ -1802,6 +1823,11 @@ namespace AISystemOptimizer.Core.Utilities
         /// This is read-only telemetry: the application never changes it.
         /// </summary>
         public static bool IsDefenderRealTimeProtectionEnabled()
+        {
+            return BoundedReader.Read(IsDefenderRealTimeProtectionEnabledCore, false, 3000, "Defender status");
+        }
+
+        private static bool IsDefenderRealTimeProtectionEnabledCore()
         {
             try
             {
