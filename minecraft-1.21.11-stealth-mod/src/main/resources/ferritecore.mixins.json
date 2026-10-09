@@ -1,0 +1,33 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "net.optifabric.ferrite.mixin",
+  "plugin": "net.optifabric.ferrite.core.FerriteMixinPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "AtmosphericFogEnvironmentMixin",
+    "BlockEntityRenderDispatcherMixin",
+    "BlockMixin",
+    "BlockStateBaseMixin",
+    "ClientTelemetryManagerMixin",
+    "EntityMixin",
+    "EntityRendererMixin",
+    "FogRendererMixin",
+    "GameRendererMixin",
+    "IndigoBlockRenderInfoMixin",
+    "KeyboardHandlerMixin",
+    "LiquidBlockRendererMixin",
+    "LocalPlayerMixin",
+    "MinecraftMixin",
+    "ModelBlockRendererMixin",
+    "OptionInstanceMixin",
+    "SectionOcclusionGraphMixin",
+    "SodiumBlockRenderContextMixin",
+    "SodiumFluidRendererMixin",
+    "SodiumRenderSectionManagerMixin",
+    "SystemReportMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
