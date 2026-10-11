@@ -73,6 +73,13 @@ namespace ServerHelp.Ui
 
             Log.Line += delegate (string line) { Ui(delegate { AppendLog(line); }); };
             _pipeline.Game.Exited += delegate (int code) { Ui(delegate { OnGameExited(code); }); };
+            // Subscribed once: subscribing inside every run would add the same row twice.
+            _pipeline.StepChanged += delegate (PipelineStep step)
+            {
+                Ui(delegate { AddStepRow(step.Title, step.StateTextFa, step.Detail, step.State); });
+            };
+            _pipeline.Progress += delegate (string message) { Ui(delegate { SetStatus(message); }); };
+            _pipeline.Finished += delegate (LaunchReport report) { Ui(delegate { OnPipelineFinished(report); }); };
         }
 
         // ------------------------------------------------------------------ UI build
@@ -1044,12 +1051,6 @@ namespace ServerHelp.Ui
                         "Server Help", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
-                _pipeline.StepChanged += delegate (PipelineStep step)
-                {
-                    Ui(delegate { AddStepRow(step.Title, step.StateTextFa, step.Detail, step.State); });
-                };
-                _pipeline.Progress += delegate (string message) { Ui(delegate { SetStatus(message); }); };
-                _pipeline.Finished += delegate (LaunchReport report) { Ui(delegate { OnPipelineFinished(report); }); };
                 _pipeline.Run(_settings, profile, version, _gameDir, javaPath);
             });
             _worker.IsBackground = true;
