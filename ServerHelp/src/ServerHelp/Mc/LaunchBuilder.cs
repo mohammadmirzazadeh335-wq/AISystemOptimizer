@@ -44,6 +44,17 @@ namespace ServerHelp.Mc
             try
             {
                 var root = Json.ParseObject(File.ReadAllText(version.JsonPath, Encoding.UTF8));
+
+                // Forge / Fabric / OptiFine profiles only describe their own layer and point at a
+                // parent version; the chain has to be merged or the client jar and the vanilla
+                // libraries would be missing and the game would not start.
+                string versionsDir = Path.GetDirectoryName(version.Folder);
+                if (string.IsNullOrEmpty(versionsDir)) versionsDir = Path.Combine(gameDir, "versions");
+                string inheritedJar;
+                List<string> inheritedNotes;
+                root = VersionResolver.Merge(root, versionsDir, out inheritedJar, out inheritedNotes);
+                foreach (string note in inheritedNotes) plan.Notes.Add(note);
+
                 string mainClass = Json.GetStr(root, "mainClass", "");
                 if (string.IsNullOrEmpty(mainClass)) { error = L.T("فایل نسخه ناقص است (mainClass ندارد)", "version json is incomplete (no mainClass)"); return null; }
 
@@ -60,7 +71,8 @@ namespace ServerHelp.Mc
 
                 // ---------------------------------------------------------- libraries
                 var classpath = new List<string>();
-                string versionJar = Shell.FileExists(version.JarPath) ? version.JarPath : Path.Combine(version.Folder, version.Id + ".jar");
+                string versionJar = !string.IsNullOrEmpty(inheritedJar) ? inheritedJar
+                                    : (Shell.FileExists(version.JarPath) ? version.JarPath : Path.Combine(version.Folder, version.Id + ".jar"));
 
                 var libraries = Json.Arr(Json.Get(root, "libraries"));
                 if (libraries != null)
@@ -101,7 +113,14 @@ namespace ServerHelp.Mc
                     }
                 }
 
+                if (!Shell.FileExists(versionJar))
+                {
+                    string clientUrl = Json.GetStr(Json.Obj(Json.Get(Json.Obj(Json.Get(root, "downloads")), "client")), "url", "");
+                    if (!string.IsNullOrEmpty(clientUrl) && DownloadFile(clientUrl, versionJar))
+                        plan.Notes.Add(L.T("فایل کلاینت دانلود شد", "client jar downloaded"));
+                }
                 if (Shell.FileExists(versionJar) && !classpath.Contains(versionJar)) classpath.Add(versionJar);
+                else if (!Shell.FileExists(versionJar)) plan.Notes.Add(L.T("فایل کلاینت پیدا نشد", "client jar missing"));
                 plan.Classpath = string.Join(";", classpath.ToArray());
 
                 // ---------------------------------------------------------- placeholders
@@ -186,9 +205,11 @@ namespace ServerHelp.Mc
                 // ---------------------------------------------------------- server entry
                 if (quickPlay && server != null)
                 {
-                    bool isLegacy = Json.Obj(Json.Get(root, "arguments")) == null;
+                    // --quickPlayMultiplayer exists since 1.20; older clients use --server/--port and
+                    // would refuse to start when handed an argument they do not know.
+                    bool useQuickPlay = VersionResolver.SupportsQuickPlay(version.Id);
                     string host = server.PreferDomain || string.IsNullOrEmpty(server.DirectIp) ? server.Host : server.DirectIp;
-                    if (!isLegacy)
+                    if (useQuickPlay)
                     {
                         string target = host + ":" + server.Port.ToString(CultureInfo.InvariantCulture);
                         gameArgs.Add("--quickPlayMultiplayer");

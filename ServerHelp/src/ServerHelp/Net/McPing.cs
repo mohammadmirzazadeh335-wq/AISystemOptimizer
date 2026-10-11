@@ -31,6 +31,8 @@ namespace ServerHelp.Net
         public int LatencyMs = -1;
         public string Raw = "";
         public string Via = "";
+        /// <summary>Set when the failure was a socket error: WSAECONNRESET means a filter or the server itself closed us.</summary>
+        public int SocketErrorCode;
 
         public string Short
         {
@@ -57,9 +59,19 @@ namespace ServerHelp.Net
             {
                 last = StatusOnce(host, port, timeoutMs, proxy, proto);
                 if (last.Ok) return last;
-                if (last.Error != null && last.Error.IndexOf("reset", StringComparison.OrdinalIgnoreCase) >= 0) break;
+                // A connection reset means something answered and killed us; retrying the other
+                // protocol versions would only waste the one minute budget.
+                if (last.SocketErrorCode == (int)SocketError.ConnectionReset || LooksLikeReset(last.Error)) break;
             }
             return last;
+        }
+
+        private static bool LooksLikeReset(string message)
+        {
+            if (string.IsNullOrEmpty(message)) return false;
+            return message.IndexOf("reset", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   message.IndexOf("forcibly closed", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   message.IndexOf("10054", StringComparison.Ordinal) >= 0;
         }
 
         private static McStatus StatusOnce(string host, int port, int timeoutMs, Socks5Client proxy, int protocol)
@@ -113,6 +125,8 @@ namespace ServerHelp.Net
             catch (Exception ex)
             {
                 status.Error = ex.Message;
+                var socketError = ex as SocketException;
+                if (socketError != null) status.SocketErrorCode = (int)socketError.SocketError;
                 return status;
             }
             finally
@@ -146,14 +160,15 @@ namespace ServerHelp.Net
                 handshake.AddRange(VarInt(2));      // login
                 SendPacket(socket, handshake.ToArray());
 
-                byte[] nick = Encoding.UTF8.GetBytes(string.IsNullOrEmpty(nickname) ? "ServerHelp" : nickname);
+                string loginName = string.IsNullOrEmpty(nickname) ? "ServerHelp" : nickname;
+                byte[] nick = Encoding.UTF8.GetBytes(loginName);
                 var login = new List<byte>();
                 login.Add(0x00);
                 login.AddRange(VarInt(nick.Length));
                 login.AddRange(nick);
                 if (ModernProtocol >= 764)
                 {
-                    login.AddRange(OfflineUuidBytes(nickname));
+                    login.AddRange(OfflineUuidBytes(loginName));
                 }
                 SendPacket(socket, login.ToArray());
 

@@ -164,11 +164,11 @@ namespace ServerHelp.Tunnel
                     ZipArchiveEntry found = null;
                     foreach (ZipArchiveEntry entry in archive.Entries)
                     {
-                        if (string.Equals(Path.GetFileName(entry.FullName), entryName, StringComparison.OrdinalIgnoreCase))
-                        {
-                            // prefer the plain amd64 build over any nested legacy folder
-                            if (found == null) found = entry;
-                        }
+                        if (!string.Equals(Path.GetFileName(entry.FullName), entryName, StringComparison.OrdinalIgnoreCase)) continue;
+                        // This app is 64 bit only, so an amd64 build always wins over arm64/x86 and
+                        // over any nested legacy-windows-7 folder.
+                        bool preferred = IsAmd64Entry(entry.FullName);
+                        if (found == null || (preferred && !IsAmd64Entry(found.FullName))) found = entry;
                     }
                     if (found == null) throw new Exception(entryName + " is not inside the archive");
                     Directory.CreateDirectory(Path.GetDirectoryName(targetPath));
@@ -179,6 +179,12 @@ namespace ServerHelp.Tunnel
             {
                 try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
             }
+        }
+
+        private static bool IsAmd64Entry(string fullName)
+        {
+            return fullName.IndexOf("amd64", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   fullName.IndexOf("x64", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         public static string Sha256(string path)
