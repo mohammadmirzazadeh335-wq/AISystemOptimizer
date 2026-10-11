@@ -71,7 +71,9 @@ namespace ServerHelp.Core
         public int ScanTimeoutMs = 3500;
 
         public bool OptimizeSystem = true;
-        public bool HighPerformancePowerPlan = true;
+        /// <summary>Opt-in on purpose: switching the Windows power plan changes a system wide
+        /// setting, so the user has to ask for it explicitly.</summary>
+        public bool HighPerformancePowerPlan = false;
         public bool TrimMemory = true;
         public bool CloseBackgroundApps = false;
         public bool SetJavaPriority = true;
