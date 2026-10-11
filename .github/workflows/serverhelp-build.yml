@@ -46,16 +46,18 @@ jobs:
           Write-Host "Fetching $url"
           $zip = "$env:RUNNER_TEMP\sing-box.zip"
           try {
-            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -TimeoutSec 180
+            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -TimeoutSec 240
           } catch {
-            Write-Warning "Could not download sing-box: $_"
-            exit 0
+            Start-Sleep -Seconds 5
+            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -TimeoutSec 240
           }
           Expand-Archive -Path $zip -DestinationPath "$env:RUNNER_TEMP\singbox" -Force
           $exe = Get-ChildItem -Path "$env:RUNNER_TEMP\singbox" -Recurse -Filter 'sing-box.exe' |
                  Where-Object { $_.FullName -notmatch 'legacy' } | Select-Object -First 1
           if (-not $exe) { $exe = Get-ChildItem -Path "$env:RUNNER_TEMP\singbox" -Recurse -Filter 'sing-box.exe' | Select-Object -First 1 }
-          if (-not $exe) { Write-Warning 'sing-box.exe not found in the archive'; exit 0 }
+          # A release without the engine would need a download on the user's machine, which is
+          # exactly what must not happen behind a filtered connection: fail loudly instead.
+          if (-not $exe) { throw 'sing-box.exe was not found inside the downloaded archive' }
           New-Item -ItemType Directory -Force -Path 'ServerHelp/src/ServerHelp/vendor' | Out-Null
           Copy-Item $exe.FullName 'ServerHelp/src/ServerHelp/vendor/sing-box.exe' -Force
           $hash = (Get-FileHash 'ServerHelp/src/ServerHelp/vendor/sing-box.exe' -Algorithm SHA256).Hash.ToLower()
@@ -101,8 +103,11 @@ jobs:
           Copy-Item "$out/ServerHelp.exe" 'dist/ServerHelp.exe' -Force
           $hash = (Get-FileHash 'dist/ServerHelp.exe' -Algorithm SHA256).Hash.ToLower()
           "$hash" | Out-File -Encoding ascii 'dist/ServerHelp.exe.sha256'
+          $sizeMb = (Get-Item 'dist/ServerHelp.exe').Length / 1MB
           Write-Host "ServerHelp.exe sha256 $hash"
-          Write-Host ("size: {0:N1} MB" -f ((Get-Item 'dist/ServerHelp.exe').Length / 1MB))
+          Write-Host ("size: {0:N1} MB" -f $sizeMb)
+          # The tunnel engine has to be inside the exe (a small file means it was not embedded).
+          if ($sizeMb -lt 5) { throw "ServerHelp.exe is only $sizeMb MB - the tunnel engine was not embedded" }
 
       - name: Upload artefact
         uses: actions/upload-artifact@v4
