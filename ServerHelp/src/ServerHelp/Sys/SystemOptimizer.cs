@@ -426,7 +426,7 @@ namespace ServerHelp.Sys
                     string name = process.ProcessName.ToLowerInvariant();
                     if (Array.IndexOf(CloseCandidates, name) < 0) continue;
                     if (process.MainWindowHandle == IntPtr.Zero) continue;
-                    if (process.CloseMainWindow(1))
+                    if (process.CloseMainWindow())
                     {
                         closed.Add(process.ProcessName);
                         Log.Info("asked " + process.ProcessName + " to close");
