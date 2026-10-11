@@ -118,7 +118,7 @@ jobs:
             dist/ServerHelp.exe.sha256
 
       - name: Publish release
-        if: github.event_name == 'workflow_dispatch' && inputs.create_release
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -126,4 +126,5 @@ jobs:
           $tag = "serverhelp-v1.0.0-${{ github.run_number }}"
           gh release create $tag 'dist/ServerHelp.exe' 'dist/ServerHelp.exe.sha256' `
             --title "Server Help v1.0.0 (build ${{ github.run_number }})" `
-            --notes "Server Help — Minecraft server helper (tunnel + system optimisation).`n`nDownload ServerHelp.exe and run it as administrator."
+            --latest=false `
+            --notes "Server Help — Minecraft server helper: diagnoses the connection, builds a low ping WARP tunnel for the game server only, tunes Windows, then launches the selected version straight into the server.`n`nDownload ServerHelp.exe, then right-click → Run as administrator. SHA-256 is published next to the file.`n`nPersian guide: ServerHelp/README.md"
