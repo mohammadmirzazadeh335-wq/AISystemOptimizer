@@ -126,7 +126,7 @@ namespace ServerHelp.Net
             {
                 status.Error = ex.Message;
                 var socketError = ex as SocketException;
-                if (socketError != null) status.SocketErrorCode = (int)socketError.SocketError;
+                if (socketError != null) status.SocketErrorCode = (int)socketError.SocketErrorCode;
                 return status;
             }
             finally
