@@ -151,7 +151,7 @@ namespace ServerHelp.Orchestration
 
             // ---------------------------------------------------------- 2. network diagnosis
             watch.Restart();
-            Progress(L.T("تشخیص وضعیت شبکه…", "Diagnosing the network…"));
+            Notify(L.T("تشخیص وضعیت شبکه…", "Diagnosing the network…"));
             var candidates = new List<string>();
             string host = server.PreferDomain || string.IsNullOrEmpty(server.DirectIp) ? server.Host : server.DirectIp;
 
@@ -249,7 +249,7 @@ namespace ServerHelp.Orchestration
 
             // ---------------------------------------------------------- 4. system tuning
             watch.Restart();
-            Progress(L.T("بهینه‌سازی سیستم…", "Tuning the system…"));
+            Notify(L.T("بهینه‌سازی سیستم…", "Tuning the system…"));
             Optimizer.TunnelExePath = Shell.FileExists(AppPaths.SingBoxExe) ? AppPaths.SingBoxExe : "";
             Optimizer.JavaExePath = javaPath;
             Optimizer.Run(settings, delegate (OptimizationStep s)
@@ -317,7 +317,7 @@ namespace ServerHelp.Orchestration
 
             // ---------------------------------------------------------- 8. launch
             watch.Restart();
-            Progress(L.T("آماده‌سازی اجرای بازی…", "Preparing the launch…"));
+            Notify(L.T("آماده‌سازی اجرای بازی…", "Preparing the launch…"));
             string buildError;
             LaunchPlan plan = LaunchBuilder.Build(version, javaPath, gameDir, settings.Nickname, server, settings, settings.QuickPlay, out buildError);
             if (plan == null)
@@ -364,10 +364,10 @@ namespace ServerHelp.Orchestration
         private bool PrepareTunnel(AppSettings settings, ServerProfile server, List<string> serverIps)
         {
             var watch = Stopwatch.StartNew();
-            Progress(L.T("برپاسازی تونل Cloudflare WARP…", "Setting up the Cloudflare WARP tunnel…"));
+            Notify(L.T("برپاسازی تونل Cloudflare WARP…", "Setting up the Cloudflare WARP tunnel…"));
 
             string error;
-            if (!Tunnel.EnsureBinaries(true, Progress, out error))
+            if (!Tunnel.EnsureBinaries(true, Notify, out error))
             {
                 Step("آماده‌سازی موتور تونل", "Prepare tunnel engine", StepState.Fail, error, (int)watch.ElapsedMilliseconds);
                 return false;
@@ -376,7 +376,7 @@ namespace ServerHelp.Orchestration
             // 1. scan for the fastest reachable anycast addresses
             watch.Restart();
             int probeTimeout = Math.Min(settings.ScanTimeoutMs, 2500);
-            var scan = EndpointScanner.Scan(probeTimeout, null, Progress);
+            var scan = EndpointScanner.Scan(probeTimeout, null, Notify);
             var best = WarpEndpoints.PickBest(scan.Endpoints, Math.Max(2, settings.MaxEndpoints));
             var withPorts = EndpointScanner.WithPortVariants(best, 2);
             Step("اسکن سرورهای WARP", "Scan WARP endpoints", scan.Reachable > 0 ? StepState.Done : StepState.Warn,
@@ -392,7 +392,7 @@ namespace ServerHelp.Orchestration
             WarpCredentials credentials = WarpAccount.Load();
             if (credentials == null)
             {
-                Progress(L.T("ساخت حساب WARP…", "Creating a WARP account…"));
+                Notify(L.T("ساخت حساب WARP…", "Creating a WARP account…"));
                 string priv, pub;
                 string keyError;
                 if (!Tunnel.GenerateKeyPair(out priv, out pub, out keyError))
@@ -566,7 +566,7 @@ namespace ServerHelp.Orchestration
             if (handler != null) { try { handler(step); } catch { } }
         }
 
-        private void Progress(string text)
+        private void Notify(string text)
         {
             Action<string> handler = Progress;
             if (handler != null) { try { handler(text); } catch { } }

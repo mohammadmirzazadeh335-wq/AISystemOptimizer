@@ -953,7 +953,7 @@ namespace ServerHelp.Ui
                 _pipeline.Optimizer.JavaExePath = _javaPath;
                 _pipeline.Optimizer.Run(_settings, delegate (OptimizationStep step)
                 {
-                    Ui(delegate { AddStepRow("★ " + step.Title, step.StateTextFa, step.Detail, step.State); });
+                    Ui(delegate { AddStepRow("★ " + step.Title, step.StateText, step.Detail, step.State); });
                 });
                 Ui(delegate { SetStatus(L.T("بهینه‌سازی انجام شد", "optimisation done")); });
             });
