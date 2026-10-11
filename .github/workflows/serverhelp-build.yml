@@ -118,7 +118,11 @@ jobs:
             dist/ServerHelp.exe.sha256
 
       - name: Publish release
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true'
+        # Two ways to ask for a downloadable build: the manual dispatch checkbox, or a commit
+        # message that carries the [serverhelp-release] marker.
+        if: >-
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true') ||
+          contains(github.event.head_commit.message, '[serverhelp-release]')
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
