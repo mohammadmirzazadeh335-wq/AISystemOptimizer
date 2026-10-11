@@ -1,0 +1,124 @@
+name: Build Server Help
+
+on:
+  push:
+    branches:
+      - '**'
+    paths:
+      - 'ServerHelp/**'
+      - '.github/workflows/serverhelp-build.yml'
+  workflow_dispatch:
+    inputs:
+      singbox_version:
+        description: 'sing-box version to bundle'
+        required: false
+        default: '1.14.3'
+      create_release:
+        description: 'Publish a GitHub release with the exe'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ServerHelp.exe
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Download tunnel engine (sing-box)
+        shell: pwsh
+        env:
+          SINGBOX_VERSION: ${{ github.event.inputs.singbox_version || '1.14.3' }}
+        run: |
+          $version = $env:SINGBOX_VERSION
+          $url = "https://github.com/SagerNet/sing-box/releases/download/v$version/sing-box-$version-windows-amd64.zip"
+          Write-Host "Fetching $url"
+          $zip = "$env:RUNNER_TEMP\sing-box.zip"
+          try {
+            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -TimeoutSec 180
+          } catch {
+            Write-Warning "Could not download sing-box: $_"
+            exit 0
+          }
+          Expand-Archive -Path $zip -DestinationPath "$env:RUNNER_TEMP\singbox" -Force
+          $exe = Get-ChildItem -Path "$env:RUNNER_TEMP\singbox" -Recurse -Filter 'sing-box.exe' |
+                 Where-Object { $_.FullName -notmatch 'legacy' } | Select-Object -First 1
+          if (-not $exe) { $exe = Get-ChildItem -Path "$env:RUNNER_TEMP\singbox" -Recurse -Filter 'sing-box.exe' | Select-Object -First 1 }
+          if (-not $exe) { Write-Warning 'sing-box.exe not found in the archive'; exit 0 }
+          New-Item -ItemType Directory -Force -Path 'ServerHelp/src/ServerHelp/vendor' | Out-Null
+          Copy-Item $exe.FullName 'ServerHelp/src/ServerHelp/vendor/sing-box.exe' -Force
+          $hash = (Get-FileHash 'ServerHelp/src/ServerHelp/vendor/sing-box.exe' -Algorithm SHA256).Hash.ToLower()
+          Write-Host "sing-box $version sha256 $hash"
+          "sing-box $version sha256: $hash" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+
+      - name: Download wintun driver
+        shell: pwsh
+        run: |
+          $url = 'https://www.wintun.net/builds/wintun-0.14.1.zip'
+          $zip = "$env:RUNNER_TEMP\wintun.zip"
+          try {
+            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -TimeoutSec 180
+            Expand-Archive -Path $zip -DestinationPath "$env:RUNNER_TEMP\wintun" -Force
+            $dll = Get-ChildItem -Path "$env:RUNNER_TEMP\wintun" -Recurse -Filter 'wintun.dll' |
+                   Where-Object { $_.FullName -match 'amd64' } | Select-Object -First 1
+            if (-not $dll) { throw 'wintun.dll (amd64) missing in the archive' }
+            New-Item -ItemType Directory -Force -Path 'ServerHelp/src/ServerHelp/vendor' | Out-Null
+            Copy-Item $dll.FullName 'ServerHelp/src/ServerHelp/vendor/wintun.dll' -Force
+            $hash = (Get-FileHash 'ServerHelp/src/ServerHelp/vendor/wintun.dll' -Algorithm SHA256).Hash.ToLower()
+            Write-Host "wintun 0.14.1 sha256 $hash"
+          } catch {
+            Write-Warning "Could not bundle wintun.dll: $_"
+          }
+
+      - name: Restore
+        run: dotnet restore ServerHelp/src/ServerHelp/ServerHelp.csproj
+
+      - name: Build
+        run: dotnet build ServerHelp/src/ServerHelp/ServerHelp.csproj -c Release -p:Platform=x64 --no-restore -v minimal
+
+      - name: Collect artefact
+        shell: pwsh
+        run: |
+          $out = 'ServerHelp/src/ServerHelp/bin/x64/Release/net48'
+          if (-not (Test-Path $out)) { $out = 'ServerHelp/src/ServerHelp/bin/Release/net48' }
+          if (-not (Test-Path "$out/ServerHelp.exe")) {
+            $found = Get-ChildItem -Path 'ServerHelp/src/ServerHelp/bin' -Recurse -Filter 'ServerHelp.exe' | Select-Object -First 1
+            if (-not $found) { throw 'ServerHelp.exe was not produced' }
+            $out = $found.DirectoryName
+          }
+          New-Item -ItemType Directory -Force -Path 'dist' | Out-Null
+          Copy-Item "$out/ServerHelp.exe" 'dist/ServerHelp.exe' -Force
+          $hash = (Get-FileHash 'dist/ServerHelp.exe' -Algorithm SHA256).Hash.ToLower()
+          "$hash" | Out-File -Encoding ascii 'dist/ServerHelp.exe.sha256'
+          Write-Host "ServerHelp.exe sha256 $hash"
+          Write-Host ("size: {0:N1} MB" -f ((Get-Item 'dist/ServerHelp.exe').Length / 1MB))
+
+      - name: Upload artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ServerHelp-exe
+          path: |
+            dist/ServerHelp.exe
+            dist/ServerHelp.exe.sha256
+
+      - name: Publish release
+        if: github.event_name == 'workflow_dispatch' && inputs.create_release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "serverhelp-v1.0.0-${{ github.run_number }}"
+          gh release create $tag 'dist/ServerHelp.exe' 'dist/ServerHelp.exe.sha256' `
+            --title "Server Help v1.0.0 (build ${{ github.run_number }})" `
+            --notes "Server Help — Minecraft server helper (tunnel + system optimisation).`n`nDownload ServerHelp.exe and run it as administrator."
