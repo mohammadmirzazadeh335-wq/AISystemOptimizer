@@ -156,7 +156,12 @@ namespace ServerHelp.Core
                 if (root == null) { error = L.T("فایل JSON خوانده نشد", "the JSON file cannot be read"); return list; }
                 object raw = Json.Get(root, "connections");
                 List<object> array = Json.Arr(raw);
-                if (array == null) { error = L.T("کلید connections در فایل نیست", "the file has no connections key"); return list; }
+                if (array == null)
+                {
+                    // some tools export a bare array; accept it instead of complaining
+                    array = Json.Arr(Json.Parse(json));
+                    if (array == null) { error = L.T("کلید connections در فایل نیست", "the file has no connections key"); return list; }
+                }
                 foreach (object item in array)
                 {
                     ConnectionEntry entry = ConnectionEntry.Read(Json.Obj(item));

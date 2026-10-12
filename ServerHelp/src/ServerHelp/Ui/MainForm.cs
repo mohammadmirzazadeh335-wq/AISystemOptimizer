@@ -1687,7 +1687,8 @@ namespace ServerHelp.Ui
                 }
 
                 List<ConnectionEntry> loaded = null;
-                if (text.TrimStart().StartsWith("{"))
+                string head = text.TrimStart();
+                if (head.StartsWith("{") || head.StartsWith("["))
                 {
                     string error;
                     loaded = ConnectionParser.ParseListFile(text, out error);
