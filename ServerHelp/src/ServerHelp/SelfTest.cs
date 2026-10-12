@@ -320,6 +320,8 @@ namespace ServerHelp
             wanted.ProxyFailover = false;
             wanted.AllowRouteFallback = false;
             wanted.Servers.Clear();
+            // the defaults already carry sample connections; the round trip is about ours
+            wanted.Connections.Clear();
             var server = new ServerProfile();
             server.Name = "SMP";
             server.Host = "smp3.mcsh.io";
@@ -349,10 +351,20 @@ namespace ServerHelp
                    back.Servers[0].Port == 11005 && back.Servers[0].PreferDomain &&
                    back.Servers[0].DirectIp == "163.5.201.3",
                    "the server list survives a save and load", failures, passes);
-            Expect(back.Connections.Count == 1 && back.Connections[0].Name == "home" &&
-                   back.Connections[0].Port == 1080 && back.Connections[0].FragmentTls &&
-                   !back.Connections[0].Enabled,
-                   "the connections survive a save and load", failures, passes);
+            Expect(wanted.Connections.Count == 1, "the test starts from exactly one connection", failures, passes);
+            Expect(back.Connections.Count == 1, "one connection comes back from the settings file", failures, passes);
+            if (back.Connections.Count == 1)
+            {
+                ConnectionEntry re = back.Connections[0];
+                Expect(re.Name == "home" && re.Kind == ConnectionKind.Socks5,
+                       "the name and the kind of a connection survive a save and load", failures, passes);
+                Expect(re.Host == "203.0.113.5" && re.Port == 1080,
+                       "the address of a connection survives a save and load", failures, passes);
+                Expect(re.FragmentTls, "the per connection TLS fragmentation survives a save and load",
+                       failures, passes);
+                Expect(!re.Enabled, "a connection that was switched off stays off after a save and load",
+                       failures, passes);
+            }
             Expect(SettingsStore.Parse("{\"pinnedConnection\":null,\"retestMinutes\":9999}").RetestMinutes == 720,
                    "a nonsense retest interval is clamped instead of trusted", failures, passes);
         }
