@@ -147,8 +147,8 @@ namespace ServerHelp.Ui
                 _preview.Items.Add(item);
             }
 
-            _summary.Text = L.T("پیدا شد: ", "found: ") + _entries.Count + L.T(" اتصال", " connection(s)") +
-                            (errors.Count > 0 ? L.T(" • خطا: ", " • errors: ") + errors.Count : "");
+            _summary.Text = L.T("پیدا شد: ", "found: ") + L.N(_entries.Count) + L.T(" اتصال", " connection(s)") +
+                            (errors.Count > 0 ? L.T(" • خطا: ", " • errors: ") + L.N(errors.Count) : "");
         }
     }
 }

@@ -85,6 +85,9 @@ namespace ServerHelp
             Guard("the connection parser", failures, delegate { CheckParser(failures, passes); });
             Guard("the connection model", failures, delegate { CheckConnectionModel(failures, passes); });
             Guard("the connection list file", failures, delegate { CheckListFile(failures, passes); });
+            Guard("the settings model", failures, delegate { CheckSettings(failures, passes); });
+            Guard("the quality numbers", failures, delegate { CheckQuality(failures, passes); });
+            Guard("the tester", failures, delegate { CheckTesterAnswers(failures, passes); });
             Guard("the subscription reader", failures, delegate { CheckSubscription(failures, passes); });
             Guard("the OpenVPN profile", failures, delegate { CheckOvpn(failures, passes); });
             Guard("the generated tunnel configurations", failures, delegate { CheckConfigs(failures, passes); });
@@ -293,6 +296,124 @@ namespace ServerHelp
 
             List<ConnectionEntry> empty = Subscription.Parse("", out problems);
             Expect(empty.Count == 0, "an empty subscription adds nothing instead of throwing", failures, passes);
+        }
+
+        /// <summary>
+        /// The settings are the memory of the whole connections section: a field that is written to
+        /// disk but never read back (or the other way round) makes a switch look broken. The round
+        /// trip below is done in memory, without touching the user's own file.
+        /// </summary>
+        private static void CheckSettings(List<string> failures, List<string> passes)
+        {
+            AppSettings wanted = AppSettings.Default();
+            wanted.Language = L.En;
+            wanted.Nickname = "tester";
+            wanted.Tunnel = TunnelMode.DnsOnly;
+            wanted.PinnedConnection = "home";
+            wanted.PinnedChainHop = "work";
+            wanted.DnsThroughTunnel = false;
+            wanted.OptimiseChains = 7;
+            wanted.FragmentTls = true;
+            wanted.RetestMinutes = 45;
+            wanted.ConnectionTestTimeoutMs = 4500;
+            wanted.KillSwitch = true;
+            wanted.ProxyFailover = false;
+            wanted.AllowRouteFallback = false;
+            wanted.Servers.Clear();
+            var server = new ServerProfile();
+            server.Name = "SMP";
+            server.Host = "smp3.mcsh.io";
+            server.Port = 11005;
+            server.DirectIp = "163.5.201.3";
+            server.PreferDomain = true;
+            wanted.Servers.Add(server);
+            var entry = ConnectionEntry.Create("home", ConnectionKind.Socks5);
+            entry.Host = "203.0.113.5";
+            entry.Port = 1080;
+            entry.FragmentTls = true;
+            entry.Enabled = false;
+            wanted.Connections.Add(entry);
+
+            AppSettings back = SettingsStore.Parse(SettingsStore.ToJson(wanted));
+            Expect(back != null, "the settings can be written and read back", failures, passes);
+            if (back == null) return;
+
+            Expect(back.Language == L.En && back.Nickname == "tester" && back.Tunnel == TunnelMode.DnsOnly,
+                   "the language, the nickname and the tunnel mode survive a save and load", failures, passes);
+            Expect(back.PinnedConnection == "home" && back.PinnedChainHop == "work" && !back.DnsThroughTunnel &&
+                   back.OptimiseChains == 7 && back.FragmentTls && back.RetestMinutes == 45 &&
+                   back.ConnectionTestTimeoutMs == 4500 && back.KillSwitch &&
+                   !back.ProxyFailover && !back.AllowRouteFallback,
+                   "every connection setting survives a save and load", failures, passes);
+            Expect(back.Servers.Count == 1 && back.Servers[0].Host == "smp3.mcsh.io" &&
+                   back.Servers[0].Port == 11005 && back.Servers[0].PreferDomain &&
+                   back.Servers[0].DirectIp == "163.5.201.3",
+                   "the server list survives a save and load", failures, passes);
+            Expect(back.Connections.Count == 1 && back.Connections[0].Name == "home" &&
+                   back.Connections[0].Port == 1080 && back.Connections[0].FragmentTls &&
+                   !back.Connections[0].Enabled,
+                   "the connections survive a save and load", failures, passes);
+            Expect(SettingsStore.Parse("{\"pinnedConnection\":null,\"retestMinutes\":9999}").RetestMinutes == 720,
+                   "a nonsense retest interval is clamped instead of trusted", failures, passes);
+        }
+
+        /// <summary>The numbers a route is judged by, checked without touching the network.</summary>
+        private static void CheckQuality(List<string> failures, List<string> passes)
+        {
+            var steady = new QualityResult();
+            steady.Samples = 5; steady.Lost = 0; steady.MinMs = 38; steady.MaxMs = 46; steady.AvgMs = 41; steady.JitterMs = 4;
+            Expect(steady.Ok && steady.LossPercent == 0 && steady.Grade() == L.T("عالی", "excellent"),
+                   "a steady 41 ms run is graded excellent", failures, passes);
+            Expect(steady.Summary().Contains(L.N(41)) && steady.Summary().Contains(L.N(0)),
+                   "the quality line shows the average and the loss in the reader's digits", failures, passes);
+
+            var lossy = new QualityResult();
+            lossy.Samples = 5; lossy.Lost = 2; lossy.MinMs = 40; lossy.MaxMs = 40; lossy.AvgMs = 40; lossy.JitterMs = 0;
+            Expect(lossy.LossPercent == 40 && lossy.Grade() == L.T("پرافت", "lossy"),
+                   "two lost samples out of five are reported as 40% loss", failures, passes);
+
+            var rubber = new QualityResult();
+            rubber.Samples = 5; rubber.Lost = 0; rubber.MinMs = 30; rubber.MaxMs = 200; rubber.AvgMs = 95; rubber.JitterMs = 60;
+            Expect(rubber.Grade() == L.T("لرزان", "unstable"),
+                   "a wide spread is called unstable even when the average looks fine", failures, passes);
+
+            var dead = new QualityResult();
+            dead.Detail = "connection refused";
+            Expect(!dead.Ok && dead.Grade() == L.T("بد", "bad") && dead.Summary() == "connection refused",
+                   "a run that never answered keeps the reason it failed", failures, passes);
+        }
+
+        /// <summary>
+        /// The table and the connection dialog call the tester on a worker thread that has no handler
+        /// around it, so a malformed entry has to come back as a failed result: an exception used to
+        /// leave the Test button disabled for the rest of the dialog's life.
+        /// </summary>
+        private static void CheckTesterAnswers(List<string> failures, List<string> passes)
+        {
+            ConnectionTestResult nothing = ConnectionTester.Test(null, "smp3.mcsh.io", 11005, 500, false);
+            Expect(nothing != null && !nothing.Ok, "testing an empty entry answers instead of throwing", failures, passes);
+
+            var incomplete = ConnectionEntry.Create("incomplete", ConnectionKind.Socks5);
+            ConnectionTestResult missing = ConnectionTester.Test(incomplete, "smp3.mcsh.io", 11005, 500, false);
+            Expect(missing != null && !missing.Ok && missing.Detail.Length > 0,
+                   "an entry with missing fields is reported as incomplete", failures, passes);
+
+            var broken = ConnectionEntry.Create("broken", ConnectionKind.SingBoxOutbound);
+            broken.Config = "{\"type\":\"vless\"";
+            ConnectionTestResult bad = ConnectionTester.Test(broken, "smp3.mcsh.io", 11005, 500, false);
+            Expect(bad != null && !bad.Ok, "a half written outbound config fails the test politely", failures, passes);
+
+            var junk = ConnectionEntry.Create("junk", ConnectionKind.SingBoxConfig);
+            junk.Config = "this is not json at all";
+            ConnectionTestResult full = ConnectionTester.Test(junk, "smp3.mcsh.io", 11005, 500, false);
+            Expect(full != null && !full.Ok, "a full config that is not JSON fails the test politely", failures, passes);
+
+            var half = ConnectionEntry.Create("wg", ConnectionKind.WireGuard);
+            half.PeerHost = "198.51.100.4";
+            half.PeerPort = 2408;
+            ConnectionTestResult wireguard = ConnectionTester.Test(half, "smp3.mcsh.io", 11005, 500, false);
+            Expect(wireguard != null && !wireguard.Ok,
+                   "a half filled WireGuard entry is reported, not attempted", failures, passes);
         }
 
         private static void CheckParser(List<string> failures, List<string> passes)

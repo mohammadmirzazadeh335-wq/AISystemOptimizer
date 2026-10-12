@@ -89,6 +89,21 @@ namespace ServerHelp.Ui
 
             AcceptButton = ok;
             CancelButton = cancel;
+            // an empty or hand-typed address would fail after the dialog closed; say so while the
+            // user is still looking at the box
+            FormClosing += delegate (object sender, FormClosingEventArgs e)
+            {
+                if (DialogResult != DialogResult.OK) return;
+                string text = _url.Text.Trim();
+                if (text.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                    text.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) return;
+                e.Cancel = true;
+                MessageBox.Show(this,
+                    L.T("آدرس اشتراک باید با http:// یا https:// شروع شود.",
+                        "the subscription address must start with http:// or https://"),
+                    "Server Help", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                _url.Focus();
+            };
             Theme.Apply(this);
             Theme.StyleButton(ok, true);
         }

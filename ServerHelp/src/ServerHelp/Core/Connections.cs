@@ -165,7 +165,7 @@ namespace ServerHelp.Core
             get
             {
                 if (string.IsNullOrEmpty(LastStatus)) return "—";
-                if (LastDelayMs > 0) return LastStatus + " • " + LastDelayMs.ToString(CultureInfo.InvariantCulture) + " ms";
+                if (LastDelayMs > 0) return LastStatus + " • " + L.N(LastDelayMs) + " ms";
                 return LastStatus;
             }
         }
@@ -272,11 +272,11 @@ namespace ServerHelp.Core
             if (LastJitterMs < 0 && LastLossPercent < 0 && LastSpeedKbps < 0 && LastPingMin < 0) return "";
             var sb = new System.Text.StringBuilder();
             if (LastPingMin > 0 && LastPingMax > 0)
-                sb.Append(L.T("کمین ", "min ")).Append(LastPingMin).Append('/')
-                  .Append(L.T("بیشینه ", "max ")).Append(LastPingMax).Append(" ms");
-            if (LastJitterMs >= 0) sb.Append(sb.Length > 0 ? " • " : "").Append("±").Append(LastJitterMs).Append(" ms");
-            if (LastLossPercent >= 0) sb.Append(sb.Length > 0 ? " • " : "").Append(L.T("افت ", "loss ")).Append(LastLossPercent).Append('%');
-            if (LastSpeedKbps > 0) sb.Append(sb.Length > 0 ? " • " : "").Append(LastSpeedKbps).Append(L.T(" کیلوبایت/ثانیه", " KB/s"));
+                sb.Append(L.T("کمین ", "min ")).Append(L.N(LastPingMin)).Append('/')
+                  .Append(L.T("بیشینه ", "max ")).Append(L.N(LastPingMax)).Append(" ms");
+            if (LastJitterMs >= 0) sb.Append(sb.Length > 0 ? " • " : "").Append("±").Append(L.N(LastJitterMs)).Append(" ms");
+            if (LastLossPercent >= 0) sb.Append(sb.Length > 0 ? " • " : "").Append(L.T("افت ", "loss ")).Append(L.N(LastLossPercent)).Append('%');
+            if (LastSpeedKbps > 0) sb.Append(sb.Length > 0 ? " • " : "").Append(L.N(LastSpeedKbps)).Append(L.T(" کیلوبایت/ثانیه", " KB/s"));
             return sb.ToString();
         }
 

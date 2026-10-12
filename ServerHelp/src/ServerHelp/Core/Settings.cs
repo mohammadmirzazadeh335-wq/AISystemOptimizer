@@ -195,94 +195,103 @@ namespace ServerHelp.Core
             try
             {
                 if (!File.Exists(AppPaths.SettingsFile)) return AppSettings.Default();
-                string text = File.ReadAllText(AppPaths.SettingsFile, Encoding.UTF8);
-                var d = Json.ParseObject(text);
-                var s = AppSettings.Default();
-                s.Servers.Clear();
-
-                s.Version = Json.GetInt(d, "version", 1);
-                s.Language = Json.GetStr(d, "language", s.Language);
-                s.Nickname = Json.GetStr(d, "nickname", s.Nickname);
-                s.VersionsDir = Json.GetStr(d, "versionsDir", s.VersionsDir);
-                s.GameDirOverride = Json.GetStr(d, "gameDirOverride", s.GameDirOverride);
-                s.JavaPathOverride = Json.GetStr(d, "javaPathOverride", s.JavaPathOverride);
-                s.ActiveServer = Json.GetStr(d, "activeServer", s.ActiveServer);
-
-                s.Tunnel = (TunnelMode)Json.GetInt(d, "tunnel", (int)s.Tunnel);
-                s.UseHostsFile = Json.GetBool(d, "useHostsFile", s.UseHostsFile);
-                s.MaxEndpoints = Clamp(Json.GetInt(d, "maxEndpoints", s.MaxEndpoints), 1, 24);
-                s.ScanTimeoutMs = Clamp(Json.GetInt(d, "scanTimeoutMs", s.ScanTimeoutMs), 800, 20000);
-
-                s.OptimizeSystem = Json.GetBool(d, "optimizeSystem", s.OptimizeSystem);
-                s.HighPerformancePowerPlan = Json.GetBool(d, "highPerformancePowerPlan", s.HighPerformancePowerPlan);
-                s.TrimMemory = Json.GetBool(d, "trimMemory", s.TrimMemory);
-                s.CloseBackgroundApps = Json.GetBool(d, "closeBackgroundApps", s.CloseBackgroundApps);
-                s.SetJavaPriority = Json.GetBool(d, "setJavaPriority", s.SetJavaPriority);
-                s.TuneNetwork = Json.GetBool(d, "tuneNetwork", s.TuneNetwork);
-                s.AddFirewallRules = Json.GetBool(d, "addFirewallRules", s.AddFirewallRules);
-                s.TimerResolution = Json.GetBool(d, "timerResolution", s.TimerResolution);
-
-                s.UseAikarFlags = Json.GetBool(d, "useAikarFlags", s.UseAikarFlags);
-                s.OpenGlPipeline = Json.GetBool(d, "openGlPipeline", s.OpenGlPipeline);
-                s.MaxHeapMb = Clamp(Json.GetInt(d, "maxHeapMb", s.MaxHeapMb), 0, 65536);
-                s.ExtraJvmArgs = Json.GetStr(d, "extraJvmArgs", s.ExtraJvmArgs);
-                s.QuickPlay = Json.GetBool(d, "quickPlay", s.QuickPlay);
-
-                s.AutoRestoreOnExit = Json.GetBool(d, "autoRestoreOnExit", s.AutoRestoreOnExit);
-                s.KeepTunnelAfterGame = Json.GetBool(d, "keepTunnelAfterGame", s.KeepTunnelAfterGame);
-                s.MinimizeWhilePlaying = Json.GetBool(d, "minimizeWhilePlaying", s.MinimizeWhilePlaying);
-                s.CloseAppWhenGameExits = Json.GetBool(d, "closeAppWhenGameExits", s.CloseAppWhenGameExits);
-                s.GaugesOnDashboard = Json.GetBool(d, "gaugesOnDashboard", s.GaugesOnDashboard);
-                s.ConnectTimeoutMs = Clamp(Json.GetInt(d, "connectTimeoutMs", s.ConnectTimeoutMs), 1000, 30000);
-                s.LoginProbe = Json.GetBool(d, "loginProbe", s.LoginProbe);
-
-                s.PinnedConnection = Json.GetStr(d, "pinnedConnection", s.PinnedConnection);
-                s.PinnedChainHop = Json.GetStr(d, "pinnedChainHop", s.PinnedChainHop);
-                s.DnsThroughTunnel = Json.GetBool(d, "dnsThroughTunnel", s.DnsThroughTunnel);
-                s.OptimiseChains = Clamp(Json.GetInt(d, "optimiseChains", s.OptimiseChains), 0, 12);
-                s.FragmentTls = Json.GetBool(d, "fragmentTls", s.FragmentTls);
-                s.RetestMinutes = Clamp(Json.GetInt(d, "retestMinutes", s.RetestMinutes), 0, 720);
-                s.AllowRouteFallback = Json.GetBool(d, "allowRouteFallback", s.AllowRouteFallback);
-                s.ProxyFailover = Json.GetBool(d, "proxyFailover", s.ProxyFailover);
-                s.KillSwitch = Json.GetBool(d, "killSwitch", s.KillSwitch);
-                s.ConnectionTestTimeoutMs = Clamp(Json.GetInt(d, "connectionTestTimeoutMs", s.ConnectionTestTimeoutMs), 700, 20000);
-
-                var connections = Json.Arr(Json.Get(d, "connections"));
-                if (connections != null)
-                {
-                    // An empty list stays empty: the user may have removed every entry on purpose.
-                    s.Connections.Clear();
-                    foreach (object o in connections)
-                    {
-                        var entry = ConnectionEntry.Read(Json.Obj(o));
-                        if (entry != null) s.Connections.Add(entry);
-                    }
-                }
-
-                var servers = Json.Arr(Json.Get(d, "servers"));
-                if (servers != null)
-                {
-                    foreach (object o in servers)
-                    {
-                        var sd = Json.Obj(o);
-                        if (sd == null) continue;
-                        var sp = new ServerProfile();
-                        sp.Name = Json.GetStr(sd, "name", sp.Name);
-                        sp.Host = Json.GetStr(sd, "host", sp.Host);
-                        sp.Port = Clamp(Json.GetInt(sd, "port", sp.Port), 1, 65535);
-                        sp.DirectIp = Json.GetStr(sd, "directIp", sp.DirectIp);
-                        sp.PreferDomain = Json.GetBool(sd, "preferDomain", sp.PreferDomain);
-                        if (!string.IsNullOrWhiteSpace(sp.Host)) s.Servers.Add(sp);
-                    }
-                }
-                if (s.Servers.Count == 0) s.Servers.Add(AppSettings.DefaultServer());
-                return s;
+                return Parse(File.ReadAllText(AppPaths.SettingsFile, Encoding.UTF8));
             }
             catch (Exception ex)
             {
                 Log.Error("settings load failed, using defaults", ex);
                 return AppSettings.Default();
             }
+        }
+
+        /// <summary>
+        /// Reads the settings out of their JSON form. Split from the file handling so the model can
+        /// be round tripped in the self test: a field that is written but never read back (or the
+        /// other way round) is the classic way a setting silently stops working.
+        /// </summary>
+        public static AppSettings Parse(string text)
+        {
+            var d = Json.ParseObject(text);
+            var s = AppSettings.Default();
+            s.Servers.Clear();
+
+            s.Version = Json.GetInt(d, "version", 1);
+            s.Language = Json.GetStr(d, "language", s.Language);
+            s.Nickname = Json.GetStr(d, "nickname", s.Nickname);
+            s.VersionsDir = Json.GetStr(d, "versionsDir", s.VersionsDir);
+            s.GameDirOverride = Json.GetStr(d, "gameDirOverride", s.GameDirOverride);
+            s.JavaPathOverride = Json.GetStr(d, "javaPathOverride", s.JavaPathOverride);
+            s.ActiveServer = Json.GetStr(d, "activeServer", s.ActiveServer);
+
+            s.Tunnel = (TunnelMode)Json.GetInt(d, "tunnel", (int)s.Tunnel);
+            s.UseHostsFile = Json.GetBool(d, "useHostsFile", s.UseHostsFile);
+            s.MaxEndpoints = Clamp(Json.GetInt(d, "maxEndpoints", s.MaxEndpoints), 1, 24);
+            s.ScanTimeoutMs = Clamp(Json.GetInt(d, "scanTimeoutMs", s.ScanTimeoutMs), 800, 20000);
+
+            s.OptimizeSystem = Json.GetBool(d, "optimizeSystem", s.OptimizeSystem);
+            s.HighPerformancePowerPlan = Json.GetBool(d, "highPerformancePowerPlan", s.HighPerformancePowerPlan);
+            s.TrimMemory = Json.GetBool(d, "trimMemory", s.TrimMemory);
+            s.CloseBackgroundApps = Json.GetBool(d, "closeBackgroundApps", s.CloseBackgroundApps);
+            s.SetJavaPriority = Json.GetBool(d, "setJavaPriority", s.SetJavaPriority);
+            s.TuneNetwork = Json.GetBool(d, "tuneNetwork", s.TuneNetwork);
+            s.AddFirewallRules = Json.GetBool(d, "addFirewallRules", s.AddFirewallRules);
+            s.TimerResolution = Json.GetBool(d, "timerResolution", s.TimerResolution);
+
+            s.UseAikarFlags = Json.GetBool(d, "useAikarFlags", s.UseAikarFlags);
+            s.OpenGlPipeline = Json.GetBool(d, "openGlPipeline", s.OpenGlPipeline);
+            s.MaxHeapMb = Clamp(Json.GetInt(d, "maxHeapMb", s.MaxHeapMb), 0, 65536);
+            s.ExtraJvmArgs = Json.GetStr(d, "extraJvmArgs", s.ExtraJvmArgs);
+            s.QuickPlay = Json.GetBool(d, "quickPlay", s.QuickPlay);
+
+            s.AutoRestoreOnExit = Json.GetBool(d, "autoRestoreOnExit", s.AutoRestoreOnExit);
+            s.KeepTunnelAfterGame = Json.GetBool(d, "keepTunnelAfterGame", s.KeepTunnelAfterGame);
+            s.MinimizeWhilePlaying = Json.GetBool(d, "minimizeWhilePlaying", s.MinimizeWhilePlaying);
+            s.CloseAppWhenGameExits = Json.GetBool(d, "closeAppWhenGameExits", s.CloseAppWhenGameExits);
+            s.GaugesOnDashboard = Json.GetBool(d, "gaugesOnDashboard", s.GaugesOnDashboard);
+            s.ConnectTimeoutMs = Clamp(Json.GetInt(d, "connectTimeoutMs", s.ConnectTimeoutMs), 1000, 30000);
+            s.LoginProbe = Json.GetBool(d, "loginProbe", s.LoginProbe);
+
+            s.PinnedConnection = Json.GetStr(d, "pinnedConnection", s.PinnedConnection);
+            s.PinnedChainHop = Json.GetStr(d, "pinnedChainHop", s.PinnedChainHop);
+            s.DnsThroughTunnel = Json.GetBool(d, "dnsThroughTunnel", s.DnsThroughTunnel);
+            s.OptimiseChains = Clamp(Json.GetInt(d, "optimiseChains", s.OptimiseChains), 0, 12);
+            s.FragmentTls = Json.GetBool(d, "fragmentTls", s.FragmentTls);
+            s.RetestMinutes = Clamp(Json.GetInt(d, "retestMinutes", s.RetestMinutes), 0, 720);
+            s.AllowRouteFallback = Json.GetBool(d, "allowRouteFallback", s.AllowRouteFallback);
+            s.ProxyFailover = Json.GetBool(d, "proxyFailover", s.ProxyFailover);
+            s.KillSwitch = Json.GetBool(d, "killSwitch", s.KillSwitch);
+            s.ConnectionTestTimeoutMs = Clamp(Json.GetInt(d, "connectionTestTimeoutMs", s.ConnectionTestTimeoutMs), 700, 20000);
+
+            var connections = Json.Arr(Json.Get(d, "connections"));
+            if (connections != null)
+            {
+                // An empty list stays empty: the user may have removed every entry on purpose.
+                s.Connections.Clear();
+                foreach (object o in connections)
+                {
+                    var entry = ConnectionEntry.Read(Json.Obj(o));
+                    if (entry != null) s.Connections.Add(entry);
+                }
+            }
+
+            var servers = Json.Arr(Json.Get(d, "servers"));
+            if (servers != null)
+            {
+                foreach (object o in servers)
+                {
+                    var sd = Json.Obj(o);
+                    if (sd == null) continue;
+                    var sp = new ServerProfile();
+                    sp.Name = Json.GetStr(sd, "name", sp.Name);
+                    sp.Host = Json.GetStr(sd, "host", sp.Host);
+                    sp.Port = Clamp(Json.GetInt(sd, "port", sp.Port), 1, 65535);
+                    sp.DirectIp = Json.GetStr(sd, "directIp", sp.DirectIp);
+                    sp.PreferDomain = Json.GetBool(sd, "preferDomain", sp.PreferDomain);
+                    if (!string.IsNullOrWhiteSpace(sp.Host)) s.Servers.Add(sp);
+                }
+            }
+                if (s.Servers.Count == 0) s.Servers.Add(AppSettings.DefaultServer());
+                return s;
         }
 
         private static int Clamp(int v, int min, int max)
@@ -297,74 +306,79 @@ namespace ServerHelp.Core
             try
             {
                 AppPaths.EnsureAll();
-                var w = new JsonWriter(true);
-                w.StartObject();
-                w.Prop("version", s.Version);
-                w.Prop("language", s.Language);
-                w.Prop("nickname", s.Nickname);
-                w.Prop("versionsDir", s.VersionsDir);
-                w.Prop("gameDirOverride", s.GameDirOverride);
-                w.Prop("javaPathOverride", s.JavaPathOverride);
-                w.Prop("activeServer", s.ActiveServer);
-                w.Prop("tunnel", (int)s.Tunnel);
-                w.Prop("useHostsFile", s.UseHostsFile);
-                w.Prop("maxEndpoints", s.MaxEndpoints);
-                w.Prop("scanTimeoutMs", s.ScanTimeoutMs);
-                w.Prop("optimizeSystem", s.OptimizeSystem);
-                w.Prop("highPerformancePowerPlan", s.HighPerformancePowerPlan);
-                w.Prop("trimMemory", s.TrimMemory);
-                w.Prop("closeBackgroundApps", s.CloseBackgroundApps);
-                w.Prop("setJavaPriority", s.SetJavaPriority);
-                w.Prop("tuneNetwork", s.TuneNetwork);
-                w.Prop("addFirewallRules", s.AddFirewallRules);
-                w.Prop("timerResolution", s.TimerResolution);
-                w.Prop("useAikarFlags", s.UseAikarFlags);
-                w.Prop("openGlPipeline", s.OpenGlPipeline);
-                w.Prop("maxHeapMb", s.MaxHeapMb);
-                w.Prop("extraJvmArgs", s.ExtraJvmArgs);
-                w.Prop("quickPlay", s.QuickPlay);
-                w.Prop("autoRestoreOnExit", s.AutoRestoreOnExit);
-                w.Prop("keepTunnelAfterGame", s.KeepTunnelAfterGame);
-                w.Prop("minimizeWhilePlaying", s.MinimizeWhilePlaying);
-                w.Prop("closeAppWhenGameExits", s.CloseAppWhenGameExits);
-                w.Prop("gaugesOnDashboard", s.GaugesOnDashboard);
-                w.Prop("connectTimeoutMs", s.ConnectTimeoutMs);
-                w.Prop("loginProbe", s.LoginProbe);
-                w.Prop("pinnedConnection", s.PinnedConnection);
-                w.Prop("pinnedChainHop", s.PinnedChainHop);
-                w.Prop("dnsThroughTunnel", s.DnsThroughTunnel);
-                w.Prop("optimiseChains", s.OptimiseChains);
-                w.Prop("fragmentTls", s.FragmentTls);
-                w.Prop("retestMinutes", s.RetestMinutes);
-                w.Prop("allowRouteFallback", s.AllowRouteFallback);
-                w.Prop("proxyFailover", s.ProxyFailover);
-                w.Prop("killSwitch", s.KillSwitch);
-                w.Prop("connectionTestTimeoutMs", s.ConnectionTestTimeoutMs);
-
-                w.Name("connections").StartArray();
-                foreach (ConnectionEntry entry in s.Connections) entry.WriteTo(w);
-                w.EndArray();
-
-                w.Name("servers").StartArray();
-                foreach (var sp in s.Servers)
-                {
-                    w.StartObject();
-                    w.Prop("name", sp.Name);
-                    w.Prop("host", sp.Host);
-                    w.Prop("port", sp.Port);
-                    w.Prop("directIp", sp.DirectIp);
-                    w.Prop("preferDomain", sp.PreferDomain);
-                    w.EndObject();
-                }
-                w.EndArray();
-                w.EndObject();
-
-                File.WriteAllText(AppPaths.SettingsFile, w.ToString(), new UTF8Encoding(false));
+                File.WriteAllText(AppPaths.SettingsFile, ToJson(s), new UTF8Encoding(false));
             }
             catch (Exception ex)
             {
                 Log.Error("settings save failed", ex);
             }
+        }
+
+        /// <summary>The settings exactly as they are written to disk.</summary>
+        public static string ToJson(AppSettings s)
+        {
+            var w = new JsonWriter(true);
+            w.StartObject();
+            w.Prop("version", s.Version);
+            w.Prop("language", s.Language);
+            w.Prop("nickname", s.Nickname);
+            w.Prop("versionsDir", s.VersionsDir);
+            w.Prop("gameDirOverride", s.GameDirOverride);
+            w.Prop("javaPathOverride", s.JavaPathOverride);
+            w.Prop("activeServer", s.ActiveServer);
+            w.Prop("tunnel", (int)s.Tunnel);
+            w.Prop("useHostsFile", s.UseHostsFile);
+            w.Prop("maxEndpoints", s.MaxEndpoints);
+            w.Prop("scanTimeoutMs", s.ScanTimeoutMs);
+            w.Prop("optimizeSystem", s.OptimizeSystem);
+            w.Prop("highPerformancePowerPlan", s.HighPerformancePowerPlan);
+            w.Prop("trimMemory", s.TrimMemory);
+            w.Prop("closeBackgroundApps", s.CloseBackgroundApps);
+            w.Prop("setJavaPriority", s.SetJavaPriority);
+            w.Prop("tuneNetwork", s.TuneNetwork);
+            w.Prop("addFirewallRules", s.AddFirewallRules);
+            w.Prop("timerResolution", s.TimerResolution);
+            w.Prop("useAikarFlags", s.UseAikarFlags);
+            w.Prop("openGlPipeline", s.OpenGlPipeline);
+            w.Prop("maxHeapMb", s.MaxHeapMb);
+            w.Prop("extraJvmArgs", s.ExtraJvmArgs);
+            w.Prop("quickPlay", s.QuickPlay);
+            w.Prop("autoRestoreOnExit", s.AutoRestoreOnExit);
+            w.Prop("keepTunnelAfterGame", s.KeepTunnelAfterGame);
+            w.Prop("minimizeWhilePlaying", s.MinimizeWhilePlaying);
+            w.Prop("closeAppWhenGameExits", s.CloseAppWhenGameExits);
+            w.Prop("gaugesOnDashboard", s.GaugesOnDashboard);
+            w.Prop("connectTimeoutMs", s.ConnectTimeoutMs);
+            w.Prop("loginProbe", s.LoginProbe);
+            w.Prop("pinnedConnection", s.PinnedConnection);
+            w.Prop("pinnedChainHop", s.PinnedChainHop);
+            w.Prop("dnsThroughTunnel", s.DnsThroughTunnel);
+            w.Prop("optimiseChains", s.OptimiseChains);
+            w.Prop("fragmentTls", s.FragmentTls);
+            w.Prop("retestMinutes", s.RetestMinutes);
+            w.Prop("allowRouteFallback", s.AllowRouteFallback);
+            w.Prop("proxyFailover", s.ProxyFailover);
+            w.Prop("killSwitch", s.KillSwitch);
+            w.Prop("connectionTestTimeoutMs", s.ConnectionTestTimeoutMs);
+
+            w.Name("connections").StartArray();
+            foreach (ConnectionEntry entry in s.Connections) entry.WriteTo(w);
+            w.EndArray();
+
+            w.Name("servers").StartArray();
+            foreach (var sp in s.Servers)
+            {
+                w.StartObject();
+                w.Prop("name", sp.Name);
+                w.Prop("host", sp.Host);
+                w.Prop("port", sp.Port);
+                w.Prop("directIp", sp.DirectIp);
+                w.Prop("preferDomain", sp.PreferDomain);
+                w.EndObject();
+            }
+            w.EndArray();
+            w.EndObject();
+            return w.ToString();
         }
     }
 }

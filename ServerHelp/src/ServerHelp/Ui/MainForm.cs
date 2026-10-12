@@ -38,7 +38,7 @@ namespace ServerHelp.Ui
         private TextBox _planBox;
         private string _planBuildingFor = "";      // keeps one preparation per version in flight
         private bool _routeBusy;                   // one route hunt at a time
-        private bool _stabilityBusy;               // one stability run at a time
+        private bool _stabilityBusy;               // one measurement at a time (tests, stability, speed)
         private ListView _endpointList;
         private TextBox _logBox;
         private TextBox _versionsDirBox;
@@ -1329,7 +1329,7 @@ namespace ServerHelp.Ui
                 // a Telegram or DNS number is not a game ping, and the table has to say so
                 string note = entry.Info.DelayNote;
                 item.SubItems.Add(entry.LastDelayMs > 0
-                    ? entry.LastDelayMs + " ms" + (note.Length > 0 ? "  (" + note + ")" : "")
+                    ? L.N(entry.LastDelayMs) + " ms" + (note.Length > 0 ? "  (" + note + ")" : "")
                     : "—");
                 item.SubItems.Add(entry.Info.Carries);
                 item.SubItems.Add(entry.QualityText().Length > 0 ? entry.QualityText() : "—");
@@ -1508,46 +1508,81 @@ namespace ServerHelp.Ui
             int timeout = _settings.ConnectionTestTimeoutMs;
             string host = profile.Host;
             int port = profile.Port;
+            if (!BeginMeasurement()) return;
             SetStatus(L.T("تست اتصال‌ها…", "testing connections…"));
 
             var thread = new Thread(delegate ()
             {
-                int done = 0;
-                foreach (ConnectionEntry entry in targets)
-                {
-                    done++;
-                    ConnectionEntry local = entry;
-                    int index = done + 1;
-                    int total = targets.Count;
-                    Ui(delegate { SetStatus("(" + index + "/" + total + ") " + L.T("تست: ", "testing: ") + local.Name); });
-                    ConnectionTestResult result = ConnectionTester.Test(local, host, port, timeout, false);
-                    local.LastDelayMs = result.Ok ? result.DelayMs : -1;
-                    local.LastStatus = result.Status;
-                    local.LastError = result.Ok ? "" : result.Detail;
-                    local.LastTestUtc = DateTime.Now.ToString("HH:mm:ss");
-                    string line = local.Name + " [" + local.Info.Title + "] — " +
-                                  (result.Ok ? L.T("کار کرد", "works") : L.T("کار نکرد", "failed")) +
-                                  (result.DelayMs > 0 ? " • " + result.DelayMs + " ms" : "") +
-                                  (string.IsNullOrEmpty(result.Detail) ? "" : " • " + result.Detail);
-                    AppendLog("[connection] " + line);
-                    Ui(delegate
-                    {
-                        RefreshConnections();
-                        SetStatus(line);
-                    });
-                }
-                Ui(delegate
-                {
-                    SettingsStore.Save(_settings);
-                    RefreshConnections();
-                    SetStatus(L.T("تست اتصال‌ها تمام شد", "connection tests finished"));
-                });
+                try { RunConnectionTests(targets, host, port, timeout); }
+                finally { EndMeasurement(); }
             });
             thread.IsBackground = true;
             thread.Start();
         }
 
+        /// <summary>Measures the entries one after another, updating the table after each result.</summary>
+        private void RunConnectionTests(List<ConnectionEntry> targets, string host, int port, int timeout)
+        {
+            int done = 0;
+            foreach (ConnectionEntry entry in targets)
+            {
+                done++;
+                ConnectionEntry local = entry;
+                int index = done;                       // 1 of 3, not 2 of 3
+                int total = targets.Count;
+                Ui(delegate
+                {
+                    SetStatus("(" + L.N(index) + "/" + L.N(total) + ") " + L.T("تست: ", "testing: ") + local.Name);
+                });
+                ConnectionTestResult result = ConnectionTester.Test(local, host, port, timeout, false);
+                local.LastDelayMs = result.Ok ? result.DelayMs : -1;
+                local.LastStatus = result.Status;
+                local.LastError = result.Ok ? "" : result.Detail;
+                local.LastTestUtc = DateTime.Now.ToString("HH:mm:ss");
+                string line = local.Name + " [" + local.Info.Title + "] — " +
+                              (result.Ok ? L.T("کار کرد", "works") : L.T("کار نکرد", "failed")) +
+                              (result.DelayMs > 0 ? " • " + L.N(result.DelayMs) + " ms" : "") +
+                              (string.IsNullOrEmpty(result.Detail) ? "" : " • " + result.Detail);
+                AppendLog("[connection] " + line);
+                Ui(delegate
+                {
+                    RefreshConnections();
+                    SetStatus(line);
+                });
+            }
+            Ui(delegate
+            {
+                SettingsStore.Save(_settings);
+                RefreshConnections();
+                SetStatus(L.T("تست اتصال‌ها تمام شد", "connection tests finished"));
+            });
+        }
+
         /// <summary>Runs the real MTProto handshake + req_pq on the selected proxy and reports it.</summary>
+        /// <summary>
+        /// One heavy measurement at a time. A stability run, a speed test and a connection test each
+        /// bring up their own throwaway engine, and two of them at once would fight over the same
+        /// machine. The periodic retest asks the same flag, so it can never start on top of a manual
+        /// run.
+        /// </summary>
+        private bool BeginMeasurement()
+        {
+            if (_stabilityBusy)
+            {
+                SetStatus(L.T("یک اندازه‌گیری دیگر در جریان است؛ چند لحظه صبر کنید",
+                              "another measurement is already running; give it a moment"));
+                return false;
+            }
+            _stabilityBusy = true;
+            return true;
+        }
+
+        /// <summary>Releases the flag on the UI thread, whatever happened in the worker.</summary>
+        private void EndMeasurement()
+        {
+            Ui(delegate { _stabilityBusy = false; });
+        }
+
         /// <summary>
         /// Keeps the measured delays honest: with a timer set, the connections are re-measured in the
         /// background every few minutes, so a route that died during the evening is noticed before the
@@ -1594,9 +1629,12 @@ namespace ServerHelp.Ui
             int port = profile.Port;
             int timeout = Math.Max(2500, _settings.ConnectionTestTimeoutMs);
 
+            if (!BeginMeasurement()) return;
             SetStatus(L.T("تشخیص خط…", "diagnosing the line…"));
             var thread = new Thread(delegate ()
             {
+              try
+              {
                 var probes = LineDoctor.Probe(host, ip, port, timeout);
                 string advice;
                 LineVerdict verdict = LineDoctor.Verdict(probes, out advice);
@@ -1615,6 +1653,8 @@ namespace ServerHelp.Ui
                         L.T("تشخیص خط", "Line diagnosis"), MessageBoxButtons.YesNo, MessageBoxIcon.Information);
                     if (answer == DialogResult.Yes) ApplyLineAdvice(verdict);
                 });
+              }
+              finally { EndMeasurement(); }
             });
             thread.IsBackground = true;
             thread.Start();
@@ -1646,6 +1686,7 @@ namespace ServerHelp.Ui
                         else
                         {
                             _settings.FragmentTls = true;
+                            if (_chkFragment != null) _chkFragment.Checked = true;   // the switch moves too
                             SettingsStore.Save(_settings);
                             SetStatus(L.T("تکه‌تکه‌کردن TLS برای همه مسیرهای جدید روشن شد",
                                           "TLS fragmentation is on for every new route"));
@@ -1670,11 +1711,6 @@ namespace ServerHelp.Ui
         /// </summary>
         private void StabilityTest(bool all)
         {
-            if (_stabilityBusy)
-            {
-                SetStatus(L.T("یک تست پایداری در جریان است", "a stability test is already running"));
-                return;
-            }
             var targets = new List<ConnectionEntry>();
             if (all)
             {
@@ -1705,11 +1741,13 @@ namespace ServerHelp.Ui
 
             var profile = SelectedServer();
             int timeout = Math.Min(4000, Math.Max(2000, _settings.ConnectionTestTimeoutMs));
-            _stabilityBusy = true;
+            if (!BeginMeasurement()) return;
             SetStatus(L.T("تست پایداری…", "measuring stability…"));
 
             var thread = new Thread(delegate ()
             {
+              try
+              {
                 int index = 0;
                 foreach (ConnectionEntry entry in targets)
                 {
@@ -1717,7 +1755,8 @@ namespace ServerHelp.Ui
                     int shown = index;
                     Ui(delegate
                     {
-                        SetStatus(L.T("پایداری ", "stability ") + shown + "/" + targets.Count + " — " + entry.Name);
+                        SetStatus(L.T("پایداری ", "stability ") + L.N(shown) + "/" + L.N(targets.Count) +
+                                  " — " + entry.Name);
                     });
                     var result = new QualityResult();
                     try
@@ -1747,11 +1786,12 @@ namespace ServerHelp.Ui
                         RefreshConnections();
                     });
                 }
-                Ui(delegate
-                {
-                    _stabilityBusy = false;
-                    SetStatus(L.T("تست پایداری تمام شد", "the stability test is done"));
-                });
+              }
+              finally
+              {
+                EndMeasurement();
+                Ui(delegate { SetStatus(L.T("تست پایداری تمام شد", "the stability test is done")); });
+              }
             });
             thread.IsBackground = true;
             thread.Start();
@@ -1844,6 +1884,7 @@ namespace ServerHelp.Ui
             }
             var profile = SelectedServer();
             int timeout = Math.Min(4000, Math.Max(2000, _settings.ConnectionTestTimeoutMs));
+            if (!BeginMeasurement()) return;
             SetStatus(L.T("تست سرعت ", "measuring the speed through ") + entry.Name + " …");
 
             var thread = new Thread(delegate ()
@@ -1858,16 +1899,18 @@ namespace ServerHelp.Ui
                         SettingsStore.Save(_settings);
                         RefreshConnections();
                         SetStatus(result.SpeedKbps > 0
-                            ? entry.Name + L.T(" — سرعت: ", " — speed: ") + result.SpeedKbps + L.T(" کیلوبایت/ثانیه", " KB/s")
+                            ? entry.Name + L.T(" — سرعت: ", " — speed: ") + L.N(result.SpeedKbps) +
+                              L.T(" کیلوبایت/ثانیه", " KB/s")
                             : L.T("سرعت اندازه‌گیری نشد: ", "the speed could not be measured: ") + result.Detail);
                         AppendLog("[speed] " + entry.Name + " — " +
-                                  (result.SpeedKbps > 0 ? result.SpeedKbps + " KB/s" : result.Detail));
+                                  (result.SpeedKbps > 0 ? L.N(result.SpeedKbps) + " KB/s" : result.Detail));
                     });
                 }
                 catch (Exception ex)
                 {
                     Ui(delegate { SetStatus(L.T("تست سرعت شکست خورد: ", "the speed test failed: ") + ex.Message); });
                 }
+                finally { EndMeasurement(); }
             });
             thread.IsBackground = true;
             thread.Start();
@@ -1929,9 +1972,13 @@ namespace ServerHelp.Ui
                         int added = 0;
                         foreach (ConnectionEntry entry in entries)
                         {
-                            if (_settings.FindConnection(entry.Name) != null &&
-                                string.Equals(entry.Name, ConnectionEntry.Create(entry.Name, entry.Kind).Name, StringComparison.Ordinal))
-                                entry.Name = entry.Name + " (" + EntryHints(_settings) + ")";
+                            // importing the same subscription twice must not produce look-alike names:
+                            // the second import gets "node-2 2", not another "node-2"
+                            string wanted = entry.Name.Length > 0 ? entry.Name : entry.Info.Title;
+                            string name = wanted;
+                            int suffix = 2;
+                            while (_settings.FindConnection(name) != null) name = wanted + " " + suffix++;
+                            entry.Name = name;
                             entry.Id = ConnectionEntry.NewId();
                             _settings.Connections.Add(entry);
                             added++;
@@ -1955,11 +2002,6 @@ namespace ServerHelp.Ui
                 thread.IsBackground = true;
                 thread.Start();
             }
-        }
-
-        private static int EntryHints(AppSettings settings)
-        {
-            return settings.Connections.Count + 2;
         }
 
         /// <summary>
@@ -2006,8 +2048,8 @@ namespace ServerHelp.Ui
                         int shown = index;
                         Ui(delegate
                         {
-                            SetStatus(L.T("بهینه‌سازی مسیر ", "optimising route ") + shown + "/" + candidates.Count +
-                                      " — " + candidate.Describe());
+                            SetStatus(L.T("بهینه‌سازی مسیر ", "optimising route ") + L.N(shown) + "/" +
+                                      L.N(candidates.Count) + " — " + candidate.Describe());
                         });
                         string error;
                         RouteOptimizer.Measure(candidate, host, port, timeout, timeout, out error);
@@ -2036,7 +2078,7 @@ namespace ServerHelp.Ui
                         SetStatus(winner == null
                             ? L.T("هیچ مسیری جواب نداد", "no route answered")
                             : L.T("سریع‌ترین مسیر: ", "fastest route: ") + winner.Describe() +
-                              (winner.GamePingMs > 0 ? " • " + winner.GamePingMs + " ms" : ""));
+                              (winner.GamePingMs > 0 ? " • " + L.N(winner.GamePingMs) + " ms" : ""));
 
                         if (winner == null)
                         {

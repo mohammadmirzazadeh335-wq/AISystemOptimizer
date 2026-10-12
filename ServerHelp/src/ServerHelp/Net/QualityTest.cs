@@ -32,10 +32,10 @@ namespace ServerHelp.Net
         {
             if (!Ok) return Detail.Length > 0 ? Detail : L.T("اندازه‌گیری نشد", "not measured");
             var sb = new StringBuilder();
-            sb.Append(AvgMs).Append(" ms");
-            if (JitterMs > 0) sb.Append(" ±").Append(JitterMs);
-            if (Samples > 1) sb.Append(" • ").Append(L.T("افت ", "loss ")).Append(LossPercent).Append('%');
-            if (SpeedKbps > 0) sb.Append(" • ").Append(SpeedKbps).Append(L.T(" کیلوبایت/ثانیه", " KB/s"));
+            sb.Append(L.N(AvgMs)).Append(" ms");
+            if (JitterMs > 0) sb.Append(" ±").Append(L.N(JitterMs));
+            if (Samples > 1) sb.Append(" • ").Append(L.T("افت ", "loss ")).Append(L.N(LossPercent)).Append('%');
+            if (SpeedKbps > 0) sb.Append(" • ").Append(L.N(SpeedKbps)).Append(L.T(" کیلوبایت/ثانیه", " KB/s"));
             return sb.ToString();
         }
 
@@ -108,7 +108,7 @@ namespace ServerHelp.Net
             for (int i = 1; i < delays.Count; i++) movement += Math.Abs(delays[i] - delays[i - 1]);
             result.JitterMs = delays.Count > 1 ? (int)Math.Round((double)movement / (delays.Count - 1)) : 0;
             if (result.Lost > 0)
-                result.Detail = L.T("در ", "during ") + samples + L.T(" نمونه، ", " samples, ") + result.Lost +
+                result.Detail = L.T("در ", "during ") + L.N(samples) + L.T(" نمونه، ", " samples, ") + L.N(result.Lost) +
                                 L.T(" پاسخ نیامد", " did not answer");
             return result;
         }

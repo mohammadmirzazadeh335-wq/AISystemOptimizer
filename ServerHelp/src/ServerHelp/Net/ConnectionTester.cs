@@ -197,26 +197,36 @@ namespace ServerHelp.Net
             if (missing.Length > 0)
                 return ConnectionTestResult.Fail(L.T("ناقص", "incomplete"), L.T("این فیلدها لازم است: ", "these fields are required: ") + missing, entry.CanCarryGame);
 
-            switch (entry.Kind)
+            try
             {
-                case ConnectionKind.Dns:
-                    return TestDns(entry, targetHost, timeoutMs);
-                case ConnectionKind.Mtproto:
-                    return TestMtproto(entry, timeoutMs);
-                case ConnectionKind.Socks5:
-                    return TestSocks5(entry, targetHost, targetPort, timeoutMs);
-                case ConnectionKind.Http:
-                    return TestHttp(entry, targetHost, targetPort, timeoutMs);
-                case ConnectionKind.WireGuard:
-                    return TestSingBoxRoute(entry, targetHost, targetPort, timeoutMs, quick);
-                case ConnectionKind.SingBoxOutbound:
-                    return TestSingBoxRoute(entry, targetHost, targetPort, timeoutMs, quick);
-                case ConnectionKind.SingBoxConfig:
-                    return TestFullConfig(entry, targetHost, targetPort, timeoutMs, quick);
-                case ConnectionKind.Warp:
-                    return TestWarp(entry, targetHost, targetPort, timeoutMs, quick);
-                default:
-                    return ConnectionTestResult.Fail(L.T("نوع ناشناخته", "unknown kind"), "", true);
+                switch (entry.Kind)
+                {
+                    case ConnectionKind.Dns:
+                        return TestDns(entry, targetHost, timeoutMs);
+                    case ConnectionKind.Mtproto:
+                        return TestMtproto(entry, timeoutMs);
+                    case ConnectionKind.Socks5:
+                        return TestSocks5(entry, targetHost, targetPort, timeoutMs);
+                    case ConnectionKind.Http:
+                        return TestHttp(entry, targetHost, targetPort, timeoutMs);
+                    case ConnectionKind.WireGuard:
+                        return TestSingBoxRoute(entry, targetHost, targetPort, timeoutMs, quick);
+                    case ConnectionKind.SingBoxOutbound:
+                        return TestSingBoxRoute(entry, targetHost, targetPort, timeoutMs, quick);
+                    case ConnectionKind.SingBoxConfig:
+                        return TestFullConfig(entry, targetHost, targetPort, timeoutMs, quick);
+                    case ConnectionKind.Warp:
+                        return TestWarp(entry, targetHost, targetPort, timeoutMs, quick);
+                    default:
+                        return ConnectionTestResult.Fail(L.T("نوع ناشناخته", "unknown kind"), "", true);
+                }
+            }
+            catch (Exception ex)
+            {
+                // A test always answers: any surprise in a pasted config or in the engine comes back
+                // as a failed result, because the callers (dialog, table, pipeline) have no handler
+                // for an exception thrown on their worker thread.
+                return ConnectionTestResult.Fail(L.T("تست شکست خورد", "the test failed"), ex.Message, entry.CanCarryGame);
             }
         }
 

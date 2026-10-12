@@ -911,7 +911,14 @@ namespace ServerHelp.Orchestration
                         StepState.Fail, error, (int)watch.ElapsedMilliseconds);
                     return false;
                 }
-                int socksPort = entry.LocalSocksPort > 0 ? entry.LocalSocksPort : ConnectionParser.FindSocksPort(Json.ParseObject(entry.Config));
+                int socksPort = entry.LocalSocksPort;
+                if (socksPort <= 0)
+                {
+                    // the same text was just accepted by the engine, so a failure here can only come
+                    // from something exotic in the JSON: report it, never throw at launch time
+                    try { socksPort = ConnectionParser.FindSocksPort(Json.ParseObject(entry.Config)); }
+                    catch { socksPort = 0; }
+                }
                 if (socksPort <= 0)
                 {
                     Step(L.T("اجرای کانفیگ", "Run the config"), L.T("اجرای کانفیگ", "Run the config"), StepState.Fail,

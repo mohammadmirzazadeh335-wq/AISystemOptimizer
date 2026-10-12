@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Threading;
@@ -79,7 +80,7 @@ namespace ServerHelp.Ui
             _kindCombo.Top = y + 20;
             _kindCombo.Width = 340;
             foreach (ConnectionKindInfo info in ConnectionKindInfo.AllKinds()) _kindCombo.Items.Add(info.Title);
-            _kindCombo.SelectedIndex = (int)Entry.Kind;
+            _kindCombo.SelectedIndex = IndexOfKind(Entry.Kind);
             _kindCombo.SelectedIndexChanged += delegate { OnKindChanged(); };
             panel.Controls.Add(_kindCombo);
             y += 54;
@@ -136,6 +137,7 @@ namespace ServerHelp.Ui
             _config.Height = 150;
             _config.Font = new Font("Consolas", 9f);
             _config.Text = Entry.Config;
+            _config.TextChanged += delegate { OnConfigChanged(); };   // once, not once per kind change
             panel.Controls.Add(_config);
 
             // the .ovpn helpers sit above the box they fill, and only for that kind
@@ -283,10 +285,19 @@ namespace ServerHelp.Ui
         {
             get
             {
+                // the combo lists the kinds in their own order; the enum value is not the row number
+                List<ConnectionKindInfo> kinds = ConnectionKindInfo.AllKinds();
                 int index = _kindCombo.SelectedIndex;
-                foreach (ConnectionKindInfo info in ConnectionKindInfo.AllKinds()) if (info.Kind == (ConnectionKind)index) return info.Kind;
-                return ConnectionKind.Socks5;
+                if (index < 0 || index >= kinds.Count) return ConnectionKind.Socks5;
+                return kinds[index].Kind;
             }
+        }
+
+        private static int IndexOfKind(ConnectionKind kind)
+        {
+            List<ConnectionKindInfo> kinds = ConnectionKindInfo.AllKinds();
+            for (int i = 0; i < kinds.Count; i++) if (kinds[i].Kind == kind) return i;
+            return 2;   // SOCKS5
         }
 
         private void Show(Control control, bool visible)
@@ -398,23 +409,35 @@ namespace ServerHelp.Ui
             _useForGame.Enabled = ConnectionKindInfo.Of(kind).CanCarryGame;
             if (!_useForGame.Enabled) _useForGame.Checked = false;
 
+            OnConfigChanged();
+        }
+
+        /// <summary>
+        /// Live feedback while the config is typed or pasted: the .ovpn summary, the secret hint and
+        /// whether the fragment switch can apply. A half pasted JSON is normal while typing, so the
+        /// parse is guarded and an unreadable config leaves the switch alone instead of moving it.
+        /// </summary>
+        private void OnConfigChanged()
+        {
             UpdateSecretHint();
-            if (kind == ConnectionKind.OpenVpn && _config != null) _config.TextChanged += delegate { UpdateSecretHint(); };
-            if (_config != null) _config.TextChanged += delegate
+            if (_fragment == null || !_fragment.Visible) return;
+            if (CurrentKind != ConnectionKind.SingBoxOutbound)
             {
-                if (_fragment == null || !_fragment.Visible) return;
-                if (CurrentKind == ConnectionKind.SingBoxOutbound)
-                {
-                    var parsed = Json.ParseObject(_config.Text);
-                    bool hasTls = parsed != null && Json.Get(parsed, "tls") != null;
-                    _fragment.Enabled = hasTls;
-                    if (!hasTls) _fragment.Checked = false;
-                }
-                else
-                {
-                    _fragment.Enabled = true;
-                }
-            };
+                _fragment.Enabled = true;
+                return;
+            }
+            bool parsedOk = false;
+            bool hasTls = false;
+            try
+            {
+                Dictionary<string, object> parsed = Json.ParseObject(_config.Text);
+                parsedOk = true;
+                hasTls = parsed != null && Json.Get(parsed, "tls") != null;
+            }
+            catch { parsedOk = false; }
+            if (!parsedOk) return;
+            _fragment.Enabled = hasTls;
+            if (!hasTls) _fragment.Checked = false;
         }
 
         /// <summary>Live explanation of what the pasted secret means - the main MTProto debug aid.</summary>
@@ -480,7 +503,7 @@ namespace ServerHelp.Ui
                 else if (length != 44)
                 {
                     _secretHint.ForeColor = Color.FromArgb(180, 110, 0);
-                    _secretHint.Text = L.T("طول کلید ", "the key is ") + length +
+                    _secretHint.Text = L.T("طول کلید ", "the key is ") + L.N(length) +
                                        L.T(" کاراکتر است، باید ۴۴ باشد.", " characters, it should be 44.");
                 }
                 else
@@ -540,7 +563,8 @@ namespace ServerHelp.Ui
             {
                 entry.Host = profile.Host;
                 entry.Port = profile.Port;
-                entry.Notes = profile.Summary();
+                // the summary only fills a note the user left empty: their own words stay
+                if (entry.Notes.Length == 0) entry.Notes = profile.Summary();
             }
         }
 
@@ -597,7 +621,14 @@ namespace ServerHelp.Ui
 
             var thread = new Thread(delegate ()
             {
-                ConnectionTestResult result = ConnectionTester.Test(snapshot, host, port, timeout, false);
+                ConnectionTestResult result;
+                try { result = ConnectionTester.Test(snapshot, host, port, timeout, false); }
+                catch (Exception ex)
+                {
+                    // the dialog must always come back, so a surprise is reported like a failed test
+                    result = ConnectionTestResult.Fail(L.T("تست شکست خورد", "the test failed"), ex.Message,
+                                                       snapshot.CanCarryGame);
+                }
                 try
                 {
                     BeginInvoke((Action)delegate
@@ -612,7 +643,7 @@ namespace ServerHelp.Ui
                         }
                         _result.ForeColor = result.Ok ? Color.FromArgb(24, 120, 50) : Color.FromArgb(180, 40, 40);
                         _result.Text = (result.Ok ? L.T("کار کرد", "works") : L.T("کار نکرد", "failed")) + " • " + result.Status +
-                                       (result.DelayMs > 0 ? " • " + result.DelayMs + " ms" : "") +
+                                       (result.DelayMs > 0 ? " • " + L.N(result.DelayMs) + " ms" : "") +
                                        Environment.NewLine + result.Detail +
                                        (snapshot.CanCarryGame ? "" : Environment.NewLine + L.T("این نوع نمی‌تواند ترافیک بازی را حمل کند.", "this kind cannot carry the game traffic."));
                     });
