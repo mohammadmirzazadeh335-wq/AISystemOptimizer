@@ -131,9 +131,12 @@ jobs:
                  Where-Object { $_.FullName -match 'Release' } | Select-Object -First 1
           if (-not $exe) { $exe = Get-ChildItem -Path 'ServerHelp/src/ServerHelp/bin' -Recurse -Filter 'ServerHelp.exe' | Select-Object -First 1 }
           if (-not $exe) { throw 'ServerHelp.exe was not built' }
-          # the engine is embedded in the exe, so the app unpacks it itself
-          & $exe.FullName --selftest
-          $code = $LASTEXITCODE
+          # the engine is embedded in the exe, so the app unpacks it itself.
+          # Start-Process with -Wait: PowerShell does not wait for a window application, so calling
+          # it with & would return before the test ran and leave the exit code empty.
+          $process = Start-Process -FilePath $exe.FullName -ArgumentList '--selftest' -PassThru -Wait -NoNewWindow
+          $code = $process.ExitCode
+          Write-Host "self test exit code: $code"
           # a window application has no console in the build, so the report is read from its file
           $reportPath = Join-Path $env:LOCALAPPDATA 'ServerHelp\selftest.txt'
           if (Test-Path $reportPath) {
