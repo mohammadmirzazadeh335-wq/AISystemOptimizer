@@ -84,7 +84,8 @@ namespace ServerHelp.Ui
             var font = control.Font;
             bool bold = font != null && font.Bold;
 
-            if (control is SHButton || control is SHGauge || control is SHPill || control is SHProgress) return;
+            if (control is SHButton || control is SHPanel || control is SHHeader ||
+                control is SHGauge || control is SHPill || control is SHProgress) return;
 
             var button = control as Button;
             if (button != null)
@@ -136,6 +137,17 @@ namespace ServerHelp.Ui
                 return;
             }
 
+            var flow = control as FlowLayoutPanel;
+            if (flow != null)
+            {
+                // a flow of checkboxes and labels sits on a white card or on the grey page,
+                // so it has to borrow the colour of whatever holds it
+                Control holder = flow.Parent;
+                Color parentColor = holder == null ? Background : holder.BackColor;
+                flow.BackColor = parentColor == Color.Transparent ? Surface : parentColor;
+                return;
+            }
+
             var panel = control as Panel;
             if (panel != null)
             {
@@ -148,7 +160,8 @@ namespace ServerHelp.Ui
             if (group != null)
             {
                 group.ForeColor = Text;
-                group.BackColor = Color.Transparent;
+                Color holder = group.Parent == null ? Background : group.Parent.BackColor;
+                group.BackColor = holder == Color.Transparent ? Surface : holder;
                 return;
             }
 
@@ -160,9 +173,6 @@ namespace ServerHelp.Ui
                 if (form.Font == null || form.Font.Name != "Segoe UI") form.Font = Font(9.75f, false);
                 return;
             }
-
-            var flow = control as FlowLayoutPanel;
-            if (flow != null) flow.BackColor = Color.Transparent;
         }
 
         public static void StyleButton(Button button, bool accent)

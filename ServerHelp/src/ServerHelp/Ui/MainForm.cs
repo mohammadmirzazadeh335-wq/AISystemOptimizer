@@ -261,6 +261,7 @@ namespace ServerHelp.Ui
 
             var card = new SHPanel();
             card.Dock = DockStyle.Fill;
+            card.Title = L.T("اتصالات — هر راهی که بازی می‌تواند از آن رد شود", "Connections — every route the game can use");
 
             var buttons = new FlowLayoutPanel();
             buttons.Dock = DockStyle.Top;
@@ -584,6 +585,7 @@ namespace ServerHelp.Ui
 
             var card = new SHPanel();
             card.Dock = DockStyle.Fill;
+            card.Title = L.T("سرورها — لیست خودتان", "Servers — your own list");
 
             _serverList = new ListView();
             _serverList.Dock = DockStyle.Fill;
@@ -635,6 +637,7 @@ namespace ServerHelp.Ui
 
             var card = new SHPanel();
             card.Dock = DockStyle.Fill;
+            card.Title = L.T("شبکه و DNS", "Network and DNS");
 
             var buttons = new FlowLayoutPanel();
             buttons.Dock = DockStyle.Top;
@@ -687,6 +690,7 @@ namespace ServerHelp.Ui
 
             var card = new SHPanel();
             card.Dock = DockStyle.Fill;
+            card.Title = L.T("بهینه‌سازی سیستم (همه برگشت‌پذیر)", "System optimisation (all reversible)");
 
             var panel = new FlowLayoutPanel();
             panel.Dock = DockStyle.Fill;
@@ -796,6 +800,7 @@ namespace ServerHelp.Ui
 
             var card = new SHPanel();
             card.Dock = DockStyle.Fill;
+            card.Title = L.T("نسخه‌های ماینکرفت روی این سیستم", "Minecraft versions on this PC");
 
             var top = new Panel();
             top.Dock = DockStyle.Top;
@@ -871,6 +876,7 @@ namespace ServerHelp.Ui
 
             var card = new SHPanel();
             card.Dock = DockStyle.Fill;
+            card.Title = L.T("تنظیمات", "Settings");
 
             var panel = new FlowLayoutPanel();
             panel.Dock = DockStyle.Fill;
@@ -959,6 +965,7 @@ namespace ServerHelp.Ui
 
             var card = new SHPanel();
             card.Dock = DockStyle.Fill;
+            card.Title = L.T("گزارش", "Log");
 
             _logBox = new TextBox();
             _logBox.Multiline = true;
