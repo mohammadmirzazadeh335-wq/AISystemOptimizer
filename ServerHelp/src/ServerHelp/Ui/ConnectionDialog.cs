@@ -386,7 +386,6 @@ namespace ServerHelp.Ui
             _secretHint.Text = "";
         }
 
-        }
 
         // ------------------------------------------------------------------ actions
 
