@@ -125,22 +125,6 @@ namespace ServerHelp.Ui
             lblConfig.Location = new Point(12, y);
             panel.Controls.Add(lblConfig);
             _lblConfig = lblConfig;
-            _ovpnBrowse = new Button();
-            _ovpnBrowse.Text = L.T("خواندن از فایل .ovpn…", "Load an .ovpn file…");
-            _ovpnBrowse.Width = 200;
-            _ovpnBrowse.Left = 12;
-            _ovpnBrowse.Top = 8;
-            _ovpnBrowse.Click += delegate { LoadOvpnFile(); };
-            panel.Controls.Add(_ovpnBrowse);
-
-            _ovpnHint = new Label();
-            _ovpnHint.Left = 220;
-            _ovpnHint.Top = 12;
-            _ovpnHint.Width = 380;
-            _ovpnHint.Height = 34;
-            _ovpnHint.ForeColor = Color.FromArgb(120, 120, 120);
-            panel.Controls.Add(_ovpnHint);
-
             _config = new TextBox();
             _config.Multiline = true;
             _config.ScrollBars = ScrollBars.Both;
@@ -152,7 +136,25 @@ namespace ServerHelp.Ui
             _config.Font = new Font("Consolas", 9f);
             _config.Text = Entry.Config;
             panel.Controls.Add(_config);
-            y += 178;
+
+            // the .ovpn helpers sit above the box they fill, and only for that kind
+            _ovpnBrowse = new Button();
+            _ovpnBrowse.Text = L.T("خواندن از فایل .ovpn…", "Load an .ovpn file…");
+            _ovpnBrowse.Width = 190;
+            _ovpnBrowse.Left = 12;
+            _ovpnBrowse.Top = _config.Top + _config.Height + 6;
+            _ovpnBrowse.Click += delegate { LoadOvpnFile(); };
+            panel.Controls.Add(_ovpnBrowse);
+
+            _ovpnHint = new Label();
+            _ovpnHint.Left = 214;
+            _ovpnHint.Top = _ovpnBrowse.Top + 4;
+            _ovpnHint.Width = 360;
+            _ovpnHint.Height = 32;
+            _ovpnHint.ForeColor = Color.FromArgb(120, 120, 120);
+            panel.Controls.Add(_ovpnHint);
+
+            y += 224;
 
             _socksPort = NumberField(panel, L.T("پورت SOCKS محلی کانفیگ کامل", "Local SOCKS port of a full config"),
                                 ref y, Entry.LocalSocksPort, 0, 65535, out _lblSocksPort);
