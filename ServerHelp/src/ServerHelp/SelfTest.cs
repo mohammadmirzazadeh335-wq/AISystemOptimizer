@@ -194,7 +194,7 @@ namespace ServerHelp
             filled.LastSpeedKbps = 512;
             filled.LastPingMin = 38;
             filled.LastPingMax = 55;
-            filled.LastTestUtc = "12:00:00";
+            filled.MarkTested();
 
             var writer = new JsonWriter(false);
             filled.WriteTo(writer);
@@ -206,6 +206,20 @@ namespace ServerHelp
             Expect(back.SameConfig(filled), "the round trip keeps the entry equal to itself", failures, passes);
             Expect(back.QualityText().Length > 0, "the measured quality is readable again after loading",
                    failures, passes);
+            Expect(!back.MeasurementOlderThan(60) && back.TestedText().Length == 8,
+                   "a measurement taken just now is fresh and reads back as a clock time", failures, passes);
+
+            var neverTested = ConnectionEntry.Create("never measured", ConnectionKind.Socks5);
+            Expect(neverTested.MeasurementOlderThan(60) && neverTested.TestedText().Length == 0,
+                   "an entry nobody measured counts as stale and carries no stamp", failures, passes);
+            neverTested.LastTestUtc = "2001-01-01 00:00:00";
+            Expect(neverTested.MeasurementOlderThan(60) && neverTested.TestedText() == "2001-01-01 00:00",
+                   "an old measurement is stale and the table says which day it was", failures, passes);
+            neverTested.LastTestUtc = "12:00:00";
+            Expect(neverTested.MeasurementOlderThan(60) && neverTested.TestedText() == "12:00:00",
+                   "a stamp from an older build counts as stale and is still shown as it is", failures, passes);
+            Expect(!neverTested.MeasurementOlderThan(0),
+                   "with no retest interval set, nothing is ever called stale", failures, passes);
 
             // outbounds and endpoints
             var socks = ConnectionEntry.Create("s", ConnectionKind.Socks5);

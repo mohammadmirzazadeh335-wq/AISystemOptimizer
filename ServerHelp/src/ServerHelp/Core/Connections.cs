@@ -266,6 +266,39 @@ namespace ServerHelp.Core
             LastSpeedKbps = other.LastSpeedKbps;
         }
 
+        /// <summary>
+        /// Stamps a measurement with the full local date and time. The table shows only the clock time
+        /// while it is still today, because that is what a reader wants to see - but a stamp without a
+        /// day would let yesterday's number look like a fresh one, and "retest every N minutes" has to
+        /// know when the last measurement really was.
+        /// </summary>
+        public void MarkTested()
+        {
+            LastTestUtc = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>True when the stored measurement is missing or older than the given interval.</summary>
+        public bool MeasurementOlderThan(int minutes)
+        {
+            if (minutes <= 0) return false;      // no interval set: nothing can be stale about it
+            DateTime tested;
+            if (!DateTime.TryParse(LastTestUtc, CultureInfo.InvariantCulture, DateTimeStyles.None, out tested))
+                return true;
+            return DateTime.Now - tested >= TimeSpan.FromMinutes(minutes);
+        }
+
+        /// <summary>The stamp as a table shows it: the clock time while it is today, otherwise the day.</summary>
+        public string TestedText()
+        {
+            if (string.IsNullOrEmpty(LastTestUtc)) return "";
+            DateTime tested;
+            if (!DateTime.TryParse(LastTestUtc, CultureInfo.InvariantCulture, DateTimeStyles.None, out tested))
+                return LastTestUtc;              // written by an older build: shown exactly as it is
+            return tested.Date == DateTime.Now.Date
+                ? tested.ToString("HH:mm:ss", CultureInfo.InvariantCulture)
+                : tested.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+        }
+
         /// <summary>The measured stability as one line, or empty when it was never measured.</summary>
         public string QualityText()
         {

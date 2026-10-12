@@ -689,7 +689,7 @@ namespace ServerHelp.Ui
                             Entry.LastDelayMs = result.Ok ? result.DelayMs : -1;
                             Entry.LastStatus = result.Status;
                             Entry.LastError = result.Ok ? "" : result.Detail;
-                            Entry.LastTestUtc = DateTime.Now.ToString("HH:mm:ss");
+                            Entry.MarkTested();
                         }
                         _result.ForeColor = result.Ok ? Color.FromArgb(24, 120, 50) : Color.FromArgb(180, 40, 40);
                         _result.Text = (result.Ok ? L.T("کار کرد", "works") : L.T("کار نکرد", "failed")) + " • " + result.Status +

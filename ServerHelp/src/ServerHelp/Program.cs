@@ -169,6 +169,22 @@ namespace ServerHelp.Core
             return label;
         }
 
+        /// <summary>
+        /// The height a wrapping label needs for this text at this width. A fixed number of pixels is a
+        /// guess: the sentence one language needs is longer than the other's, and a label that ends up
+        /// one line short drops that line - even with an ellipsis, the sentence is then not readable.
+        /// </summary>
+        public static int WrappedHeight(string text, Font font, int width, int minimum)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(text) || font == null || width < 40) return minimum;
+                Size measured = TextRenderer.MeasureText(text, font, new Size(width, 0), TextFormatFlags.WordBreak);
+                return Math.Max(minimum, measured.Height + 6);
+            }
+            catch { return minimum; }
+        }
+
         public static Label Sub(string text)
         {
             var label = new Label();

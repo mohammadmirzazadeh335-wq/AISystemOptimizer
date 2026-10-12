@@ -52,6 +52,7 @@ namespace ServerHelp.Ui
         private NumericUpDown _chainCount;
         private NumericUpDown _retestMinutes;
         private System.Windows.Forms.Timer _retestTimer;
+        private System.Windows.Forms.Timer _startupRetest;
         private ComboBox _tunnelCombo;
         private NumericUpDown _heapBox, _endpointBox;
         private TextBox _extraJvmBox;
@@ -199,6 +200,7 @@ namespace ServerHelp.Ui
             UpdatePlanPreview();
             ConnectionRoute.FragmentTlsByDefault = _settings.FragmentTls;
             RestartRetestTimer();
+            RetestStaleAtStartup();
         }
 
         /// <summary>Keeps the chips in the header honest about the current state.</summary>
@@ -1203,7 +1205,11 @@ namespace ServerHelp.Ui
                                           "Server Help v" + Program.Version() + " — tunnel: sing-box " + SingBoxRunner.PinnedVersion +
                                           " + Cloudflare WARP. Nothing about you leaves this machine."));
             creditLabel.Width = 640;
-            creditLabel.Height = 40;
+            // measured rather than guessed: the version line is long in both languages, and the label
+            // used to be told "two lines" by hand. Any later growth - a longer build stamp, a wider
+            // Persian face - now makes the label taller instead of cutting the last line.
+            using (var creditFont = UiKit.UiFont(9.75f, false))
+                creditLabel.Height = UiKit.WrappedHeight(creditLabel.Text, creditFont, creditLabel.Width, 40);
 
             panel.Controls.Add(langLabel);
             panel.Controls.Add(langCombo);
@@ -1530,7 +1536,9 @@ namespace ServerHelp.Ui
                     item.SubItems.Add(entry.Info.Carries);
                     item.SubItems.Add(entry.QualityText().Length > 0 ? entry.QualityText() : "—");
                     item.SubItems.Add(string.IsNullOrEmpty(entry.LastStatus) ? L.T("تست نشده", "not tested") : entry.StatusText);
-                    item.SubItems.Add(string.IsNullOrEmpty(entry.LastTestUtc) ? "—" : entry.LastTestUtc);
+                    // a bare clock time would make yesterday's measurement look like today's
+                    string tested = entry.TestedText();
+                    item.SubItems.Add(tested.Length > 0 ? tested : "—");
                     item.SubItems.Add(entry.Enabled ? L.T("بله", "yes") : L.T("خیر", "no"));
                     if (!entry.Enabled) item.ForeColor = Color.FromArgb(140, 140, 140);
                     else if (entry.LastDelayMs > 0) item.ForeColor = Color.FromArgb(24, 120, 50);
@@ -1787,7 +1795,7 @@ namespace ServerHelp.Ui
                 local.LastDelayMs = result.Ok ? result.DelayMs : -1;
                 local.LastStatus = result.Status;
                 local.LastError = result.Ok ? "" : result.Detail;
-                local.LastTestUtc = DateTime.Now.ToString("HH:mm:ss");
+                local.MarkTested();
                 string line = local.Name + " [" + local.Info.Title + "] — " +
                               (result.Ok ? L.T("کار کرد", "works") : L.T("کار نکرد", "failed")) +
                               (result.DelayMs > 0 ? " • " + L.N(result.DelayMs) + " ms" : "") +
@@ -1858,6 +1866,40 @@ namespace ServerHelp.Ui
                 TestConnections(true);
             };
             _retestTimer.Start();
+        }
+
+        /// <summary>
+        /// The periodic retest only fires once a whole interval has passed, so with "every 12 hours" a
+        /// number measured last week would sit in the table looking current. One measurement a few
+        /// seconds after the window opens closes that gap - and it is skipped when the saved numbers
+        /// are still inside the interval, so opening the app twice in a row probes nothing twice.
+        /// </summary>
+        private void RetestStaleAtStartup()
+        {
+            if (_settings.RetestMinutes <= 0 || _settings.Connections == null) return;
+            bool stale = false;
+            foreach (ConnectionEntry entry in _settings.Connections)
+            {
+                if (!entry.Enabled) continue;
+                if (!entry.MeasurementOlderThan(_settings.RetestMinutes)) continue;
+                stale = true;
+                break;
+            }
+            if (!stale) return;
+            _startupRetest = new System.Windows.Forms.Timer();
+            _startupRetest.Interval = 8000;      // let the window finish drawing and the server check start
+            _startupRetest.Tick += delegate
+            {
+                _startupRetest.Stop();
+                _startupRetest.Dispose();
+                _startupRetest = null;
+                if (_worker != null && _worker.IsAlive) return;          // a launch is running
+                if (_pipeline.GameRunning) return;                      // the game is playing
+                if (_connectionsBusy || _stabilityBusy) return;         // a measurement is running
+                AppendLog("[retest] the saved delays are older than " + _settings.RetestMinutes + " min; measuring now");
+                TestConnections(true);
+            };
+            _startupRetest.Start();
         }
 
         /// <summary>
@@ -2029,7 +2071,7 @@ namespace ServerHelp.Ui
                             target.LastDelayMs = captured.AvgMs;
                             target.LastStatus = L.T("پایدار ", "stable ") + captured.Grade();
                         }
-                        target.LastTestUtc = DateTime.Now.ToString("HH:mm:ss");
+                        target.MarkTested();
                         AppendLog("[quality] " + target.Name + " — " + captured.Summary());
                         SettingsStore.Save(_settings);
                         RefreshConnections();
@@ -2216,7 +2258,7 @@ namespace ServerHelp.Ui
                     Ui(delegate
                     {
                         entry.LastSpeedKbps = result.SpeedKbps;
-                        entry.LastTestUtc = DateTime.Now.ToString("HH:mm:ss");
+                        entry.MarkTested();
                         SettingsStore.Save(_settings);
                         RefreshConnections();
                         SetStatus(result.SpeedKbps > 0
@@ -2573,7 +2615,7 @@ namespace ServerHelp.Ui
                 entry.LastDelayMs = check.Connected ? check.DelayMs : -1;
                 entry.LastStatus = check.Status;
                 entry.LastError = check.Verified ? "" : check.Detail;
-                entry.LastTestUtc = DateTime.Now.ToString("HH:mm:ss");
+                entry.MarkTested();
                 Ui(delegate
                 {
                     AppendLog("[mtproto] " + line);
