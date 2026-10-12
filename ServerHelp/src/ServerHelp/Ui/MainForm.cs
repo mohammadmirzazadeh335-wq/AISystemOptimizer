@@ -36,6 +36,7 @@ namespace ServerHelp.Ui
         private ListView _serverList;
         private ListView _versionList;
         private TextBox _planBox;
+        private string _planBuildingFor = "";      // keeps one preparation per version in flight
         private ListView _endpointList;
         private TextBox _logBox;
         private TextBox _versionsDirBox;
@@ -171,6 +172,7 @@ namespace ServerHelp.Ui
             RefreshConnections();
             Theme.Apply(this);
             UpdateHeaderPills();
+            UpdatePlanPreview();
         }
 
         /// <summary>Keeps the chips in the header honest about the current state.</summary>
@@ -361,7 +363,6 @@ namespace ServerHelp.Ui
             _pinCombo.DropDownStyle = ComboBoxStyle.DropDownList;
             _pinCombo.Width = 300;
             if (_versionCombo != null) _versionCombo.SelectedIndexChanged += delegate { UpdatePlanPreview(); };
-            if (_versionList != null) _versionList.SelectedIndexChanged += delegate { UpdatePlanPreview(); };
             _pinCombo.SelectedIndexChanged += delegate
             {
                 if (_connectionsBusy) return;
@@ -858,6 +859,7 @@ namespace ServerHelp.Ui
             _versionList.Columns.Add(L.T("نیازمندی", "Details"), 320);
             _versionList.Columns.Add(L.T("مسیر", "Folder"), 420);
             _versionList.DoubleClick += delegate { UseSelectedVersion(); };
+            _versionList.SelectedIndexChanged += delegate { UpdatePlanPreview(); };
             card.Controls.Add(_versionList);
 
             var bottom = UiLabel(L.T("نسخه‌ها از پوشه TLauncher/ماینکرفت خوانده می‌شوند. با دوبار کلیک، نسخه انتخاب می‌شود.",
@@ -1785,6 +1787,8 @@ namespace ServerHelp.Ui
                                   "pick a version and this panel shows exactly what will be optimised.");
                 return;
             }
+            if (_planBuildingFor == version.Id) return;          // already being prepared
+            _planBuildingFor = version.Id;
             target.Text = L.T("در حال محاسبه بهینه‌سازی…", "working out the optimisation…");
             SetStatus(L.T("بهینه‌سازی نسخه ", "optimising version ") + version.Id + " …");
             var thread = new Thread(delegate ()
@@ -1801,6 +1805,7 @@ namespace ServerHelp.Ui
                         : plan.Profile.Summary();
                     Ui(delegate
                     {
+                        if (_planBuildingFor == version.Id) _planBuildingFor = "";
                         if (_planBox != null && SelectedVersion() == version) _planBox.Text = text;
                         if (plan != null)
                             SetStatus(L.T("بهینه‌سازی آماده است — ", "optimisation ready — ") + version.Id +
@@ -1812,6 +1817,7 @@ namespace ServerHelp.Ui
                     Log.Warn("plan preview: " + ex.Message);
                     Ui(delegate
                     {
+                        if (_planBuildingFor == version.Id) _planBuildingFor = "";
                         if (_planBox != null && SelectedVersion() == version)
                             _planBox.Text = L.T("پیش‌نمایش بهینه‌سازی ممکن نشد: ", "the preview is unavailable: ") + ex.Message;
                     });
