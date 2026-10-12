@@ -126,7 +126,15 @@ jobs:
         run: dotnet restore ServerHelp/src/ServerHelp/ServerHelp.csproj
 
       - name: Build
-        run: dotnet build ServerHelp/src/ServerHelp/ServerHelp.csproj -c Release -p:Platform=x64 --no-restore -v minimal
+        # The run number goes into the fourth part of the version, so a user can tell one download
+        # from the next: the settings tab and the first log line then read "Server Help v1.0.0.57"
+        # and it matches the release tag serverhelp-v1.0.0-57.
+        run: >
+          dotnet build ServerHelp/src/ServerHelp/ServerHelp.csproj -c Release -p:Platform=x64
+          -p:AssemblyVersion=1.0.0.${{ github.run_number }}
+          -p:FileVersion=1.0.0.${{ github.run_number }}
+          -p:InformationalVersion=1.0.0.${{ github.run_number }}
+          --no-restore -v minimal
 
       - name: Self test the generated tunnel configurations
         shell: pwsh

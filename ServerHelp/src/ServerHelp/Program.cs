@@ -87,7 +87,10 @@ namespace ServerHelp.Core
             try
             {
                 var version = Assembly.GetExecutingAssembly().GetName().Version;
-                return version == null ? "1.0.0" : version.ToString(3);
+                if (version == null) return "1.0.0";
+                // CI puts the build number in the fourth part; a local build leaves it at zero, which
+                // is not worth showing - but "1.0.0.57" tells the user which download they are running
+                return version.Revision > 0 ? version.ToString(4) : version.ToString(3);
             }
             catch { return "1.0.0"; }
         }

@@ -1151,9 +1151,11 @@ namespace ServerHelp.Ui
             folderButton.Width = 200;
             folderButton.Click += delegate { Process.Start("explorer.exe", AppPaths.Data); };
 
-            var creditLabel = UiLabel(L.T("Server Help v1.0.0 — تونل: sing-box " + SingBoxRunner.PinnedVersion +
+            // the version line is how a user checks which download they are running: it carries the
+            // build number the release workflow stamped
+            var creditLabel = UiLabel(L.T("Server Help v" + Program.Version() + " — تونل: sing-box " + SingBoxRunner.PinnedVersion +
                                           " + Cloudflare WARP. هیچ داده‌ای از شما جایی ارسال نمی‌شود.",
-                                          "Server Help v1.0.0 — tunnel: sing-box " + SingBoxRunner.PinnedVersion +
+                                          "Server Help v" + Program.Version() + " — tunnel: sing-box " + SingBoxRunner.PinnedVersion +
                                           " + Cloudflare WARP. Nothing about you leaves this machine."));
             creditLabel.Width = 640;
             creditLabel.Height = 40;
