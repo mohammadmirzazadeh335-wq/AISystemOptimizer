@@ -800,7 +800,7 @@ namespace ServerHelp.Orchestration
                 else { entry.LastStatus = result.Status; entry.LastError = result.Detail; }
                 string line = entry.Name + " [" + entry.Info.Title + "] — " +
                               (result.Ok ? L.T("کار کرد", "works") : L.T("کار نکرد", "failed")) +
-                              (result.DelayMs > 0 ? " • " + result.DelayMs + " ms" : "") +
+                              (result.DelayMs > 0 ? " • " + L.N(result.DelayMs) + " ms" : "") +
                               (string.IsNullOrEmpty(result.Detail) ? "" : " • " + result.Detail);
                 Report.Candidates.Add(line);
                 Log.Info("connection test: " + line);
@@ -821,7 +821,7 @@ namespace ServerHelp.Orchestration
                     best = new SelectedRoute();
                     best.Entry = entry;
                     best.DelayMs = result.DelayMs;
-                    best.Label = entry.Name + " • " + result.DelayMs + " ms";
+                    best.Label = entry.Name + " • " + L.N(result.DelayMs) + " ms";
                 }
             }
 
@@ -841,22 +841,31 @@ namespace ServerHelp.Orchestration
                 }
                 ConnectionTestResult pinnedResult;
                 bool known = results.TryGetValue(pinned.Id, out pinnedResult);
-                if (known && !pinnedResult.Ok && !settings.AllowRouteFallback)
+                // A kind that is only brought up at launch was never measured here: that is not a
+                // failure, and the route the user pinned has to be used.
+                bool measuredFailure = known && !pinnedResult.Ok && !pinnedResult.Deferred;
+                if (measuredFailure && !settings.AllowRouteFallback)
                 {
                     Step(L.T("اتصال انتخابی", "Chosen connection"), L.T("اتصال انتخابی", "Chosen connection"),
                         StepState.Warn, L.T("پاسخ نداد ولی طبق تنظیمات استفاده می‌شود: ", "did not answer, but it is used as configured: ") +
                         pinnedResult.Detail, (int)watch.ElapsedMilliseconds);
                 }
-                else if (known && !pinnedResult.Ok)
+                else if (measuredFailure)
                 {
                     Step(L.T("اتصال انتخابی", "Chosen connection"), L.T("اتصال انتخابی", "Chosen connection"),
                         StepState.Warn, pinnedResult.Status + " • " + pinnedResult.Detail, (int)watch.ElapsedMilliseconds);
                     return null;
                 }
+                else if (known && pinnedResult.Deferred)
+                {
+                    Step(L.T("اتصال انتخابی", "Chosen connection"), L.T("اتصال انتخابی", "Chosen connection"),
+                        StepState.Done, pinned.Info.Title + L.T(" — هنگام اجرا بالا می‌آید", " — brought up at launch"),
+                        (int)watch.ElapsedMilliseconds);
+                }
                 var chosen = new SelectedRoute();
                 chosen.Entry = pinned;
                 chosen.DelayMs = known ? pinnedResult.DelayMs : -1;
-                chosen.Label = pinned.Name + (chosen.DelayMs > 0 ? " • " + chosen.DelayMs + " ms" : "");
+                chosen.Label = pinned.Name + (chosen.DelayMs > 0 ? " • " + L.N(chosen.DelayMs) + " ms" : "");
                 Step(L.T("اتصال انتخابی", "Chosen connection"), L.T("اتصال انتخابی", "Chosen connection"),
                     StepState.Done, chosen.Label + " • " + pinned.Info.Title, (int)watch.ElapsedMilliseconds);
                 return chosen;

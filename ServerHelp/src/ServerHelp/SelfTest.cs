@@ -407,8 +407,8 @@ namespace ServerHelp
 
             var incomplete = ConnectionEntry.Create("incomplete", ConnectionKind.Socks5);
             ConnectionTestResult missing = ConnectionTester.Test(incomplete, "smp3.mcsh.io", 11005, 500, false);
-            Expect(missing != null && !missing.Ok && missing.Detail.Length > 0,
-                   "an entry with missing fields is reported as incomplete", failures, passes);
+            Expect(missing != null && !missing.Ok && !missing.Deferred && missing.Detail.Length > 0,
+                   "an entry with missing fields is incomplete, not deferred", failures, passes);
 
             var broken = ConnectionEntry.Create("broken", ConnectionKind.SingBoxOutbound);
             broken.Config = "{\"type\":\"vless\"";
@@ -426,6 +426,27 @@ namespace ServerHelp
             ConnectionTestResult wireguard = ConnectionTester.Test(half, "smp3.mcsh.io", 11005, 500, false);
             Expect(wireguard != null && !wireguard.Ok,
                    "a half filled WireGuard entry is reported, not attempted", failures, passes);
+
+            // Inside the one minute budget a WireGuard or a full config is not started at all. That
+            // has to be reported as "deferred", never as "does not work": the pinned route decision
+            // reads exactly this flag, and getting it wrong throws the user's chosen route away.
+            var ready = ConnectionEntry.Create("ready wg", ConnectionKind.WireGuard);
+            ready.Address = "172.16.0.2/32";
+            ready.Secret = new string('A', 44);
+            ready.PeerPublicKey = new string('B', 44);
+            ready.PeerHost = "198.51.100.4";
+            ready.PeerPort = 2408;
+            ConnectionTestResult deferred = ConnectionTester.Test(ready, "smp3.mcsh.io", 11005, 800, true);
+            Expect(deferred != null && !deferred.Ok && deferred.Deferred,
+                   "a route that is only brought up at launch says so instead of pretending to fail",
+                   failures, passes);
+
+            var fullConfig = ConnectionEntry.Create("full config", ConnectionKind.SingBoxConfig);
+            fullConfig.Config = "{\"log\":{\"level\":\"warn\"}}";
+            ConnectionTestResult deferredConfig = ConnectionTester.Test(fullConfig, "smp3.mcsh.io", 11005, 800, true);
+            Expect(deferredConfig != null && !deferredConfig.Ok && deferredConfig.Deferred,
+                   "a full config is reported as deferred inside the launch budget", failures, passes);
+
         }
 
         private static void CheckParser(List<string> failures, List<string> passes)

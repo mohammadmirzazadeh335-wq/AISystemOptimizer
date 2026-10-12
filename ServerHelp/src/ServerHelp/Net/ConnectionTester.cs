@@ -16,6 +16,12 @@ namespace ServerHelp.Net
         public string Status = "";
         public string Detail = "";
         public bool CanCarryGame = true;
+        /// <summary>
+        /// True when the kind was not measured on purpose inside the one minute budget (it is brought
+        /// up at launch instead). A caller must never read this as "it does not work": that mistake
+        /// is what used to throw a pinned WireGuard or OpenVPN route away.
+        /// </summary>
+        public bool Deferred;
 
         public static ConnectionTestResult Fail(string status, string detail, bool canCarryGame)
         {
@@ -370,6 +376,7 @@ namespace ServerHelp.Net
             if (quick)
             {
                 result.Ok = false;
+                result.Deferred = true;
                 result.Status = L.T("در بودجه یک‌دقیقه‌ای تست نشد", "not tested inside the one minute budget");
                 result.Detail = L.T("این نوع اتصال هنگام اجرا بالا می‌آید؛ برای تست کامل در تب اتصالات دکمه تست را بزنید.",
                                     "this kind is brought up at launch time; press Test in the Connections tab for a full test.");
@@ -421,6 +428,7 @@ namespace ServerHelp.Net
             if (quick)
             {
                 result.Ok = false;
+                result.Deferred = true;
                 result.Status = L.T("در بودجه یک‌دقیقه‌ای تست نشد", "not tested inside the one minute budget");
                 result.Detail = L.T("کانفیگ کامل هنگام اجرا بالا می‌آید.", "the full config is brought up at launch time.");
                 return result;
@@ -487,6 +495,7 @@ namespace ServerHelp.Net
             if (credentials == null && quick)
             {
                 result.Ok = false;
+                result.Deferred = true;
                 result.Status = L.T("حساب WARP ساخته نشده", "no WARP account yet");
                 result.Detail = L.T("هنگام اجرا ساخته می‌شود.", "it is created at launch time.");
                 return result;

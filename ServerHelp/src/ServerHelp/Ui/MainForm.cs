@@ -1375,10 +1375,33 @@ namespace ServerHelp.Ui
                                           L.T(" • روشن: ", " • on: ") + L.N(on) +
                                           L.T(" • تست‌شده با تأخیر: ", " • measured: ") + L.N(working) +
                                           L.T("    |  مسیر انتخابی: ", "    |  chosen route: ") +
-                                          (_settings.PinnedConnection.Length == 0
-                                              ? L.T("خودکار (همه تست و سریع‌ترین انتخاب می‌شود)", "automatic (all are tested, the fastest wins)")
-                                              : _settings.PinnedConnection);
+                                          ChosenRouteText();
             }
+        }
+
+        /// <summary>
+        /// What the next launch will actually do. A pin that points at a connection which was
+        /// removed, switched off or renamed away must say so here: otherwise the table claims a
+        /// route that the pipeline is not going to use.
+        /// </summary>
+        private string ChosenRouteText()
+        {
+            string automatic = L.T("خودکار (همه تست و سریع‌ترین انتخاب می‌شود)",
+                                   "automatic (all are tested, the fastest wins)");
+            string pinnedName = _settings.PinnedConnection == null ? "" : _settings.PinnedConnection.Trim();
+            if (pinnedName.Length == 0) return automatic;
+            ConnectionEntry pinned = _settings.FindConnection(pinnedName);
+            if (pinned == null)
+                return pinnedName + L.T(" (پیدا نشد؛ مسیر خودکار استفاده می‌شود)",
+                                        " (not found; the automatic route is used)");
+            if (!pinned.Enabled)
+                return pinned.Name + L.T(" (خاموش است؛ مسیر خودکار استفاده می‌شود)",
+                                         " (switched off; the automatic route is used)");
+            if (!pinned.CanCarryGame)
+                return pinned.Name + L.T(" (ترافیک بازی را حمل نمی‌کند)", " (it cannot carry the game traffic)");
+            string chain = _settings.PinnedChainHop == null ? "" : _settings.PinnedChainHop.Trim();
+            if (chain.Length > 0) return pinned.Name + " → " + chain;
+            return pinned.Name;
         }
 
         private ConnectionEntry SelectedConnection()
@@ -1403,6 +1426,14 @@ namespace ServerHelp.Ui
                 {
                     int index = _settings.Connections.IndexOf(existing);
                     if (index >= 0) _settings.Connections[index] = result;
+                    // the pin is stored by name: a rename would silently stop it from matching
+                    if (existing.Name != result.Name)
+                    {
+                        if (string.Equals(_settings.PinnedConnection, existing.Name, StringComparison.OrdinalIgnoreCase))
+                            _settings.PinnedConnection = result.Name;
+                        if (string.Equals(_settings.PinnedChainHop, existing.Name, StringComparison.OrdinalIgnoreCase))
+                            _settings.PinnedChainHop = result.Name;
+                    }
                 }
                 SettingsStore.Save(_settings);
                 RefreshConnections();
