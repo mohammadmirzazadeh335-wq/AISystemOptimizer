@@ -89,6 +89,7 @@ namespace ServerHelp
             Guard("the settings model", failures, delegate { CheckSettings(failures, passes); });
             Guard("the quality numbers", failures, delegate { CheckQuality(failures, passes); });
             Guard("the launch plan", failures, delegate { CheckProfiler(failures, passes); });
+            Guard("the launcher folder", failures, delegate { CheckVersions(failures, passes); });
             Guard("the tester", failures, delegate { CheckTesterAnswers(failures, passes); });
             Guard("the subscription reader", failures, delegate { CheckSubscription(failures, passes); });
             Guard("the OpenVPN profile", failures, delegate { CheckOvpn(failures, passes); });
@@ -424,6 +425,67 @@ namespace ServerHelp
             foreach (string flag in opengl.Flags) if (flag == "-Dsun.java2d.opengl=true") pipeline = true;
             Expect(pipeline && opengl.Flags.Count == 1,
                    "the separate OpenGL switch still works with the tuning flags off", failures, passes);
+        }
+
+        /// <summary>
+        /// Reading the launcher folder: the version list, the java version each one needs, and the name
+        /// the launcher remembers. Everything runs against files written here, so no launcher and no
+        /// network are needed.
+        /// </summary>
+        private static void CheckVersions(List<string> failures, List<string> passes)
+        {
+            string root = Path.Combine(Path.GetTempPath(), "serverhelp-selftest-mc");
+            string versions = Path.Combine(root, "versions");
+            try
+            {
+                if (Directory.Exists(root)) Directory.Delete(root, true);
+                Directory.CreateDirectory(Path.Combine(versions, "1.20.1"));
+                Directory.CreateDirectory(Path.Combine(versions, "1.7.10-forge"));
+                File.WriteAllText(Path.Combine(versions, "1.20.1", "1.20.1.json"),
+                    "{\"id\":\"1.20.1\",\"type\":\"release\",\"javaVersion\":{\"majorVersion\":17}," +
+                    "\"assetIndex\":{\"id\":\"5\"}}");
+                File.WriteAllText(Path.Combine(versions, "1.20.1", "1.20.1.jar"), "jar");
+                // a folder with a jar but no json: it has to be listed, and marked as not launchable
+                File.WriteAllText(Path.Combine(versions, "1.7.10-forge", "1.7.10-forge.jar"), "jar");
+                File.WriteAllText(Path.Combine(root, "launcher_profiles.json"),
+                    "{\"authenticationDatabase\":{\"a1\":{\"username\":\"player@example.com\"," +
+                    "\"profiles\":{\"p1\":{\"displayName\":\"Crafty_One\"}}}}," +
+                    "\"profiles\":{\"p2\":{\"name\":\"Latest release\"}}}");
+            }
+            catch (Exception ex) { Log.Debug("selftest fixture: " + ex.Message); }
+
+            Expect(VersionScanner.DetectGameDir(root) == root,
+                   "the game folder is found when it carries a versions folder", failures, passes);
+            Expect(VersionScanner.ResolveVersionsDir(root, versions) == versions,
+                   "a versions folder that was picked by hand is used as it is", failures, passes);
+
+            List<McVersion> list = VersionScanner.Scan(versions);
+            Expect(list.Count == 2, "both version folders in the folder are listed", failures, passes);
+            McVersion release = null, bare = null;
+            foreach (McVersion v in list)
+            {
+                if (v.Id == "1.20.1") release = v;
+                if (v.Id == "1.7.10-forge") bare = v;
+            }
+            Expect(release != null && release.HasJson && release.Type == "release" &&
+                   release.RequiredJavaMajor == 17 && release.AssetIndex == "5" && release.JarSize == 3,
+                   "the version json gives the id, the java version and the asset index", failures, passes);
+            Expect(bare != null && !bare.HasJson && bare.Error.Length > 0,
+                   "a folder without a version json is listed and marked as not launchable", failures, passes);
+
+            Expect(VersionScanner.GuessNickname(root) == "Crafty_One",
+                   "the name comes from the account and not from a launch profile label", failures, passes);
+
+            string labelsOnly = Path.Combine(Path.GetTempPath(), "serverhelp-selftest-labels");
+            try
+            {
+                Directory.CreateDirectory(labelsOnly);
+                File.WriteAllText(Path.Combine(labelsOnly, "launcher_profiles.json"),
+                    "{\"profiles\":{\"p1\":{\"name\":\"Latest release\"},\"p2\":{\"name\":\"1.20.1-Fabric\"}}}");
+            }
+            catch { }
+            Expect(VersionScanner.GuessNickname(labelsOnly) == "",
+                   "launch profile labels are never mistaken for the player's name", failures, passes);
         }
 
         /// <summary>The numbers a route is judged by, checked without touching the network.</summary>

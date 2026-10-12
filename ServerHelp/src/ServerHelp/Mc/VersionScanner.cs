@@ -171,7 +171,12 @@ namespace ServerHelp.Mc
             return list;
         }
 
-        /// <summary>Nickname TLauncher remembers, so the user does not have to retype it.</summary>
+        /// <summary>
+        /// The account name TLauncher or the vanilla launcher remembers, so the user does not have to
+        /// retype it. Only values that really are an account name are accepted: a launch profile label
+        /// ("Latest release", "Fabric 1.20.1") or an e-mail address in a token file is not a name to
+        /// walk around a server with, and a wrong guess is worse than none.
+        /// </summary>
         public static string GuessNickname(string gameDir)
         {
             try
@@ -180,33 +185,83 @@ namespace ServerHelp.Mc
                 string[] candidates = new string[]
                 {
                     Path.Combine(gameDir, "TLauncherAdditional.json"),
+                    Path.Combine(gameDir, "launcher_accounts.json"),
                     Path.Combine(gameDir, "launcher_profiles.json"),
                     Path.Combine(gameDir, "TLauncherProfiles.json")
                 };
                 foreach (string file in candidates)
                 {
                     if (!Shell.FileExists(file)) continue;
-                    string text = File.ReadAllText(file, System.Text.Encoding.UTF8);
-                    var d = Json.Obj(Json.Parse(text));
+                    var d = Json.Obj(Json.Parse(File.ReadAllText(file, System.Text.Encoding.UTF8)));
                     if (d == null) continue;
-                    string nick = Json.GetStr(d, "username", null);
-                    if (string.IsNullOrEmpty(nick)) nick = Json.GetStr(d, "name", null);
-                    if (!string.IsNullOrEmpty(nick)) return nick;
-                    var profiles = Json.Obj(Json.Get(d, "profiles"));
-                    if (profiles != null)
-                    {
-                        foreach (var kv in profiles)
+
+                    string nick = AccountName(Json.GetStr(d, "username", null));
+                    if (nick.Length > 0) return nick;
+                    nick = AccountMap(Json.Obj(Json.Get(d, "authenticationDatabase")));
+                    if (nick.Length > 0) return nick;
+                    nick = AccountMap(Json.Obj(Json.Get(d, "accounts")));
+                    if (nick.Length > 0) return nick;
+
+                    var array = Json.Arr(Json.Get(d, "accounts"));
+                    if (array != null)
+                        foreach (object item in array)
                         {
-                            var pd = Json.Obj(kv.Value);
-                            if (pd == null) continue;
-                            string remember = Json.GetStr(pd, "name", null);
-                            if (!string.IsNullOrEmpty(remember) && remember != "Latest release") return remember;
+                            var account = Json.Obj(item);
+                            if (account == null) continue;
+                            nick = AccountName(Json.GetStr(account, "username", null));
+                            if (nick.Length == 0) nick = AccountName(Json.GetStr(account, "name", null));
+                            if (nick.Length > 0) return nick;
                         }
-                    }
                 }
             }
             catch (Exception ex) { Log.Debug("nickname guess failed: " + ex.Message); }
             return "";
+        }
+
+        /// <summary>One account out of a map of accounts, in either shape the launchers write.</summary>
+        private static string AccountMap(Dictionary<string, object> map)
+        {
+            if (map == null) return "";
+            foreach (var kv in map)
+            {
+                var account = Json.Obj(kv.Value);
+                if (account == null) continue;
+                string nick = AccountName(Json.GetStr(account, "username", null));
+                if (nick.Length == 0) nick = AccountName(Json.GetStr(account, "name", null));
+                if (nick.Length == 0)
+                {
+                    var profile = Json.Obj(Json.Get(account, "minecraftProfile"));      // newer launchers
+                    if (profile != null) nick = AccountName(Json.GetStr(profile, "name", null));
+                }
+                if (nick.Length == 0)
+                {
+                    var profiles = Json.Obj(Json.Get(account, "profiles"));             // vanilla launcher
+                    if (profiles != null)
+                        foreach (var inner in profiles)
+                        {
+                            var entry = Json.Obj(inner.Value);
+                            if (entry == null) continue;
+                            nick = AccountName(Json.GetStr(entry, "displayName", null));
+                            if (nick.Length > 0) break;
+                        }
+                }
+                if (nick.Length > 0) return nick;
+            }
+            return "";
+        }
+
+        /// <summary>
+        /// A Minecraft name is 3 to 16 letters, digits or underscores; the same filter throws out
+        /// launch profile labels ("Latest release", "1.20.1-Fabric"), e-mails and token blobs.
+        /// </summary>
+        private static string AccountName(string value)
+        {
+            if (string.IsNullOrEmpty(value) || value.Length < 3 || value.Length > 16) return "";
+            foreach (char c in value)
+            {
+                if (!char.IsLetterOrDigit(c) && c != '_') return "";
+            }
+            return value;
         }
     }
 }
