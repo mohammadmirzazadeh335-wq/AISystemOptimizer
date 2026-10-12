@@ -147,7 +147,8 @@ jobs:
           $report | ForEach-Object { Write-Output $_ }
           $report | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
           # every failure becomes an annotation, so it is readable from the run page and the API
-          $report | Where-Object { $_ -match 'FAIL' } | ForEach-Object { Write-Output "::error::$_" }
+          $report | Where-Object { $_ -match '^\s*FAIL' -or $_ -match '^\s*\d+ passed, [1-9]\d* failed' } |
+            ForEach-Object { Write-Output "::error::$_" }
           if ($code -ne 0) {
             # the report is also posted as a commit comment: a build failure has to be readable
             # from the API, not only from a job log
