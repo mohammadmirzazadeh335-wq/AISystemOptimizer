@@ -248,7 +248,9 @@ namespace ServerHelp.Tunnel
             // ---- dns: the reason the game cannot be reached on a filtered line is very often the
             // resolver, so name lookups are pushed through the same route the game uses. A resolver
             // the user added by hand only fixes the hosts file; this fixes the protocol itself.
-            if (plan.DnsThroughRoute)
+            // sing-box 1.12 and newer refuse a configuration in which a dial field has no resolver
+            // ("missing route.default_domain_resolver"), so the dns block and that default are always
+            // written: without them the engine would reject the whole tunnel.
             {
                 w.Name("dns").StartObject();
                 w.Name("servers").StartArray();
@@ -258,7 +260,7 @@ namespace ServerHelp.Tunnel
                 w.Prop("tag", plan.LocalDnsTag);
                 w.EndObject();
 
-                bool tunnelledDns = routeTag != "direct";
+                bool tunnelledDns = plan.DnsThroughRoute && routeTag != "direct";
                 if (tunnelledDns && !string.IsNullOrEmpty(plan.DnsOpenVpnTag))
                 {
                     // an OpenVPN server pushes its own resolvers; using them is both faster and
@@ -314,6 +316,10 @@ namespace ServerHelp.Tunnel
             w.Name("route").StartObject();
             w.Prop("auto_detect_interface", true);
             w.Prop("final", "direct");
+            // dial fields without their own resolver (the proxies the user entered, for example)
+            // resolve names through the local resolver: asking the tunnel for the tunnel's own
+            // address would be a circle
+            w.Prop("default_domain_resolver", plan.LocalDnsTag);
             w.Name("rules").StartArray();
             if (routeTag != "direct")
             {

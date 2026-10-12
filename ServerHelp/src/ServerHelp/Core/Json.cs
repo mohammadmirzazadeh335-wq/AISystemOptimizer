@@ -171,6 +171,8 @@ namespace ServerHelp.Core
             if (v is string) return (string)v;
             if (v is bool) return ((bool)v) ? "true" : "false";
             if (v is double) return ((double)v).ToString(CultureInfo.InvariantCulture);
+            if (v is int) return ((int)v).ToString(CultureInfo.InvariantCulture);
+            if (v is long) return ((long)v).ToString(CultureInfo.InvariantCulture);
             return def;
         }
 
@@ -179,6 +181,8 @@ namespace ServerHelp.Core
             object v = Get(d, key);
             if (v == null) return def;
             if (v is double) return (int)Math.Round((double)v);
+            if (v is int) return (int)v;
+            if (v is long) return (int)(long)v;
             int i;
             if (v is string && int.TryParse((string)v, out i)) return i;
             return def;
