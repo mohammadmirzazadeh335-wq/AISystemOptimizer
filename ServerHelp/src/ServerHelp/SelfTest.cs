@@ -92,6 +92,7 @@ namespace ServerHelp
             Guard("the launch plan", failures, delegate { CheckProfiler(failures, passes); });
             Guard("the launcher folder", failures, delegate { CheckVersions(failures, passes); });
             Guard("the launch report", failures, delegate { CheckReport(failures, passes); });
+            Guard("the firewall rule lookup", failures, delegate { CheckFirewall(failures, passes); });
             Guard("the tester", failures, delegate { CheckTesterAnswers(failures, passes); });
             Guard("the subscription reader", failures, delegate { CheckSubscription(failures, passes); });
             Guard("the OpenVPN profile", failures, delegate { CheckOvpn(failures, passes); });
@@ -512,6 +513,32 @@ namespace ServerHelp
                    !report.LeakGuardArmed && !report.LeakGuardTripped && report.LeakGuardNote.Length == 0 &&
                    report.WithinBudget,
                    "a finished run's report is wiped clean before the next run starts", failures, passes);
+        }
+
+        /// <summary>
+        /// The firewall lookup. The promise "we only ever delete rules this app wrote" rests on
+        /// reading Windows' answer correctly, so the answer format is pinned here - without asking
+        /// the real firewall anything, because a build machine has no rules of ours.
+        /// </summary>
+        private static void CheckFirewall(List<string> failures, List<string> passes)
+        {
+            string answer =
+                "ServerHelp sing-box (in) | In | C:\\Users\\x\\AppData\\Local\\ServerHelp\\bin\\sing-box.exe\n" +
+                "ServerHelp sing-box (out) | Out | C:\\Users\\x\\AppData\\Local\\ServerHelp\\bin\\sing-box.exe\n" +
+                "a broken line\n";
+            List<FirewallRule> rules = FirewallHelper.ParseQueryOutput(answer);
+            Expect(rules.Count == 2 &&
+                   rules[0].Name == "ServerHelp sing-box (in)" && rules[0].Direction == "In" &&
+                   rules[0].Program.EndsWith("sing-box.exe", StringComparison.OrdinalIgnoreCase) &&
+                   rules[1].Direction == "Out",
+                   "a rule lookup is read back as name, direction and program", failures, passes);
+            Expect(FirewallHelper.ParseQueryOutput("").Count == 0 &&
+                   FirewallHelper.ParseQueryOutput("no separators here").Count == 0,
+                   "an empty or unreadable answer means \"no such rule\", not a crash", failures, passes);
+            Expect(FirewallHelper.SameProgram("C:\\X\\sing-box.exe", "c:\\x\\sing-box.exe") &&
+                   !FirewallHelper.SameProgram("Any", "C:\\X\\sing-box.exe") &&
+                   !FirewallHelper.SameProgram("", ""),
+                   "a rule counts as ours only when it points at our program", failures, passes);
         }
 
         /// <summary>The numbers a route is judged by, checked without touching the network.</summary>

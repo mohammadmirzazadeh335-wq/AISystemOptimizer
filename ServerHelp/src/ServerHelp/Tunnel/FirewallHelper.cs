@@ -142,8 +142,18 @@ namespace ServerHelp.Tunnel
                 Log.Debug("firewall query unavailable: " + result.All);
                 return null;
             }
+            return ParseQueryOutput(result.StdOut);
+        }
+
+        /// <summary>
+        /// Turns the "name|direction|program" lines the lookup prints into rules. Kept as its own
+        /// method so the self test can pin the format on a machine where there is no firewall to ask.
+        /// </summary>
+        public static List<FirewallRule> ParseQueryOutput(string text)
+        {
             var rules = new List<FirewallRule>();
-            foreach (string raw in result.StdOut.Split('\n'))
+            if (string.IsNullOrEmpty(text)) return rules;
+            foreach (string raw in text.Split('\n'))
             {
                 string line = raw.Trim();
                 if (line.Length == 0) continue;
@@ -197,7 +207,7 @@ namespace ServerHelp.Tunnel
             return null;
         }
 
-        private static bool SameProgram(string a, string b)
+        internal static bool SameProgram(string a, string b)
         {
             if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
             return string.Equals(a.Trim().Trim('"'), b.Trim().Trim('"'), StringComparison.OrdinalIgnoreCase);
