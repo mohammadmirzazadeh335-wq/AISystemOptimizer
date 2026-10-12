@@ -343,6 +343,10 @@ namespace ServerHelp.Sys
                 }
                 if (restored > 0 && report != null)
                     report(L.T("تنظیمات رجیستری به حالت قبل برگشت.", "registry tweaks reverted."));
+                // The backup describes the change we have not undone yet. Once it is undone the file
+                // goes, otherwise a later restore would write back a stale snapshot and quietly
+                // overwrite something the user changed in between.
+                try { File.Delete(BackupFile); } catch { }
             }
             catch (Exception ex) { Log.Warn("registry restore failed: " + ex.Message); }
         }

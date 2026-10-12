@@ -115,6 +115,25 @@ namespace ServerHelp.Core
             return new Font(FontFamily.GenericSansSerif, size, bold ? FontStyle.Bold : FontStyle.Regular);
         }
 
+        /// <summary>A fixed width face for the log, so a stack trace or a config line stays readable.
+        /// Consolas is on every Windows since Vista, the others are fallbacks.</summary>
+        public static Font MonoFont(float size)
+        {
+            string[] names = new string[] { "Consolas", "Cascadia Mono", "Courier New" };
+            foreach (string name in names)
+            {
+                try
+                {
+                    var font = new Font(name, size, FontStyle.Regular, GraphicsUnit.Point);
+                    if (string.Equals(font.FontFamily.Name, name, StringComparison.OrdinalIgnoreCase)) return font;
+                    font.Dispose();
+                }
+                catch { }
+            }
+            try { return new Font(FontFamily.GenericMonospace, size); }
+            catch { return UiFont(size, false); }
+        }
+
         public static Icon BuildIcon()
         {
             try

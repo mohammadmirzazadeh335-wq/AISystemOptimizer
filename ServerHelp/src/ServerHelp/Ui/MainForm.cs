@@ -193,6 +193,8 @@ namespace ServerHelp.Ui
             RefreshServerList();
             RefreshConnections();
             Theme.Apply(this);
+            // Apply puts every text box on the body font, so the log's fixed width face is set again
+            if (_logBox != null) _logBox.Font = UiKit.MonoFont(9f);
             UpdateHeaderPills();
             UpdatePlanPreview();
             ConnectionRoute.FragmentTlsByDefault = _settings.FragmentTls;
@@ -715,6 +717,7 @@ namespace ServerHelp.Ui
             _nicknameBox.Width = 240;
             _nicknameBox.Text = _settings.Nickname;
             _nicknameBox.TextChanged += delegate { _settings.Nickname = _nicknameBox.Text.Trim(); };
+            _nicknameBox.Validated += delegate { SettingsStore.Save(_settings); };
             top.Controls.Add(_nicknameBox);
 
             _playButton = new SHButton();
@@ -1048,7 +1051,11 @@ namespace ServerHelp.Ui
             _versionsDirBox.Location = new Point(8, 26);
             _versionsDirBox.Width = 560;
             _versionsDirBox.Text = VersionScanner.ResolveVersionsDir(_settings.GameDirOverride, _settings.VersionsDir);
-            _versionsDirBox.TextChanged += delegate { _settings.VersionsDir = _versionsDirBox.Text.Trim(); };
+            _versionsDirBox.TextChanged += delegate
+            {
+                _settings.VersionsDir = _versionsDirBox.Text.Trim();
+                if (Directory.Exists(_settings.VersionsDir)) RefreshVersions();
+            };
             top.Controls.Add(_versionsDirBox);
 
             var browse = new Button();
@@ -1140,15 +1147,25 @@ namespace ServerHelp.Ui
                 _settings.Language = next;
                 L.SetLang(next);
                 SettingsStore.Save(_settings);
-                BuildUi();
-                SetStatus(L.T("زبان تغییر کرد", "language changed"));
+                // the rebuild disposes this very combo box, so let the event finish first: the window
+                // is put together again on the next message instead of inside its own event
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    BuildUi();
+                    SetStatus(L.T("زبان تغییر کرد", "language changed"));
+                });
             };
 
             var gameDirLabel = UiKit.Sub(L.T("پوشه بازی (.minecraft)", "Game folder (.minecraft)"));
             _gameDirBox = new TextBox();
             _gameDirBox.Width = 520;
             _gameDirBox.Text = _settings.GameDirOverride;
-            _gameDirBox.TextChanged += delegate { _settings.GameDirOverride = _gameDirBox.Text.Trim(); };
+            _gameDirBox.TextChanged += delegate
+            {
+                _settings.GameDirOverride = _gameDirBox.Text.Trim();
+                if (Directory.Exists(_settings.GameDirOverride)) RefreshVersions();
+            };
+            _gameDirBox.Validated += delegate { SettingsStore.Save(_settings); };
 
             var pickDir = new Button();
             pickDir.Text = L.T("انتخاب پوشه بازی", "Pick the game folder");
@@ -1172,6 +1189,7 @@ namespace ServerHelp.Ui
             javaBox.Width = 520;
             javaBox.Text = _settings.JavaPathOverride;
             javaBox.TextChanged += delegate { _settings.JavaPathOverride = javaBox.Text.Trim(); };
+            javaBox.Validated += delegate { SettingsStore.Save(_settings); };
 
             var folderButton = new Button();
             folderButton.Text = L.T("بازکردن پوشه داده‌ها", "Open the data folder");
@@ -1216,7 +1234,7 @@ namespace ServerHelp.Ui
             _logBox.ScrollBars = ScrollBars.Both;
             _logBox.WordWrap = false;
             _logBox.Dock = DockStyle.Fill;
-            _logBox.Font = new Font("Consolas", 9f);
+            _logBox.Font = UiKit.MonoFont(9f);
             _logBox.ReadOnly = true;
 
             // a rebuild (a language switch) must not wipe the visible log, and at startup there is
@@ -1264,6 +1282,7 @@ namespace ServerHelp.Ui
             label.AutoSize = false;
             label.Height = 46;
             label.TextAlign = ContentAlignment.MiddleLeft;
+            label.AutoEllipsis = true;       // a long sentence in a narrow window is cut, not clipped away
             return label;
         }
 
