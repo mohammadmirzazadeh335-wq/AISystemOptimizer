@@ -54,6 +54,7 @@ namespace ServerHelp.Sys
     {
         private readonly List<OptimizationStep> _steps = new List<OptimizationStep>();
         private readonly List<Tunnel.CreatedRule> _firewallRulesAdded = new List<Tunnel.CreatedRule>();
+        private int _running;                      // 0 = free, 1 = an optimisation is in flight
         private string _previousPowerPlan = "";
         private string _createdPowerPlan = "";
         private bool _timerRaised;
@@ -74,16 +75,31 @@ namespace ServerHelp.Sys
                 return;
             }
 
-            if (settings.HighPerformancePowerPlan) ApplyPowerPlan(onStep);
-            if (settings.TuneNetwork) ApplyNetworkTweaks(onStep);
-            if (settings.AddFirewallRules) ApplyFirewall(onStep);
-            if (settings.TrimMemory) TrimMemory(onStep);
-            if (settings.CloseBackgroundApps) CloseBackgroundApps(onStep);
-            // The checkbox on the optimisation tab decides this one too - it used to be raised whatever
-            // the user had chosen, which made the tab lie about what it was doing.
-            if (settings.TimerResolution) RaiseTimerResolution(onStep);
-            else Add(onStep, "دقت تایمر سیستم", "System timer resolution", StepState.Skip,
-                     L.T("در تنظیمات خاموش است", "disabled in settings"), 0);
+            // Two runs at the same time would fight over the same timer, the same power plan and the
+            // same registry backup - and the second one would overwrite the first one's memory of what
+            // has to be put back. Whoever arrives second is told so instead of half-undoing the other;
+            // the window also refuses to start one while the other is going.
+            if (System.Threading.Interlocked.CompareExchange(ref _running, 1, 0) != 0)
+            {
+                Add(onStep, "بهینه‌سازی سیستم", "System tuning", StepState.Skip,
+                    L.T("یک بهینه‌سازی دیگر همین حالا در جریان است؛ این یکی انجام نشد",
+                        "another optimisation is already in flight; this one was skipped"), 0);
+                return;
+            }
+            try
+            {
+                if (settings.HighPerformancePowerPlan) ApplyPowerPlan(onStep);
+                if (settings.TuneNetwork) ApplyNetworkTweaks(onStep);
+                if (settings.AddFirewallRules) ApplyFirewall(onStep);
+                if (settings.TrimMemory) TrimMemory(onStep);
+                if (settings.CloseBackgroundApps) CloseBackgroundApps(onStep);
+                // The checkbox on the optimisation tab decides this one too - it used to be raised
+                // whatever the user had chosen, which made the tab lie about what it was doing.
+                if (settings.TimerResolution) RaiseTimerResolution(onStep);
+                else Add(onStep, "دقت تایمر سیستم", "System timer resolution", StepState.Skip,
+                         L.T("در تنظیمات خاموش است", "disabled in settings"), 0);
+            }
+            finally { System.Threading.Interlocked.Exchange(ref _running, 0); }
         }
 
         /// <summary>Puts back everything this run changed.</summary>

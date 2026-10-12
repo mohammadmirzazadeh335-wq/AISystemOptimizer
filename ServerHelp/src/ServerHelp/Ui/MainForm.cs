@@ -971,6 +971,12 @@ namespace ServerHelp.Ui
             restore.Width = 220;
             restore.Click += delegate
             {
+                if (_optimizerBusy)
+                {
+                    SetStatus(L.T("بهینه‌سازی در جریان است؛ چند لحظه بعد دوباره امتحان کنید",
+                                  "an optimisation is running; try again in a moment"));
+                    return;
+                }
                 _pipeline.Shutdown(false);
                 SetStatus(L.T("تنظیمات سیستم بازگردانی شد", "system settings restored"));
             };
@@ -3156,6 +3162,14 @@ namespace ServerHelp.Ui
                 SetStatus(L.T("بهینه‌سازی همین حالا در جریان است", "an optimisation is already running"));
                 return;
             }
+            if (_worker != null && _worker.IsAlive)
+            {
+                // The launch does its own tuning a moment from now; two of them at once would undo
+                // each other's bookkeeping of what has to be put back afterwards.
+                SetStatus(L.T("یک اجرا در جریان است؛ بهینه‌سازی همین حالا انجام نشد",
+                              "a launch is running; nothing was tuned now"));
+                return;
+            }
             _optimizerBusy = true;
             SetStatus(L.T("بهینه‌سازی سیستم…", "tuning the system…"));
             var thread = new Thread(delegate ()
@@ -3221,6 +3235,12 @@ namespace ServerHelp.Ui
             if (_worker != null && _worker.IsAlive)
             {
                 SetStatus(L.T("یک اجرا در جریان است", "a run is in progress"));
+                return;
+            }
+            if (_optimizerBusy)
+            {
+                SetStatus(L.T("بهینه‌سازی در جریان است؛ چند لحظه بعد دوباره Play را بزنید",
+                              "an optimisation is running; press Play again in a moment"));
                 return;
             }
             if (_versions.Count == 0)
