@@ -34,6 +34,13 @@ namespace ServerHelp.Mc
         public static LaunchPlan Build(McVersion version, string javawPath, string gameDir, string nickname,
                                        ServerProfile server, AppSettings settings, bool quickPlay, out string error)
         {
+            return Build(version, javawPath, gameDir, nickname, server, settings, quickPlay, null, out error);
+        }
+
+        public static LaunchPlan Build(McVersion version, string javawPath, string gameDir, string nickname,
+                                       ServerProfile server, AppSettings settings, bool quickPlay,
+                                       List<string> extraJvmArgs, out string error)
+        {
             error = "";
             var plan = new LaunchPlan();
             plan.JavaExe = javawPath;
@@ -196,6 +203,13 @@ namespace ServerHelp.Mc
                 jvmArgs.Insert(0, "-Xmx" + heapMb + "M");
                 jvmArgs.Insert(1, "-Xms" + Math.Max(512, heapMb / 2) + "M");
                 if (settings.UseAikarFlags) jvmArgs.InsertRange(0, AikarFlags());
+                // Extra flags from the pipeline (for example the local SOCKS port of a proxy route,
+                // which the game needs when no TUN interface could be created).
+                if (extraJvmArgs != null)
+                {
+                    foreach (string extra in extraJvmArgs)
+                        if (!string.IsNullOrEmpty(extra)) jvmArgs.Insert(0, extra);
+                }
                 if (!string.IsNullOrEmpty(settings.ExtraJvmArgs))
                 {
                     foreach (string extra in SplitQuoted(settings.ExtraJvmArgs)) jvmArgs.Insert(0, extra);

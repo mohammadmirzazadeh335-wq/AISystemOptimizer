@@ -95,6 +95,51 @@ namespace ServerHelp.Tunnel
             catch (Exception ex) { Log.Debug("route delete failed: " + ex.Message); }
         }
 
+        /// <summary>
+        /// Sends one address into a black hole (a /32 route over the loopback interface). Used by
+        /// the kill switch: when the tunnel is gone it is better for the game to have no route at
+        /// all than to leak the real address to the server.
+        /// </summary>
+        public static bool AddBlackhole(string ip, out string error)
+        {
+            error = "";
+            try
+            {
+                int loopback = -1;
+                foreach (string raw in Dump().Replace("\r\n", "\n").Split('\n'))
+                {
+                    int marker = raw.IndexOf("......", StringComparison.Ordinal);
+                    if (marker < 0) continue;
+                    string right = raw.Substring(marker + 6).Trim();
+                    if (right.IndexOf("Loopback", StringComparison.OrdinalIgnoreCase) < 0 &&
+                        right.IndexOf("Loopback Pseudo", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    string left = raw.Substring(0, marker).Trim();
+                    int dots = left.IndexOf("...", StringComparison.Ordinal);
+                    string indexPart = dots > 0 ? left.Substring(0, dots).Trim() : left;
+                    int parsed;
+                    if (int.TryParse(indexPart, out parsed)) { loopback = parsed; break; }
+                }
+                if (loopback <= 0)
+                {
+                    error = L.T("اینترفیس loopback پیدا نشد", "the loopback interface was not found");
+                    return false;
+                }
+                var result = Shell.Run("route", "add " + ip + " mask 255.255.255.255 0.0.0.0 if " + loopback + " metric 1", 10000);
+                if (result.Ok)
+                {
+                    Log.Info("kill switch: " + ip + " blackholed");
+                    return true;
+                }
+                error = result.All;
+                return false;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
+
         /// <summary>Best guess of the machine's normal gateway (used only for diagnostics).</summary>
         public static string DefaultGateway()
         {

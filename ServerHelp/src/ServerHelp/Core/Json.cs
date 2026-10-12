@@ -248,6 +248,64 @@ namespace ServerHelp.Core
         {
             return d.ToString("0.###", CultureInfo.InvariantCulture);
         }
+
+        /// <summary>
+        /// Writes any value produced by <see cref="Parse"/> back out as JSON. Used to embed a
+        /// pasted outbound or endpoint object inside a generated configuration.
+        /// </summary>
+        public static string Serialize(object value)
+        {
+            var sb = new StringBuilder();
+            WriteValue(sb, value);
+            return sb.ToString();
+        }
+
+        private static void WriteValue(StringBuilder sb, object value)
+        {
+            if (value == null) { sb.Append("null"); return; }
+            if (value is string) { sb.Append(Escape((string)value)); return; }
+            if (value is bool) { sb.Append(((bool)value) ? "true" : "false"); return; }
+            if (value is double) { sb.Append(Num((double)value)); return; }
+            if (value is float) { sb.Append(Num((float)value)); return; }
+            if (value is int || value is long || value is short || value is byte)
+            {
+                sb.Append(Convert.ToString(value, CultureInfo.InvariantCulture));
+                return;
+            }
+
+            var map = value as Dictionary<string, object>;
+            if (map != null)
+            {
+                sb.Append('{');
+                bool first = true;
+                foreach (var pair in map)
+                {
+                    if (!first) sb.Append(',');
+                    first = false;
+                    sb.Append(Escape(pair.Key)).Append(':');
+                    WriteValue(sb, pair.Value);
+                }
+                sb.Append('}');
+                return;
+            }
+
+            var list = value as System.Collections.IEnumerable;
+            if (list != null)
+            {
+                sb.Append('[');
+                bool first = true;
+                foreach (object item in list)
+                {
+                    if (!first) sb.Append(',');
+                    first = false;
+                    WriteValue(sb, item);
+                }
+                sb.Append(']');
+                return;
+            }
+
+            sb.Append(Escape(value.ToString()));
+        }
     }
 
     /// <summary>Tiny indentation-aware JSON writer, so generated config files stay readable.</summary>

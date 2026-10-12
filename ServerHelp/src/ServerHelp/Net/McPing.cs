@@ -51,7 +51,7 @@ namespace ServerHelp.Net
         public const int ModernProtocol = 767;   // 1.21.x
         public const int LegacyProtocol = 47;    // 1.8
 
-        public static McStatus Status(string host, int port, int timeoutMs, Socks5Client proxy)
+        public static McStatus Status(string host, int port, int timeoutMs, IConnector proxy)
         {
             int[] protocols = new int[] { ModernProtocol, LegacyProtocol, -1 };
             McStatus last = null;
@@ -74,7 +74,7 @@ namespace ServerHelp.Net
                    message.IndexOf("10054", StringComparison.Ordinal) >= 0;
         }
 
-        private static McStatus StatusOnce(string host, int port, int timeoutMs, Socks5Client proxy, int protocol)
+        private static McStatus StatusOnce(string host, int port, int timeoutMs, IConnector proxy, int protocol)
         {
             var status = new McStatus();
             status.Via = proxy == null ? L.T("مستقیم", "direct") : L.T("تونل", "tunnel");
@@ -139,7 +139,7 @@ namespace ServerHelp.Net
         /// Starts a login and looks at the very first answer: an encryption request means the
         /// server runs in online (premium) mode - useful to know before launching the game.
         /// </summary>
-        public static LoginVerdict LoginProbe(string host, int port, string nickname, int timeoutMs, Socks5Client proxy, out string message)
+        public static LoginVerdict LoginProbe(string host, int port, string nickname, int timeoutMs, IConnector proxy, out string message)
         {
             message = "";
             Socket socket = null;
@@ -233,7 +233,7 @@ namespace ServerHelp.Net
 
         // ------------------------------------------------------------------ plumbing
 
-        private static Socket Open(string host, int port, int timeoutMs, Socks5Client proxy)
+        private static Socket Open(string host, int port, int timeoutMs, IConnector proxy)
         {
             if (proxy != null) return proxy.Connect(host, port);
 

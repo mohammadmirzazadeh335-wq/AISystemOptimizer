@@ -9,11 +9,13 @@ namespace ServerHelp.Net
     /// Minimal SOCKS5 client. The tunnel exposes a local SOCKS port, which lets the app measure
     /// the real game latency through the tunnel before Minecraft is even started.
     /// </summary>
-    public sealed class Socks5Client
+    public sealed class Socks5Client : IConnector
     {
         public string Host = "127.0.0.1";
         public int Port = 22345;
         public int TimeoutMs = 5000;
+        public string User = "";
+        public string Password = "";
 
         public Socks5Client() { }
 
@@ -23,6 +25,17 @@ namespace ServerHelp.Net
             Port = port;
             TimeoutMs = timeoutMs;
         }
+
+        public Socks5Client(string host, int port, string user, string password, int timeoutMs)
+        {
+            Host = host;
+            Port = port;
+            User = user ?? "";
+            Password = password ?? "";
+            TimeoutMs = timeoutMs;
+        }
+
+        public string Describe { get { return "socks5 " + Host + ":" + Port; } }
 
         /// <summary>Opens a TCP connection to targetHost:targetPort through the proxy.</summary>
         public Socket Connect(string targetHost, int targetPort)
@@ -46,11 +59,31 @@ namespace ServerHelp.Net
                 if (!ar.AsyncWaitHandle.WaitOne(TimeoutMs)) throw new Exception("proxy connect timeout");
                 socket.EndConnect(ar);
 
-                // greeting: version 5, one method, no-auth
-                socket.Send(new byte[] { 0x05, 0x01, 0x00 });
+                // greeting: version 5 with the methods we support (no-auth, and user/password
+                // when the entry carries credentials)
+                bool needsAuth = !string.IsNullOrEmpty(User);
+                byte[] greeting = needsAuth ? new byte[] { 0x05, 0x02, 0x00, 0x02 } : new byte[] { 0x05, 0x01, 0x00 };
+                socket.Send(greeting);
                 byte[] greet = ReadExact(socket, 2);
                 if (greet[0] != 0x05) throw new Exception("not a socks5 proxy");
-                if (greet[1] != 0x00) throw new Exception("socks5 proxy requires authentication (" + greet[1] + ")");
+                if (greet[1] == 0x02)
+                {
+                    if (!needsAuth) throw new Exception("socks5 proxy requires a user name and password");
+                    var auth = new System.Collections.Generic.List<byte>();
+                    byte[] user = Encoding.UTF8.GetBytes(User);
+                    byte[] pass = Encoding.UTF8.GetBytes(Password);
+                    if (user.Length > 255 || pass.Length > 255) throw new Exception("proxy credentials too long");
+                    auth.Add(0x01);
+                    auth.Add((byte)user.Length); auth.AddRange(user);
+                    auth.Add((byte)pass.Length); auth.AddRange(pass);
+                    socket.Send(auth.ToArray());
+                    byte[] authReply = ReadExact(socket, 2);
+                    if (authReply[1] != 0x00) throw new Exception("the socks5 proxy rejected the user name or password");
+                }
+                else if (greet[1] != 0x00)
+                {
+                    throw new Exception("socks5 proxy requires authentication (" + greet[1] + ")");
+                }
 
                 // request
                 var req = new System.Collections.Generic.List<byte>();

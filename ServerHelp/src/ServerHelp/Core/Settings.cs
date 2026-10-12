@@ -97,6 +97,18 @@ namespace ServerHelp.Core
         /// <summary>Runs a real login to learn whether the server is premium-only.</summary>
         public bool LoginProbe = true;
 
+        // ---- connections the user entered (proxies, DNS, VPN configs, pasted sing-box configs)
+        public List<ConnectionEntry> Connections = new List<ConnectionEntry>();
+        /// <summary>Name (or id) of the connection to use; empty means "pick the best one".</summary>
+        public string PinnedConnection = "";
+        /// <summary>When the chosen route fails, keep going with the automatic one.</summary>
+        public bool AllowRouteFallback = true;
+        /// <summary>Group every working proxy so sing-box itself fails over to the fastest one.</summary>
+        public bool ProxyFailover = true;
+        /// <summary>Close the game and blackhole the server when the tunnel dies mid session.</summary>
+        public bool KillSwitch = false;
+        public int ConnectionTestTimeoutMs = 3000;
+
         public ServerProfile GetActiveServer()
         {
             if (Servers.Count == 0) Servers.Add(DefaultServer());
@@ -115,14 +127,53 @@ namespace ServerHelp.Core
             var c = (AppSettings)MemberwiseClone();
             c.Servers = new List<ServerProfile>();
             foreach (var s in Servers) c.Servers.Add(s.Clone());
+            c.Connections = new List<ConnectionEntry>();
+            foreach (var entry in Connections) c.Connections.Add(entry.Clone());
             return c;
+        }
+
+        /// <summary>Every connection entry, for the UI.</summary>
+        public ConnectionEntry FindConnection(string nameOrId)
+        {
+            if (string.IsNullOrEmpty(nameOrId)) return null;
+            foreach (ConnectionEntry entry in Connections)
+                if (string.Equals(entry.Name, nameOrId, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(entry.Id, nameOrId, StringComparison.OrdinalIgnoreCase)) return entry;
+            return null;
         }
 
         public static AppSettings Default()
         {
             var s = new AppSettings();
             s.Servers.Add(DefaultServer());
+            foreach (ConnectionEntry entry in DefaultConnections()) s.Connections.Add(entry);
             return s;
+        }
+
+        /// <summary>
+        /// Ships with the automatic WARP tunnel and two secure resolvers as ready made entries, so
+        /// the Connections tab explains itself and the DNS fallback is visible instead of hidden.
+        /// </summary>
+        public static List<ConnectionEntry> DefaultConnections()
+        {
+            var list = new List<ConnectionEntry>();
+
+            var warp = ConnectionEntry.Create(L.T("تونل WARP کلادفلر (خودکار)", "Cloudflare WARP tunnel (automatic)"), ConnectionKind.Warp);
+            warp.Notes = L.T("اسکن خودکار کم‌پینگ‌ترین آدرس کلادفلر و ساخت حساب WARP بدون ثبت‌نام.",
+                             "Scans for the lowest ping Cloudflare address and creates a free WARP account.");
+            list.Add(warp);
+
+            var cloudflare = ConnectionEntry.Create("Cloudflare DNS", ConnectionKind.Dns);
+            cloudflare.DnsUrl = "https://cloudflare-dns.com/dns-query";
+            cloudflare.UseForGame = false;
+            list.Add(cloudflare);
+
+            var google = ConnectionEntry.Create("Google DNS", ConnectionKind.Dns);
+            google.DnsUrl = "https://dns.google/resolve";
+            google.UseForGame = false;
+            list.Add(google);
+
+            return list;
         }
     }
 
@@ -172,6 +223,24 @@ namespace ServerHelp.Core
                 s.GaugesOnDashboard = Json.GetBool(d, "gaugesOnDashboard", s.GaugesOnDashboard);
                 s.ConnectTimeoutMs = Clamp(Json.GetInt(d, "connectTimeoutMs", s.ConnectTimeoutMs), 1000, 30000);
                 s.LoginProbe = Json.GetBool(d, "loginProbe", s.LoginProbe);
+
+                s.PinnedConnection = Json.GetStr(d, "pinnedConnection", s.PinnedConnection);
+                s.AllowRouteFallback = Json.GetBool(d, "allowRouteFallback", s.AllowRouteFallback);
+                s.ProxyFailover = Json.GetBool(d, "proxyFailover", s.ProxyFailover);
+                s.KillSwitch = Json.GetBool(d, "killSwitch", s.KillSwitch);
+                s.ConnectionTestTimeoutMs = Clamp(Json.GetInt(d, "connectionTestTimeoutMs", s.ConnectionTestTimeoutMs), 700, 20000);
+
+                var connections = Json.Arr(Json.Get(d, "connections"));
+                if (connections != null)
+                {
+                    // An empty list stays empty: the user may have removed every entry on purpose.
+                    s.Connections.Clear();
+                    foreach (object o in connections)
+                    {
+                        var entry = ConnectionEntry.Read(Json.Obj(o));
+                        if (entry != null) s.Connections.Add(entry);
+                    }
+                }
 
                 var servers = Json.Arr(Json.Get(d, "servers"));
                 if (servers != null)
@@ -243,6 +312,15 @@ namespace ServerHelp.Core
                 w.Prop("gaugesOnDashboard", s.GaugesOnDashboard);
                 w.Prop("connectTimeoutMs", s.ConnectTimeoutMs);
                 w.Prop("loginProbe", s.LoginProbe);
+                w.Prop("pinnedConnection", s.PinnedConnection);
+                w.Prop("allowRouteFallback", s.AllowRouteFallback);
+                w.Prop("proxyFailover", s.ProxyFailover);
+                w.Prop("killSwitch", s.KillSwitch);
+                w.Prop("connectionTestTimeoutMs", s.ConnectionTestTimeoutMs);
+
+                w.Name("connections").StartArray();
+                foreach (ConnectionEntry entry in s.Connections) entry.WriteTo(w);
+                w.EndArray();
 
                 w.Name("servers").StartArray();
                 foreach (var sp in s.Servers)

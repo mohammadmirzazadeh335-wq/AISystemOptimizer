@@ -44,6 +44,13 @@ namespace ServerHelp.Ui
         private Label _serverInfoLabel;
         private Label _tunnelInfoLabel;
 
+        // ---- the connections tab
+        private ListView _connectionList;
+        private ComboBox _pinCombo;
+        private CheckBox _chkFallback, _chkFailover, _chkKillSwitch;
+        private NumericUpDown _connTimeoutBox;
+        private Label _connectionSummary;
+
         private List<McVersion> _versions = new List<McVersion>();
         private List<WarpEndpoint> _lastScan = new List<WarpEndpoint>();
         private Thread _worker;
@@ -126,6 +133,7 @@ namespace ServerHelp.Ui
 
             _tabs.TabPages.Add(BuildHomeTab());
             _tabs.TabPages.Add(BuildServersTab());
+            _tabs.TabPages.Add(BuildConnectionsTab());
             _tabs.TabPages.Add(BuildNetworkTab());
             _tabs.TabPages.Add(BuildOptimizeTab());
             _tabs.TabPages.Add(BuildVersionsTab());
@@ -158,6 +166,136 @@ namespace ServerHelp.Ui
             ResumeLayout(true);
             RefreshVersions();
             RefreshServerList();
+            RefreshConnections();
+        }
+
+        private TabPage BuildConnectionsTab()
+        {
+            var page = new TabPage(L.T("اتصالات", "Connections"));
+            page.Padding = new Padding(12);
+
+            var card = UiKit.Card();
+            card.Dock = DockStyle.Fill;
+
+            var buttons = new FlowLayoutPanel();
+            buttons.Dock = DockStyle.Top;
+            buttons.Height = 82;
+            buttons.FlowDirection = FlowDirection.LeftToRight;
+
+            var add = new Button(); add.Text = L.T("افزودن", "Add"); add.Width = 100;
+            add.Click += delegate { EditConnection(null); };
+            var edit = new Button(); edit.Text = L.T("ویرایش", "Edit"); edit.Width = 100;
+            edit.Click += delegate { EditConnection(SelectedConnection()); };
+            var remove = new Button(); remove.Text = L.T("حذف", "Remove"); remove.Width = 100;
+            remove.Click += delegate { RemoveConnection(); };
+            var toggle = new Button(); toggle.Text = L.T("روشن/خاموش", "Enable / disable"); toggle.Width = 140;
+            toggle.Click += delegate { ToggleConnection(); };
+            var testOne = new Button(); testOne.Text = L.T("تست انتخاب‌شده", "Test selected"); testOne.Width = 150;
+            testOne.Click += delegate { TestConnections(false); };
+            var testAll = new Button(); testAll.Text = L.T("تست همه و گرفتن تأخیر", "Test all and take delays"); testAll.Width = 210;
+            testAll.Click += delegate { TestConnections(true); };
+            var import = new Button(); import.Text = L.T("افزودن دسته‌ای", "Import many"); import.Width = 140;
+            import.Click += delegate { ImportConnections(); };
+            var up = new Button(); up.Text = L.T("بالا", "Up"); up.Width = 70;
+            up.Click += delegate { MoveConnection(-1); };
+            var down = new Button(); down.Text = L.T("پایین", "Down"); down.Width = 70;
+            down.Click += delegate { MoveConnection(1); };
+            var clean = new Button(); clean.Text = L.T("استفاده از خودکار", "Use automatic"); clean.Width = 150;
+            clean.Click += delegate { PinConnection(""); };
+
+            buttons.Controls.Add(add);
+            buttons.Controls.Add(edit);
+            buttons.Controls.Add(remove);
+            buttons.Controls.Add(toggle);
+            buttons.Controls.Add(testOne);
+            buttons.Controls.Add(testAll);
+            buttons.Controls.Add(import);
+            buttons.Controls.Add(up);
+            buttons.Controls.Add(down);
+            buttons.Controls.Add(clean);
+            card.Controls.Add(buttons);
+
+            var options = new FlowLayoutPanel();
+            options.Dock = DockStyle.Top;
+            options.Height = 96;
+            options.FlowDirection = FlowDirection.LeftToRight;
+
+            var pinLabel = UiKit.Sub(L.T("مسیر ثابت بازی:", "Pinned game route:"));
+            pinLabel.Width = 130;
+            pinLabel.Height = 30;
+            options.Controls.Add(pinLabel);
+
+            _pinCombo = new ComboBox();
+            _pinCombo.DropDownStyle = ComboBoxStyle.DropDownList;
+            _pinCombo.Width = 300;
+            _pinCombo.SelectedIndexChanged += delegate
+            {
+                if (_pinCombo.SelectedIndex < 0) return;
+                PinConnection(_pinCombo.SelectedIndex == 0 ? "" : _pinCombo.Items[_pinCombo.SelectedIndex].ToString());
+            };
+            options.Controls.Add(_pinCombo);
+
+            _chkFallback = new CheckBox();
+            _chkFallback.Text = L.T("اگر مسیر انتخابی کار نکرد، مسیر خودکار امتحان شود", "If the chosen route fails, use the automatic one");
+            _chkFallback.AutoSize = true;
+            _chkFallback.Checked = _settings.AllowRouteFallback;
+            _chkFallback.CheckedChanged += delegate { _settings.AllowRouteFallback = _chkFallback.Checked; SettingsStore.Save(_settings); };
+            options.Controls.Add(_chkFallback);
+
+            _chkFailover = new CheckBox();
+            _chkFailover.Text = L.T("پروکسی‌های سالم در یک گروه با انتخاب سریع‌ترین", "Group healthy proxies and keep the fastest");
+            _chkFailover.AutoSize = true;
+            _chkFailover.Checked = _settings.ProxyFailover;
+            _chkFailover.CheckedChanged += delegate { _settings.ProxyFailover = _chkFailover.Checked; SettingsStore.Save(_settings); };
+            options.Controls.Add(_chkFailover);
+
+            _chkKillSwitch = new CheckBox();
+            _chkKillSwitch.Text = L.T("قطع امن (kill-switch): اگر تونل قطع شد، بازی بسته و آدرس سیاه‌چاله شود",
+                                      "Kill switch: if the tunnel dies, close the game and blackhole the address");
+            _chkKillSwitch.AutoSize = true;
+            _chkKillSwitch.Checked = _settings.KillSwitch;
+            _chkKillSwitch.CheckedChanged += delegate { _settings.KillSwitch = _chkKillSwitch.Checked; SettingsStore.Save(_settings); };
+            options.Controls.Add(_chkKillSwitch);
+
+            var timeoutLabel = UiKit.Sub(L.T("مهلت هر تست (میلی‌ثانیه):", "Test timeout (ms):"));
+            timeoutLabel.Width = 150;
+            timeoutLabel.Height = 30;
+            options.Controls.Add(timeoutLabel);
+
+            _connTimeoutBox = new NumericUpDown();
+            _connTimeoutBox.Minimum = 700;
+            _connTimeoutBox.Maximum = 20000;
+            _connTimeoutBox.Increment = 500;
+            _connTimeoutBox.Width = 100;
+            _connTimeoutBox.Value = Math.Min(20000, Math.Max(700, _settings.ConnectionTestTimeoutMs));
+            _connTimeoutBox.ValueChanged += delegate { _settings.ConnectionTestTimeoutMs = (int)_connTimeoutBox.Value; SettingsStore.Save(_settings); };
+            options.Controls.Add(_connTimeoutBox);
+
+            card.Controls.Add(options);
+
+            _connectionSummary = UiLabel("—");
+            _connectionSummary.Dock = DockStyle.Bottom;
+            _connectionSummary.Height = 34;
+            card.Controls.Add(_connectionSummary);
+
+            _connectionList = new ListView();
+            _connectionList.Dock = DockStyle.Fill;
+            _connectionList.View = View.Details;
+            _connectionList.FullRowSelect = true;
+            _connectionList.GridLines = true;
+            _connectionList.MultiSelect = false;
+            _connectionList.Columns.Add(L.T("نام", "Name"), 170);
+            _connectionList.Columns.Add(L.T("نوع", "Kind"), 150);
+            _connectionList.Columns.Add(L.T("مقصد", "Target"), 230);
+            _connectionList.Columns.Add(L.T("تأخیر", "Delay"), 80);
+            _connectionList.Columns.Add(L.T("وضعیت", "Status"), 240);
+            _connectionList.Columns.Add(L.T("فعال", "On"), 60);
+            _connectionList.DoubleClick += delegate { EditConnection(SelectedConnection()); };
+            card.Controls.Add(_connectionList);
+            _connectionList.BringToFront();
+
+            page.Controls.Add(card);
+            return page;
         }
 
         private TabPage BuildHomeTab()
@@ -327,8 +465,11 @@ namespace ServerHelp.Ui
             tunnel.Click += delegate { ToggleTunnel(); };
             var clean = new Button(); clean.Text = L.T("پاک‌سازی (hosts/route)", "Clean up (hosts/route)"); clean.Width = 190;
             clean.Click += delegate { _pipeline.Shutdown(false); SetStatus(L.T("پاک‌سازی انجام شد", "cleanup done")); };
+            var delays = new Button(); delays.Text = L.T("اندازه‌گیری تأخیر سرورها", "Measure server delays"); delays.Width = 200;
+            delays.Click += delegate { MeasureEndpointDelays(); };
 
             buttons.Controls.Add(scan);
+            buttons.Controls.Add(delays);
             buttons.Controls.Add(diag);
             buttons.Controls.Add(tunnel);
             buttons.Controls.Add(clean);
@@ -348,6 +489,8 @@ namespace ServerHelp.Ui
             _endpointList.Columns.Add("ICMP", 90);
             _endpointList.Columns.Add("TCP 443", 110);
             _endpointList.Columns.Add(L.T("امتیاز", "Score"), 90);
+            _endpointList.Columns.Add(L.T("تأخیر واقعی (پورت تونل)", "Real delay (tunnel port)"), 170);
+            _endpointList.Columns.Add(L.T("تأخیر از داخل تونل", "Delay inside the tunnel"), 180);
             card.Controls.Add(_endpointList);
 
             page.Controls.Add(card);
@@ -840,6 +983,225 @@ namespace ServerHelp.Ui
             }
         }
 
+        // ------------------------------------------------------------------ connections
+
+        private void RefreshConnections()
+        {
+            if (_connectionList == null) return;
+            _connectionList.Items.Clear();
+            foreach (ConnectionEntry entry in _settings.Connections)
+            {
+                var item = new ListViewItem(entry.Name);
+                item.SubItems.Add(entry.Info.Title);
+                item.SubItems.Add(entry.Target);
+                item.SubItems.Add(entry.LastDelayMs > 0 ? entry.LastDelayMs + " ms" : "—");
+                item.SubItems.Add(string.IsNullOrEmpty(entry.LastStatus) ? L.T("تست نشده", "not tested") : entry.StatusText);
+                item.SubItems.Add(entry.Enabled ? L.T("بله", "yes") : L.T("خیر", "no"));
+                if (!entry.Enabled) item.ForeColor = Color.FromArgb(140, 140, 140);
+                else if (entry.LastDelayMs > 0) item.ForeColor = Color.FromArgb(24, 120, 50);
+                else if (!string.IsNullOrEmpty(entry.LastError)) item.ForeColor = Color.FromArgb(180, 40, 70);
+                _connectionList.Items.Add(item);
+            }
+
+            if (_pinCombo != null)
+            {
+                _pinCombo.Items.Clear();
+                _pinCombo.Items.Add(L.T("خودکار (سریع‌ترین)", "Automatic (fastest)"));
+                foreach (ConnectionEntry entry in _settings.Connections)
+                {
+                    if (!entry.Enabled) continue;
+                    if (!entry.UseForGame && !entry.Info.IsResolver) continue;
+                    _pinCombo.Items.Add(entry.Name);
+                }
+                int index = 0;
+                if (!string.IsNullOrEmpty(_settings.PinnedConnection))
+                {
+                    for (int i = 1; i < _pinCombo.Items.Count; i++)
+                        if (string.Equals(_pinCombo.Items[i].ToString(), _settings.PinnedConnection, StringComparison.OrdinalIgnoreCase)) index = i;
+                }
+                _pinCombo.SelectedIndex = index;
+            }
+
+            if (_connectionSummary != null)
+            {
+                int on = 0, working = 0;
+                foreach (ConnectionEntry entry in _settings.Connections)
+                {
+                    if (entry.Enabled) on++;
+                    if (entry.LastDelayMs > 0) working++;
+                }
+                _connectionSummary.Text = L.T("اتصال‌ها: ", "connections: ") + L.N(_settings.Connections.Count) +
+                                          L.T(" • روشن: ", " • on: ") + L.N(on) +
+                                          L.T(" • تست‌شده با تأخیر: ", " • measured: ") + L.N(working) +
+                                          L.T("    |  مسیر انتخابی: ", "    |  chosen route: ") +
+                                          (_settings.PinnedConnection.Length == 0
+                                              ? L.T("خودکار (همه تست و سریع‌ترین انتخاب می‌شود)", "automatic (all are tested, the fastest wins)")
+                                              : _settings.PinnedConnection);
+            }
+        }
+
+        private ConnectionEntry SelectedConnection()
+        {
+            if (_connectionList == null || _connectionList.SelectedIndices.Count == 0) return null;
+            int index = _connectionList.SelectedIndices[0];
+            if (index < 0 || index >= _settings.Connections.Count) return null;
+            return _settings.Connections[index];
+        }
+
+        private void EditConnection(ConnectionEntry existing)
+        {
+            using (var dialog = new ConnectionDialog(existing, _settings, SelectedServer()))
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                ConnectionEntry result = dialog.Entry;
+                if (existing == null)
+                {
+                    _settings.Connections.Add(result);
+                }
+                else
+                {
+                    int index = _settings.Connections.IndexOf(existing);
+                    if (index >= 0) _settings.Connections[index] = result;
+                }
+                SettingsStore.Save(_settings);
+                RefreshConnections();
+                SetStatus(L.T("اتصال ذخیره شد: ", "connection saved: ") + result.Name);
+            }
+        }
+
+        private void RemoveConnection()
+        {
+            ConnectionEntry entry = SelectedConnection();
+            if (entry == null) return;
+            _settings.Connections.Remove(entry);
+            if (string.Equals(_settings.PinnedConnection, entry.Name, StringComparison.OrdinalIgnoreCase))
+                _settings.PinnedConnection = "";
+            SettingsStore.Save(_settings);
+            RefreshConnections();
+        }
+
+        private void ToggleConnection()
+        {
+            ConnectionEntry entry = SelectedConnection();
+            if (entry == null) return;
+            entry.Enabled = !entry.Enabled;
+            SettingsStore.Save(_settings);
+            RefreshConnections();
+        }
+
+        private void MoveConnection(int delta)
+        {
+            ConnectionEntry entry = SelectedConnection();
+            if (entry == null) return;
+            int index = _settings.Connections.IndexOf(entry);
+            int target = index + delta;
+            if (index < 0 || target < 0 || target >= _settings.Connections.Count) return;
+            _settings.Connections.RemoveAt(index);
+            _settings.Connections.Insert(target, entry);
+            SettingsStore.Save(_settings);
+            RefreshConnections();
+            if (target < _connectionList.Items.Count) _connectionList.Items[target].Selected = true;
+        }
+
+        private void PinConnection(string name)
+        {
+            _settings.PinnedConnection = name ?? "";
+            SettingsStore.Save(_settings);
+            RefreshConnections();
+            if (string.IsNullOrEmpty(_settings.PinnedConnection))
+                SetStatus(L.T("حالت خودکار: هر بار سریع‌ترین اتصال انتخاب می‌شود", "automatic mode: the fastest connection wins each run"));
+            else
+                SetStatus(L.T("مسیر ثابت شد: ", "route pinned: ") + _settings.PinnedConnection);
+        }
+
+        private void ImportConnections()
+        {
+            using (var dialog = new ImportDialog(""))
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                List<ConnectionEntry> imported = dialog.Entries;
+                if (imported.Count == 0)
+                {
+                    SetStatus(L.T("چیزی برای افزودن پیدا نشد", "nothing to import"));
+                    return;
+                }
+                foreach (ConnectionEntry entry in imported)
+                {
+                    // keep names unique so the pin list stays readable
+                    string name = entry.Name;
+                    int suffix = 2;
+                    while (_settings.FindConnection(name) != null) name = entry.Name + " " + suffix++;
+                    entry.Name = name;
+                    _settings.Connections.Add(entry);
+                }
+                SettingsStore.Save(_settings);
+                RefreshConnections();
+                SetStatus(L.T("افزوده شد: ", "imported: ") + L.N(imported.Count) + L.T(" اتصال", " connection(s)"));
+            }
+        }
+
+        private void TestConnections(bool all)
+        {
+            var targets = new List<ConnectionEntry>();
+            if (all)
+            {
+                foreach (ConnectionEntry entry in _settings.Connections) if (entry.Enabled) targets.Add(entry);
+            }
+            else
+            {
+                ConnectionEntry entry = SelectedConnection();
+                if (entry == null)
+                {
+                    SetStatus(L.T("اول یک اتصال را انتخاب کنید", "select a connection first"));
+                    return;
+                }
+                targets.Add(entry);
+            }
+            if (targets.Count == 0)
+            {
+                SetStatus(L.T("اتصال روشنی برای تست نیست", "no enabled connection to test"));
+                return;
+            }
+
+            var profile = SelectedServer();
+            int timeout = _settings.ConnectionTestTimeoutMs;
+            string host = profile.Host;
+            int port = profile.Port;
+            SetStatus(L.T("تست اتصال‌ها…", "testing connections…"));
+
+            var thread = new Thread(delegate ()
+            {
+                foreach (ConnectionEntry entry in targets)
+                {
+                    ConnectionEntry local = entry;
+                    Ui(delegate { SetStatus(L.T("تست: ", "testing: ") + local.Name); });
+                    ConnectionTestResult result = ConnectionTester.Test(local, host, port, timeout, false);
+                    local.LastDelayMs = result.Ok ? result.DelayMs : -1;
+                    local.LastStatus = result.Status;
+                    local.LastError = result.Ok ? "" : result.Detail;
+                    local.LastTestUtc = DateTime.Now.ToString("HH:mm:ss");
+                    string line = local.Name + " [" + local.Info.Title + "] — " +
+                                  (result.Ok ? L.T("کار کرد", "works") : L.T("کار نکرد", "failed")) +
+                                  (result.DelayMs > 0 ? " • " + result.DelayMs + " ms" : "") +
+                                  (string.IsNullOrEmpty(result.Detail) ? "" : " • " + result.Detail);
+                    AppendLog("[connection] " + line);
+                    Ui(delegate
+                    {
+                        RefreshConnections();
+                        SetStatus(line);
+                    });
+                }
+                Ui(delegate
+                {
+                    SettingsStore.Save(_settings);
+                    RefreshConnections();
+                    SetStatus(L.T("تست اتصال‌ها تمام شد", "connection tests finished"));
+                });
+            });
+            thread.IsBackground = true;
+            thread.Start();
+        }
+
         private void RefreshVersions()
         {
             string dir = VersionScanner.ResolveVersionsDir(_settings.GameDirOverride, _settings.VersionsDir);
@@ -939,6 +1301,8 @@ namespace ServerHelp.Ui
                         item.SubItems.Add(endpoint.IcmpRtt >= 0 ? endpoint.IcmpRtt + " ms" : "—");
                         item.SubItems.Add(endpoint.TcpRtt >= 0 ? endpoint.TcpRtt + " ms" : "—");
                         item.SubItems.Add(endpoint.Score.ToString());
+                        item.SubItems.Add(endpoint.TunnelRtt >= 0 ? endpoint.TunnelRtt + " ms" : "—");
+                        item.SubItems.Add("—");
                         _endpointList.Items.Add(item);
                     }
                     _tunnelInfoLabel.Text = L.T("بهترین آدرس‌ها انتخاب شد؛ هنگام اجرا، تونل روی سریع‌ترین آن‌ها ساخته می‌شود.",
@@ -946,6 +1310,46 @@ namespace ServerHelp.Ui
                                             + "  (" + L.N(scan.Reachable) + "/" + L.N(scan.Probed) + ")";
                     SetStatus(L.T("اسکن تمام شد", "scan finished"));
                 });
+            });
+            thread.IsBackground = true;
+            thread.Start();
+        }
+
+        private void MeasureEndpointDelays()
+        {
+            if (_endpointList == null || _endpointList.Items.Count == 0)
+            {
+                SetStatus(L.T("اول endpointها را اسکن کنید", "scan the endpoints first"));
+                return;
+            }
+            SetStatus(L.T("اندازه‌گیری تأخیر…", "measuring delays…"));
+            var targets = new List<WarpEndpoint>();
+            for (int i = 0; i < _endpointList.Items.Count; i++)
+            {
+                if (i < _lastScan.Count) targets.Add(_lastScan[i]);
+            }
+            bool tunnelUp = _pipeline.TunnelRunning;
+            string controller = "127.0.0.1:22346";
+            var thread = new Thread(delegate ()
+            {
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    WarpEndpoint endpoint = targets[i];
+                    int delay = NetUtil.TcpPing(endpoint.Ip, endpoint.Port, 2500);
+                    int tunnelDelay = -1;
+                    string tag = "warp-" + (i + 1);
+                    if (tunnelUp) tunnelDelay = ClashApi.Delay(controller, "", tag, "https://cp.cloudflare.com/generate_204", 3000);
+                    int index = i;
+                    Ui(delegate
+                    {
+                        if (index >= _endpointList.Items.Count) return;
+                        var item = _endpointList.Items[index];
+                        if (item.SubItems.Count > 4) item.SubItems[4].Text = delay > 0 ? delay + " ms" : "—";
+                        if (item.SubItems.Count > 5) item.SubItems[5].Text = tunnelDelay > 0 ? tunnelDelay + " ms" : "—";
+                        if (delay > 0) item.ForeColor = delay < 120 ? Color.FromArgb(24, 120, 50) : Color.FromArgb(180, 110, 0);
+                    });
+                }
+                Ui(delegate { SetStatus(L.T("تأخیر همه آدرس‌ها اندازه‌گیری شد", "all endpoint delays measured")); });
             });
             thread.IsBackground = true;
             thread.Start();
@@ -1095,9 +1499,14 @@ namespace ServerHelp.Ui
             if (_tunnelInfoLabel != null)
             {
                 _tunnelInfoLabel.Text = L.T("حالت: ", "mode: ") + mode +
+                    (string.IsNullOrEmpty(report.ConnectionUsed) ? "" : "  •  " + L.T("اتصال: ", "connection: ") + report.ConnectionUsed) +
                     (report.EndpointUsed.Length > 0 ? "  •  " + report.EndpointUsed : "") +
-                    (report.TunnelPing > 0 ? "  •  " + L.N(report.TunnelPing) + " ms" : "");
+                    (report.TunnelPing > 0 ? "  •  " + L.N(report.TunnelPing) + " ms" : "") +
+                    (report.ProxyOnlyMode ? L.T("  •  بازی با پروکسی محلی (بدون TUN)", "  •  game uses the local proxy (no TUN)") : "") +
+                    (report.LeakGuardArmed ? L.T("  •  kill-switch فعال", "  •  kill switch armed") : "");
             }
+            foreach (string line in report.Candidates) AppendLog("[route] " + line);
+            foreach (string warning in report.Warnings) AppendLog("[warning] " + warning);
 
             if (_settings.MinimizeWhilePlaying && string.IsNullOrEmpty(report.Error))
                 WindowState = FormWindowState.Minimized;
