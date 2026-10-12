@@ -1320,6 +1320,8 @@ namespace ServerHelp.Ui
         private void RefreshConnections()
         {
             if (_connectionList == null) return;
+            // the table is rebuilt after every result: keep the row the user was working on selected
+            int wanted = _connectionList.SelectedIndices.Count > 0 ? _connectionList.SelectedIndices[0] : -1;
             _connectionList.Items.Clear();
             foreach (ConnectionEntry entry in _settings.Connections)
             {
@@ -1341,6 +1343,9 @@ namespace ServerHelp.Ui
                 else if (!string.IsNullOrEmpty(entry.LastError)) item.ForeColor = Color.FromArgb(180, 40, 70);
                 _connectionList.Items.Add(item);
             }
+
+            if (wanted >= 0 && _connectionList.Items.Count > 0)
+                _connectionList.Items[Math.Min(wanted, _connectionList.Items.Count - 1)].Selected = true;
 
             _connectionsBusy = true;
             try

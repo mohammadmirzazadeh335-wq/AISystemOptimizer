@@ -217,6 +217,24 @@ namespace ServerHelp.Ui
             {
                 if (DialogResult != DialogResult.OK) return;
                 Collect();
+                // two connections with the same name would make the pin and the route chooser
+                // ambiguous, so the second one gets a number - with the user's agreement
+                if (_settings != null && Entry.Name.Length > 0)
+                {
+                    ConnectionEntry clash = _settings.FindConnection(Entry.Name);
+                    if (clash != null && clash.Id != Entry.Id)
+                    {
+                        DialogResult rename = MessageBox.Show(this,
+                            L.T("اتصالی با همین نام هست: ", "another connection already uses the name: ") +
+                            Entry.Name + L.T(" — نام شماره‌دار بگذارم؟", " — use a numbered name?"),
+                            "Server Help", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                        if (rename != DialogResult.Yes) { e.Cancel = true; return; }
+                        string baseName = Entry.Name;
+                        int number = 2;
+                        while (_settings.FindConnection(baseName + " " + number) != null) number++;
+                        Entry.Name = baseName + " " + number;
+                    }
+                }
                 string missing = Entry.Missing();
                 if (missing.Length == 0) return;
                 DialogResult answer = MessageBox.Show(this,
