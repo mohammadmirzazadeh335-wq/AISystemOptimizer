@@ -75,30 +75,30 @@ namespace ServerHelp.Ui
             panel.Controls.Add(_kindCombo);
             y += 54;
 
-            _name = Text(panel, L.T("نام", "Name"), ref y, Entry.Name, 340);
-            _enabled = CheckBox(panel, L.T("فعال", "Enabled"), ref y, Entry.Enabled);
-            _useForGame = CheckBox(panel, L.T("در انتخاب خودکار مسیر بازی شرکت کند", "Let the automatic game route pick it"), ref y, Entry.UseForGame);
+            _name = TextField(panel, L.T("نام", "Name"), ref y, Entry.Name, 340);
+            _enabled = CheckField(panel, L.T("فعال", "Enabled"), ref y, Entry.Enabled);
+            _useForGame = CheckField(panel, L.T("در انتخاب خودکار مسیر بازی شرکت کند", "Let the automatic game route pick it"), ref y, Entry.UseForGame);
 
-            _host = Text(panel, L.T("آدرس سرور/پروکسی", "Server or proxy address"), ref y, Entry.Host, 240, out _lblHost);
-            _port = Number(panel, L.T("پورت", "Port"), ref y, Entry.Port, 1, 65535, out _lblPort);
-            _user = Text(panel, L.T("نام کاربری (اختیاری)", "User name (optional)"), ref y, Entry.User, 240, out _lblUser);
-            _password = Text(panel, L.T("رمز (اختیاری)", "Password (optional)"), ref y, Entry.Password, 240, out _lblPassword);
+            _host = TextField(panel, L.T("آدرس سرور/پروکسی", "Server or proxy address"), ref y, Entry.Host, 240, out _lblHost);
+            _port = NumberField(panel, L.T("پورت", "Port"), ref y, Entry.Port, 1, 65535, out _lblPort);
+            _user = TextField(panel, L.T("نام کاربری (اختیاری)", "User name (optional)"), ref y, Entry.User, 240, out _lblUser);
+            _password = TextField(panel, L.T("رمز (اختیاری)", "Password (optional)"), ref y, Entry.Password, 240, out _lblPassword);
             _password.UseSystemPasswordChar = true;
 
-            _dns = Text(panel, L.T("آدرس DNS (udp:// یا tcp:// یا tls:// یا https://)", "DNS address (udp:// tcp:// tls:// https://)"),
+            _dns = TextField(panel, L.T("آدرس DNS (udp:// یا tcp:// یا tls:// یا https://)", "DNS address (udp:// tcp:// tls:// https://)"),
                         ref y, Entry.DnsUrl, 420, out _lblDns);
 
-            _secret = Text(panel, L.T("کلید خصوصی WireGuard یا secret پروکسی", "WireGuard private key or proxy secret"),
+            _secret = TextField(panel, L.T("کلید خصوصی WireGuard یا secret پروکسی", "WireGuard private key or proxy secret"),
                            ref y, Entry.Secret, 420, out _lblSecret);
             _secret.UseSystemPasswordChar = true;
-            _address = Text(panel, L.T("آدرس کلاینت WireGuard", "WireGuard client address"), ref y, Entry.Address, 240, out _lblAddress);
-            _addressV6 = Text(panel, L.T("آدرس IPv6 (اختیاری)", "IPv6 address (optional)"), ref y, Entry.AddressV6, 300, out _lblAddressV6);
-            _peerKey = Text(panel, L.T("کلید عمومی سرور (PublicKey)", "Peer public key"), ref y, Entry.PeerPublicKey, 420, out _lblPeerKey);
-            _peerHost = Text(panel, L.T("آدرس سرور WireGuard", "WireGuard peer address"), ref y, Entry.PeerHost, 300, out _lblPeerHost);
-            _peerPort = Number(panel, L.T("پورت سرور WireGuard", "WireGuard peer port"), ref y, Entry.PeerPort, 1, 65535, out _lblPeerPort);
-            _reserved = Text(panel, L.T("بایت‌های reserved مثل 0,0,0 (اختیاری)", "Reserved bytes such as 0,0,0 (optional)"),
+            _address = TextField(panel, L.T("آدرس کلاینت WireGuard", "WireGuard client address"), ref y, Entry.Address, 240, out _lblAddress);
+            _addressV6 = TextField(panel, L.T("آدرس IPv6 (اختیاری)", "IPv6 address (optional)"), ref y, Entry.AddressV6, 300, out _lblAddressV6);
+            _peerKey = TextField(panel, L.T("کلید عمومی سرور (PublicKey)", "Peer public key"), ref y, Entry.PeerPublicKey, 420, out _lblPeerKey);
+            _peerHost = TextField(panel, L.T("آدرس سرور WireGuard", "WireGuard peer address"), ref y, Entry.PeerHost, 300, out _lblPeerHost);
+            _peerPort = NumberField(panel, L.T("پورت سرور WireGuard", "WireGuard peer port"), ref y, Entry.PeerPort, 1, 65535, out _lblPeerPort);
+            _reserved = TextField(panel, L.T("بایت‌های reserved مثل 0,0,0 (اختیاری)", "Reserved bytes such as 0,0,0 (optional)"),
                              ref y, Entry.Reserved, 200, out _lblReserved);
-            _mtu = Number(panel, L.T("MTU", "MTU"), ref y, Entry.Mtu <= 0 ? 1280 : Entry.Mtu, 576, 1500, out _lblMtu);
+            _mtu = NumberField(panel, L.T("MTU", "MTU"), ref y, Entry.Mtu <= 0 ? 1280 : Entry.Mtu, 576, 1500, out _lblMtu);
 
             var lblConfig = Caption(L.T("کانفیگ JSON (outbound یا کانفیگ کامل sing-box)", "JSON config (an outbound or a full sing-box config)"));
             lblConfig.Location = new Point(12, y);
@@ -117,10 +117,10 @@ namespace ServerHelp.Ui
             panel.Controls.Add(_config);
             y += 178;
 
-            _socksPort = Number(panel, L.T("پورت SOCKS محلی کانفیگ کامل", "Local SOCKS port of a full config"),
+            _socksPort = NumberField(panel, L.T("پورت SOCKS محلی کانفیگ کامل", "Local SOCKS port of a full config"),
                                 ref y, Entry.LocalSocksPort, 0, 65535, out _lblSocksPort);
 
-            _notes = Text(panel, L.T("یادداشت", "Notes"), ref y, Entry.Notes, 420, out _lblNotes);
+            _notes = TextField(panel, L.T("یادداشت", "Notes"), ref y, Entry.Notes, 420, out _lblNotes);
 
             y += 10;
             _test = new Button();
@@ -173,13 +173,13 @@ namespace ServerHelp.Ui
             return label;
         }
 
-        private TextBox Text(Panel panel, string caption, ref int y, string value, int width)
+        private TextBox TextField(Panel panel, string caption, ref int y, string value, int width)
         {
             Label unused;
-            return Text(panel, caption, ref y, value, width, out unused);
+            return TextField(panel, caption, ref y, value, width, out unused);
         }
 
-        private TextBox Text(Panel panel, string caption, ref int y, string value, int width, out Label label)
+        private TextBox TextField(Panel panel, string caption, ref int y, string value, int width, out Label label)
         {
             label = Caption(caption);
             label.Location = new Point(12, y);
@@ -194,7 +194,7 @@ namespace ServerHelp.Ui
             return box;
         }
 
-        private NumericUpDown Number(Panel panel, string caption, ref int y, int value, int min, int max, out Label label)
+        private NumericUpDown NumberField(Panel panel, string caption, ref int y, int value, int min, int max, out Label label)
         {
             label = Caption(caption);
             label.Location = new Point(12, y);
@@ -211,7 +211,7 @@ namespace ServerHelp.Ui
             return box;
         }
 
-        private CheckBox CheckBox(Panel panel, string caption, ref int y, bool value)
+        private CheckBox CheckField(Panel panel, string caption, ref int y, bool value)
         {
             var box = new CheckBox();
             box.Text = caption;
