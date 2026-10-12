@@ -40,6 +40,10 @@ jobs:
         shell: pwsh
         env:
           SINGBOX_VERSION: ${{ github.event.inputs.singbox_version || '1.14.3' }}
+          # sha256 of sing-box-1.14.3-windows-amd64.zip, read from the GitHub release
+          # asset digest. The build refuses to bundle an engine that does not match, so a
+          # swapped release asset can never end up inside ServerHelp.exe.
+          SINGBOX_SHA256: d8b86ef58936dba9230ec6a57ffa4243933f3c14ef4809828b6c553440ed1518
         run: |
           $version = $env:SINGBOX_VERSION
           $url = "https://github.com/SagerNet/sing-box/releases/download/v$version/sing-box-$version-windows-amd64.zip"
@@ -50,6 +54,17 @@ jobs:
           } catch {
             Start-Sleep -Seconds 5
             Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -TimeoutSec 240
+          }
+          $zipHash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          if ($version -eq '1.14.3') {
+            if ($zipHash -ne $env:SINGBOX_SHA256) {
+              throw "sing-box $version hash mismatch: got $zipHash, expected $($env:SINGBOX_SHA256)"
+            }
+            Write-Host "sing-box $version archive verified ($zipHash)"
+          } else {
+            # a manual version was asked for, so there is no pin for it yet: say the hash so
+            # it can be added to SINGBOX_SHA256 instead of failing the run
+            Write-Warning "no pinned hash for sing-box $version; archive sha256 is $zipHash"
           }
           Expand-Archive -Path $zip -DestinationPath "$env:RUNNER_TEMP\singbox" -Force
           $exe = Get-ChildItem -Path "$env:RUNNER_TEMP\singbox" -Recurse -Filter 'sing-box.exe' |
@@ -68,9 +83,23 @@ jobs:
         shell: pwsh
         run: |
           $url = 'https://www.wintun.net/builds/wintun-0.14.1.zip'
+          # the hash wintun.net publishes for this build (Tailscale pins the same value)
+          $expected = '07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51'
           $zip = "$env:RUNNER_TEMP\wintun.zip"
+          $downloaded = $false
           try {
             Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -TimeoutSec 180
+            $downloaded = $true
+          } catch {
+            Write-Warning "Could not download wintun.dll, the tunnel will need a TUN-less fallback: $_"
+          }
+          if ($downloaded) {
+            $got = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+            if ($got -ne $expected) { throw "wintun archive hash mismatch: got $got, expected $expected" }
+            Write-Host "wintun archive verified ($got)"
+          }
+          if ($downloaded) {
+            try {
             Expand-Archive -Path $zip -DestinationPath "$env:RUNNER_TEMP\wintun" -Force
             $dll = Get-ChildItem -Path "$env:RUNNER_TEMP\wintun" -Recurse -Filter 'wintun.dll' |
                    Where-Object { $_.FullName -match 'amd64' } | Select-Object -First 1
@@ -78,9 +107,10 @@ jobs:
             New-Item -ItemType Directory -Force -Path 'ServerHelp/src/ServerHelp/vendor' | Out-Null
             Copy-Item $dll.FullName 'ServerHelp/src/ServerHelp/vendor/wintun.dll' -Force
             $hash = (Get-FileHash 'ServerHelp/src/ServerHelp/vendor/wintun.dll' -Algorithm SHA256).Hash.ToLower()
-            Write-Host "wintun 0.14.1 sha256 $hash"
-          } catch {
-            Write-Warning "Could not bundle wintun.dll: $_"
+            Write-Host "wintun 0.14.1 dll sha256 $hash"
+            } catch {
+              Write-Warning "Could not bundle wintun.dll: $_"
+            }
           }
 
       - name: Restore
