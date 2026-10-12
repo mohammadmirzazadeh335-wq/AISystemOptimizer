@@ -201,18 +201,25 @@ namespace ServerHelp.Net
             return result;
         }
 
+        /// <summary>
+        /// Real MTProto check: obfuscated2 / fake-TLS handshake plus req_pq_multi -> resPQ. Only a
+        /// proxy that really forwards to Telegram can pass, so this is proof, not a guess.
+        /// </summary>
         private static ConnectionTestResult TestMtproto(ConnectionEntry entry, int timeoutMs)
         {
-            var probe = MtprotoProbe.Test(entry.Host, entry.Port, entry.Secret, timeoutMs);
+            var probe = MtprotoProbe.Test(entry.Host, entry.Port, entry.Secret, entry.Dc, timeoutMs);
             var result = new ConnectionTestResult();
             result.CanCarryGame = false;
             result.Ok = probe.Ok;
-            result.DelayMs = probe.DelayMs;
+            result.DelayMs = probe.Connected ? probe.DelayMs : -1;
             result.Status = probe.Ok
-                ? (probe.Handshake ? L.T("سالم", "alive") : L.T("باز", "open"))
-                : L.T("بی‌پاسخ", "unreachable");
-            result.Detail = probe.Detail + " • " + L.T("فقط تلگرام؛ بازی از آن عبور نمی‌کند.",
-                                                      "Telegram only; the game cannot go through it.");
+                ? (probe.Status.Length > 0 ? probe.Status : L.T("تأیید شد", "verified"))
+                : (probe.Connected ? probe.Status : L.T("وصل نشد", "unreachable"));
+            result.Detail = probe.Detail +
+                            " • " + L.T("حالت: ", "mode: ") + probe.Mode +
+                            (probe.Domain.Length > 0 ? " • " + L.T("دامنه: ", "domain: ") + probe.Domain : "") +
+                            (probe.Ok ? " • DC" + probe.Dc : "") +
+                            " • " + L.T("فقط تلگرام؛ بازی از آن عبور نمی‌کند.", "Telegram only; the game cannot go through it.");
             return result;
         }
 

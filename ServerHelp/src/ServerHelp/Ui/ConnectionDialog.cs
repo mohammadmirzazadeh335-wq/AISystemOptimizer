@@ -27,6 +27,8 @@ namespace ServerHelp.Ui
                       _lblPeerKey, _lblPeerHost, _lblPeerPort, _lblReserved, _lblMtu, _lblConfig, _lblSocksPort, _lblNotes;
         private TextBox _host, _user, _password, _secret, _dns, _address, _addressV6, _peerKey, _peerHost, _reserved, _config, _notes;
         private NumericUpDown _port, _peerPort, _mtu, _socksPort;
+        private NumericUpDown _dc;
+        private Label _lblDc, _secretHint;
 
         private Label _result;
         private Button _test;
@@ -44,8 +46,8 @@ namespace ServerHelp.Ui
             RightToLeftLayout = _rtl;
             Font = UiKit.UiFont(9.75f, false);
             Text = existing == null ? L.T("افزودن اتصال", "Add connection") : L.T("ویرایش اتصال", "Edit connection");
-            Width = 620;
-            Height = 620;
+            Width = 640;
+            Height = 700;
             StartPosition = FormStartPosition.CenterParent;
             FormBorderStyle = FormBorderStyle.Sizable;
             MinimizeBox = false;
@@ -91,9 +93,22 @@ namespace ServerHelp.Ui
             _dns = TextField(panel, L.T("آدرس DNS (udp:// یا tcp:// یا tls:// یا https://)", "DNS address (udp:// tcp:// tls:// https://)"),
                         ref y, Entry.DnsUrl, 420, out _lblDns);
 
-            _secret = TextField(panel, L.T("کلید خصوصی WireGuard یا secret پروکسی", "WireGuard private key or proxy secret"),
+            _secret = TextField(panel, L.T("سکرت (MTProto: tg://… یا host:port:secret — WireGuard: PrivateKey)",
+                                          "Secret (MTProto: tg://… or host:port:secret - WireGuard: PrivateKey)"),
                            ref y, Entry.Secret, 420, out _lblSecret);
-            _secret.UseSystemPasswordChar = true;
+            _secret.TextChanged += delegate { UpdateSecretHint(); };
+
+            _secretHint = new Label();
+            _secretHint.Left = 12;
+            _secretHint.Top = y;
+            _secretHint.Width = 460;
+            _secretHint.Height = 20;
+            _secretHint.ForeColor = Color.FromArgb(90, 90, 90);
+            panel.Controls.Add(_secretHint);
+            y += 26;
+
+            _dc = NumberField(panel, L.T("دیتاسنتر تلگرام (۱ تا ۵)", "Telegram data centre (1 to 5)"),
+                              ref y, Entry.Dc <= 0 ? 2 : Entry.Dc, 1, 5, out _lblDc);
             _address = TextField(panel, L.T("آدرس کلاینت WireGuard", "WireGuard client address"), ref y, Entry.Address, 240, out _lblAddress);
             _addressV6 = TextField(panel, L.T("آدرس IPv6 (اختیاری)", "IPv6 address (optional)"), ref y, Entry.AddressV6, 300, out _lblAddressV6);
             _peerKey = TextField(panel, L.T("کلید عمومی سرور (PublicKey)", "Peer public key"), ref y, Entry.PeerPublicKey, 420, out _lblPeerKey);
@@ -247,6 +262,133 @@ namespace ServerHelp.Ui
         private void OnKindChanged()
         {
             ConnectionKind kind = CurrentKind;
+            bool isSocks = kind == ConnectionKind.Socks5;
+            bool isHttp = kind == ConnectionKind.Http;
+            bool isMtproto = kind == ConnectionKind.Mtproto;
+            bool isProxy = isSocks || isHttp || isMtproto;
+            bool isWireGuard = kind == ConnectionKind.WireGuard;
+            bool isDns = kind == ConnectionKind.Dns;
+            bool isRaw = kind == ConnectionKind.SingBoxOutbound || kind == ConnectionKind.SingBoxConfig;
+            bool isWarp = kind == ConnectionKind.Warp;
+
+            Show(_lblHost, isProxy || isWireGuard);
+            Show(_host, isProxy || isWireGuard);
+            Show(_lblPort, isProxy);
+            Show(_port, isProxy);
+            Show(_lblUser, isSocks || isHttp);
+            Show(_user, isSocks || isHttp);
+            Show(_lblPassword, isSocks || isHttp);
+            Show(_password, isSocks || isHttp);
+
+            Show(_lblDns, isDns);
+            Show(_dns, isDns);
+
+            Show(_lblSecret, isMtproto || isWireGuard);
+            Show(_secret, isMtproto || isWireGuard);
+            _secret.UseSystemPasswordChar = isWireGuard;   // a TG secret has to stay readable
+            Show(_lblDc, isMtproto);
+            Show(_dc, isMtproto);
+            Show(_secretHint, isMtproto || isWireGuard);
+
+            Show(_lblAddress, isWireGuard);
+            Show(_address, isWireGuard);
+            Show(_lblAddressV6, isWireGuard);
+            Show(_addressV6, isWireGuard);
+            Show(_lblPeerKey, isWireGuard);
+            Show(_peerKey, isWireGuard);
+            Show(_lblPeerHost, isWireGuard);
+            Show(_peerHost, isWireGuard);
+            Show(_lblPeerPort, isWireGuard);
+            Show(_peerPort, isWireGuard);
+            Show(_lblReserved, isWireGuard);
+            Show(_reserved, isWireGuard);
+            Show(_lblMtu, isWireGuard);
+            Show(_mtu, isWireGuard);
+
+            Show(_lblConfig, isRaw);
+            Show(_config, isRaw);
+            Show(_lblSocksPort, kind == ConnectionKind.SingBoxConfig);
+            Show(_socksPort, kind == ConnectionKind.SingBoxConfig);
+
+            // WARP and DNS carry no host:port of their own
+            if (isWarp || isDns)
+            {
+                Show(_lblHost, false);
+                Show(_host, false);
+                Show(_lblPort, false);
+                Show(_port, false);
+            }
+
+            // only the kinds that can really carry a game may join the automatic route
+            _useForGame.Enabled = ConnectionKindInfo.Of(kind).CanCarryGame;
+            if (!_useForGame.Enabled) _useForGame.Checked = false;
+
+            UpdateSecretHint();
+        }
+
+        /// <summary>Live explanation of what the pasted secret means - the main MTProto debug aid.</summary>
+        private void UpdateSecretHint()
+        {
+            if (_secretHint == null) return;
+            ConnectionKind kind = CurrentKind;
+            if (kind == ConnectionKind.Mtproto)
+            {
+                string text = _secret.Text.Trim();
+                if (text.Length == 0)
+                {
+                    _secretHint.ForeColor = Color.FromArgb(120, 120, 120);
+                    _secretHint.Text = L.T("سکرت را بچسبانید: tg://proxy?server=…&port=…&secret=… یا host:port:secret",
+                                           "paste the secret: tg://proxy?server=…&port=…&secret=… or host:port:secret");
+                    return;
+                }
+                MtprotoSecret parsed = MtprotoSecret.Parse(text);
+                if (!parsed.Ok)
+                {
+                    _secretHint.ForeColor = Color.FromArgb(180, 40, 40);
+                    _secretHint.Text = "✗ " + parsed.Error;
+                    return;
+                }
+                _secretHint.ForeColor = Color.FromArgb(24, 120, 50);
+                _secretHint.Text = "✓ " + parsed.Describe();
+                if (parsed.Mode == MtprotoMode.FakeTls && parsed.Domain.Length == 0)
+                {
+                    _secretHint.ForeColor = Color.FromArgb(180, 110, 0);
+                    _secretHint.Text = "! " + L.T("این سکرت fake-TLS بدون دامنه است؛ معمولاً کار نمی‌کند.",
+                                                  "this fake-TLS secret has no domain; it usually will not work.");
+                }
+                return;
+            }
+
+            if (kind == ConnectionKind.WireGuard)
+            {
+                string key = _secret.Text.Trim();
+                int length = key.Length;
+                if (length == 0)
+                {
+                    _secretHint.ForeColor = Color.FromArgb(120, 120, 120);
+                    _secretHint.Text = L.T("PrivateKey وایرگارد ۴۴ کاراکتر base64 است.",
+                                           "a WireGuard PrivateKey is 44 base64 characters.");
+                }
+                else if (length != 44)
+                {
+                    _secretHint.ForeColor = Color.FromArgb(180, 110, 0);
+                    _secretHint.Text = L.T("طول کلید ", "the key is ") + length +
+                                       L.T(" کاراکتر است، باید ۴۴ باشد.", " characters, it should be 44.");
+                }
+                else
+                {
+                    _secretHint.ForeColor = Color.FromArgb(24, 120, 50);
+                    _secretHint.Text = "✓ " + L.T("طول کلید درست است", "the key length is right");
+                }
+                return;
+            }
+
+            _secretHint.Text = "";
+        }
+
+        private void OnKindChanged()
+        {
+            ConnectionKind kind = CurrentKind;
             bool isProxy = kind == ConnectionKind.Socks5 || kind == ConnectionKind.Http || kind == ConnectionKind.Mtproto;
             bool isWireGuard = kind == ConnectionKind.WireGuard;
             bool isDns = kind == ConnectionKind.Dns;
@@ -322,6 +464,7 @@ namespace ServerHelp.Ui
             Entry.Config = _config.Text.Trim();
             Entry.LocalSocksPort = (int)_socksPort.Value;
             Entry.Notes = _notes.Text.Trim();
+            Entry.Dc = (int)_dc.Value;
 
             // a changed address invalidates the delay that was measured for the old one
             if (_original != null && !_original.SameConfig(Entry)) Entry.ForgetTest();

@@ -120,24 +120,35 @@ namespace ServerHelp.Net
         }
     }
 
-    /// <summary>Result of probing a Telegram MTProto proxy.</summary>
+    /// <summary>Result of probing a Telegram MTProto proxy with the real protocol.</summary>
     public sealed class MtprotoResult
     {
-        public bool Ok;                 // the TCP connection worked, so a delay exists
-        public bool Handshake;          // the proxy answered the obfuscated probe
-        public int DelayMs = -1;
+        public bool Ok;                 // verified end to end: the proxy answered req_pq with our nonce echoed
+        public bool Connected;          // the TCP connection worked, so there is a delay to report
+        public bool Handshake;          // the proxy accepted our obfuscated2/fake-TLS handshake (secret is right)
+        public int DelayMs = -1;        // the honest delay: req_pq -> resPQ, or the handshake when that failed
         public string Detail = "";
+        public string Status = "";
+        public string Mode = "";        // "fake-TLS", "secured (dd)", "classic obfuscated2"
+        public string Domain = "";
+        public int Dc = 2;
     }
 
     /// <summary>
-    /// Checks a Telegram MTProto proxy without logging in to Telegram: connect, send 64 random
-    /// bytes (the obfuscated protocol header) and see whether the proxy answers. Secrets starting
-    /// with "dd"/"ee" use the fake-TLS mode, which only answers a full TLS handshake, so those are
-    /// reported with the TCP delay and a note instead of a false negative.
+    /// Checks a Telegram MTProto proxy by speaking the real protocol: obfuscated2 handshake
+    /// (classic, <c>dd</c> secured or <c>ee</c> fake-TLS) followed by one unauthenticated
+    /// <c>req_pq_multi</c> / <c>resPQ</c> round trip. That proves the proxy works, proves the
+    /// secret is right and gives a real delay - a TCP probe cannot tell any of that.
+    /// The implementation lives in <see cref="MtprotoClient"/>.
     /// </summary>
     public static class MtprotoProbe
     {
         public static MtprotoResult Test(string host, int port, string secret, int timeoutMs)
+        {
+            return Test(host, port, secret, 2, timeoutMs);
+        }
+
+        public static MtprotoResult Test(string host, int port, string secret, int dc, int timeoutMs)
         {
             var result = new MtprotoResult();
             if (string.IsNullOrEmpty(host) || port <= 0)
@@ -146,76 +157,29 @@ namespace ServerHelp.Net
                 return result;
             }
 
-            long start = DateTime.UtcNow.Ticks;
-            Socket socket = null;
-            try
+            MtprotoCheck check = MtprotoClient.Check(host, port, secret, dc, timeoutMs);
+            result.Connected = check.Connected;
+            result.Handshake = check.Verified || check.ServerDigestOk || (check.Connected && check.Mode == MtprotoMode.Classic);
+            result.Ok = check.Verified;
+            result.DelayMs = check.DelayMs;
+            result.Status = check.Status;
+            result.Detail = check.Detail;
+            result.Mode = check.Mode == MtprotoMode.FakeTls
+                ? "fake-TLS"
+                : (check.Mode == MtprotoMode.Secured ? "secured (dd)" : "classic obfuscated2");
+            result.Domain = check.Domain;
+            result.Dc = check.Dc;
+
+            if (result.Ok)
             {
-                socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-                socket.NoDelay = true;
-                socket.ReceiveTimeout = timeoutMs;
-                socket.SendTimeout = timeoutMs;
-
-                IPAddress address;
-                IAsyncResult ar;
-                if (IPAddress.TryParse(host, out address))
-                {
-                    ar = socket.BeginConnect(address, port, null, null);
-                }
-                else
-                {
-                    ar = socket.BeginConnect(host, port, null, null);
-                }
-                if (!ar.AsyncWaitHandle.WaitOne(timeoutMs))
-                {
-                    try { socket.Close(); } catch { }
-                    result.Detail = L.T("اتصال برقرار نشد (timeout)", "could not connect (timeout)");
-                    return result;
-                }
-                socket.EndConnect(ar);
-                result.Ok = true;
-
-                var random = new Random();
-                var probe = new byte[64];
-                random.NextBytes(probe);
-                socket.Send(probe);
-
-                var buffer = new byte[4];
-                bool answered = false;
-                try
-                {
-                    socket.ReceiveTimeout = Math.Max(700, timeoutMs / 2);
-                    int read = socket.Receive(buffer);
-                    answered = read > 0;
-                }
-                catch (SocketException se)
-                {
-                    if (se.SocketErrorCode == SocketError.ConnectionReset) answered = false;
-                    else if (se.SocketErrorCode != SocketError.TimedOut) throw;
-                }
-
-                result.Handshake = answered;
-                bool fakeTls = !string.IsNullOrEmpty(secret) &&
-                               (secret.StartsWith("dd", StringComparison.OrdinalIgnoreCase) ||
-                                secret.StartsWith("ee", StringComparison.OrdinalIgnoreCase));
-                if (answered)
-                    result.Detail = L.T("پروکسی MTProto پاسخ داد (هندشیک سالم)", "the MTProto proxy answered the handshake, so it is alive");
-                else if (fakeTls)
-                    result.Detail = L.T("حالت fake-TLS: بدون هندشیک کامل TLS پاسخ نمی‌دهد؛ تأخیر TCP اندازه‌گیری شد.",
-                                        "fake-TLS mode: it only answers a full TLS handshake, so the TCP delay was measured instead");
-                else
-                    result.Detail = L.T("به probe پاسخ نداد ولی پورت باز است", "no answer to the probe, but the port is open");
+                result.Detail = L.T("پروکسی تأیید شد — resPQ از دیتاسنتر ", "the proxy is verified - resPQ from DC ") +
+                                L.N(result.Dc) + " • " + result.Detail;
             }
-            catch (Exception ex)
+            else if (result.Handshake)
             {
-                result.Ok = false;
-                result.Detail = ex.Message;
+                result.Detail = L.T("هندشیک سالم بود ولی تلگرام جواب نداد. ", "the handshake was fine but Telegram did not answer. ") +
+                                result.Detail;
             }
-            finally
-            {
-                if (socket != null) { try { socket.Close(); } catch { } }
-            }
-
-            result.DelayMs = (int)Math.Max(1, (DateTime.UtcNow.Ticks - start) / TimeSpan.TicksPerMillisecond);
             return result;
         }
     }

@@ -53,7 +53,9 @@ namespace ServerHelp.Core
 
                 string lower = text.ToLowerInvariant();
 
-                if (lower.StartsWith("tg://") || lower.StartsWith("mtproto://")) return FromMtprotoUri(text, out error);
+                if (lower.StartsWith("tg://") || lower.StartsWith("mtproto://") ||
+                    lower.StartsWith("https://t.me/proxy") || lower.StartsWith("http://t.me/proxy") ||
+                    lower.StartsWith("t.me/proxy")) return FromMtprotoUri(text, out error);
                 if (lower.StartsWith("vless://")) return FromVless(text, out error);
                 if (lower.StartsWith("vmess://")) return FromVmess(text, out error);
                 if (lower.StartsWith("trojan://")) return FromTrojan(text, out error);
@@ -94,6 +96,15 @@ namespace ServerHelp.Core
                 e.Host = parts[0];
                 e.Port = int.Parse(parts[1], CultureInfo.InvariantCulture);
                 e.Secret = parts[2];
+                MtprotoSecret shared = MtprotoSecret.Parse(parts[2]);
+                if (!shared.Ok)
+                {
+                    error = L.T("سکرت MTProto خوانده نشد: ", "the MTProto secret cannot be read: ") + shared.Error;
+                    return null;
+                }
+                e.Name = "MTProto " + shared.ModeTitle + " " + parts[0];
+                if (shared.Mode == MtprotoMode.FakeTls && shared.Domain.Length > 0)
+                    e.Notes = L.T("دامنه: ", "domain: ") + shared.Domain;
                 return e;
             }
             if (parts.Length == 4 && IsPort(parts[1]))
@@ -194,10 +205,24 @@ namespace ServerHelp.Core
             e.Host = host;
             e.Port = port;
             e.Secret = secret;
+            e.Dc = ParseInt(Get(query, "dc"), 2);
+            if (e.Dc < 1 || e.Dc > 5) e.Dc = 2;
+
+            MtprotoSecret parsed = MtprotoSecret.Parse(secret);
+            if (!parsed.Ok)
+            {
+                error = L.T("سکرت MTProto خوانده نشد: ", "the MTProto secret cannot be read: ") + parsed.Error;
+                return null;
+            }
             string name = Get(query, "name");
-            if (!string.IsNullOrEmpty(name)) e.Name = "MTProto " + name;
-            e.Notes = L.T("پروکسی تلگرام: تست و پینگ واقعی انجام می‌شود ولی نمی‌تواند ترافیک بازی را حمل کند.",
-                          "Telegram proxy: measured for real, but it cannot carry the game traffic.");
+            e.Name = string.IsNullOrEmpty(name)
+                ? "MTProto " + parsed.ModeTitle + " " + host
+                : "MTProto " + name;
+            e.Notes = L.T("پروکسی تلگرام (", "Telegram proxy (") + parsed.ModeTitle + ") — " +
+                      L.T("با پروتکل واقعی تست می‌شود ولی نمی‌تواند ترافیک بازی را حمل کند.",
+                          "it is verified with the real protocol, but it cannot carry the game traffic.");
+            if (parsed.Mode == MtprotoMode.FakeTls && parsed.Domain.Length > 0)
+                e.Notes += " " + L.T("دامنه: ", "domain: ") + parsed.Domain;
             return e;
         }
 

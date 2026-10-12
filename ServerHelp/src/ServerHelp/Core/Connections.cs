@@ -58,6 +58,7 @@ namespace ServerHelp.Core
         public string Config = "";           // JSON of an outbound object or of a whole config
         public int LocalSocksPort;           // where a full config listens locally
 
+        public int Dc = 2;                   // Telegram data centre for MTProto proxies (1..5)
         public string Notes = "";
 
         // last live test
@@ -166,6 +167,12 @@ namespace ServerHelp.Core
                 case ConnectionKind.SingBoxConfig:
                     if (string.IsNullOrEmpty(Config)) missing.Add(L.T("کانفیگ JSON", "JSON config"));
                     break;
+                case ConnectionKind.Mtproto:
+                    if (string.IsNullOrEmpty(Host)) missing.Add(L.T("آدرس", "address"));
+                    if (Port <= 0) missing.Add(L.T("پورت", "port"));
+                    if (string.IsNullOrEmpty(Secret)) missing.Add(L.T("سکرت", "secret"));
+                    if (Dc < 1 || Dc > 5) missing.Add(L.T("شماره دیتاسنتر (۱ تا ۵)", "data centre number (1 to 5)"));
+                    break;
                 default:
                     if (string.IsNullOrEmpty(Host)) missing.Add(L.T("آدرس", "address"));
                     if (Port <= 0) missing.Add(L.T("پورت", "port"));
@@ -184,6 +191,7 @@ namespace ServerHelp.Core
                 && string.Equals(User, other.User, StringComparison.Ordinal)
                 && string.Equals(Password, other.Password, StringComparison.Ordinal)
                 && string.Equals(Secret, other.Secret, StringComparison.Ordinal)
+                && Dc == other.Dc
                 && string.Equals(DnsUrl, other.DnsUrl, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(Address, other.Address, StringComparison.Ordinal)
                 && string.Equals(AddressV6, other.AddressV6, StringComparison.Ordinal)
@@ -213,6 +221,12 @@ namespace ServerHelp.Core
             LastTestUtc = other.LastTestUtc;
         }
 
+        /// <summary>The parsed Telegram secret (only meaningful for MTProto entries).</summary>
+        public MtprotoSecret TelegramSecret()
+        {
+            return MtprotoSecret.Parse(Secret);
+        }
+
         public ConnectionEntry Clone()
         {
             return (ConnectionEntry)MemberwiseClone();
@@ -236,6 +250,8 @@ namespace ServerHelp.Core
             else if (kind == ConnectionKind.Mtproto)
             {
                 e.Port = 443;
+                e.Dc = 2;
+                e.UseForGame = false;          // an MTProxy only carries Telegram, so it can never route the game
                 e.Notes = L.T("فقط برای تلگرام؛ بازی از این پروکسی عبور نمی‌کند.",
                               "Telegram only; the game cannot be carried by it.");
             }
@@ -271,6 +287,7 @@ namespace ServerHelp.Core
             w.Prop("user", User);
             w.Prop("password", Password);
             w.Prop("secret", Secret);
+            w.Prop("dc", Dc);
             w.Prop("address", Address);
             w.Prop("addressV6", AddressV6);
             w.Prop("peerPublicKey", PeerPublicKey);
@@ -306,6 +323,7 @@ namespace ServerHelp.Core
             e.User = Json.GetStr(d, "user", "");
             e.Password = Json.GetStr(d, "password", "");
             e.Secret = Json.GetStr(d, "secret", "");
+            e.Dc = Json.GetInt(d, "dc", 2);
             e.Address = Json.GetStr(d, "address", "");
             e.AddressV6 = Json.GetStr(d, "addressV6", "");
             e.PeerPublicKey = Json.GetStr(d, "peerPublicKey", "");

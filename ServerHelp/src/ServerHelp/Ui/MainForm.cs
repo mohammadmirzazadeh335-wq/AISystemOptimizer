@@ -216,6 +216,39 @@ namespace ServerHelp.Ui
             buttons.Controls.Add(clean);
             card.Controls.Add(buttons);
 
+            // second row: the Telegram side of things, because an MTProxy needs its own tools
+            var telegram = new FlowLayoutPanel();
+            telegram.Dock = DockStyle.Top;
+            telegram.Height = 42;
+            telegram.FlowDirection = FlowDirection.LeftToRight;
+
+            var verify = new Button();
+            verify.Text = L.T("تست واقعی MTProto", "Verify MTProto for real");
+            verify.Width = 190;
+            verify.Click += delegate { VerifyMtprotoSelected(); };
+            telegram.Controls.Add(verify);
+
+            var rank = new Button();
+            rank.Text = L.T("رتبه‌بندی دیتاسنترهای تلگرام", "Rank Telegram data centres");
+            rank.Width = 220;
+            rank.Click += delegate { RankTelegramDcs(); };
+            telegram.Controls.Add(rank);
+
+            var copyLink = new Button();
+            copyLink.Text = L.T("کپی لینک تلگرام", "Copy tg:// link");
+            copyLink.Width = 160;
+            copyLink.Click += delegate { CopyTelegramLink(); };
+            telegram.Controls.Add(copyLink);
+
+            var tgHint = UiKit.Sub(L.T("پروکسی MTProto فقط ترافیک تلگرام را حمل می‌کند؛ برای بازی از WARP یا پروکسی‌های دیگر استفاده کنید.",
+                                       "an MTProxy only carries Telegram traffic; for the game use WARP or another proxy"));
+            tgHint.AutoSize = true;
+            tgHint.Height = 30;
+            telegram.Controls.Add(tgHint);
+            card.Controls.Add(telegram);
+            telegram.BringToFront();
+            buttons.BringToFront();
+
             var options = new FlowLayoutPanel();
             options.Dock = DockStyle.Top;
             options.Height = 96;
@@ -1204,6 +1237,190 @@ namespace ServerHelp.Ui
             });
             thread.IsBackground = true;
             thread.Start();
+        }
+
+        /// <summary>Runs the real MTProto handshake + req_pq on the selected proxy and reports it.</summary>
+        private void VerifyMtprotoSelected()
+        {
+            ConnectionEntry entry = SelectedConnection();
+            if (entry == null)
+            {
+                SetStatus(L.T("اول یک اتصال MTProto را انتخاب کنید", "select an MTProto entry first"));
+                return;
+            }
+            if (entry.Kind != ConnectionKind.Mtproto)
+            {
+                SetStatus(L.T("این اتصال MTProto نیست:", "this entry is not MTProto: ") + entry.Info.Title);
+                return;
+            }
+            var secret = MtprotoSecret.Parse(entry.Secret);
+            if (!secret.Ok)
+            {
+                SetStatus(L.T("سکرت خوانده نشد: ", "the secret cannot be read: ") + secret.Error);
+                return;
+            }
+
+            int timeout = _settings.ConnectionTestTimeoutMs;
+            SetStatus(L.T("تست واقعی MTProto: ", "verifying MTProto: ") + entry.Name);
+            var thread = new Thread(delegate ()
+            {
+                MtprotoCheck check = MtprotoClient.Check(entry.Host, entry.Port, entry.Secret, entry.Dc, timeout);
+                string line = entry.Name + " — " + check.Status +
+                              (check.DelayMs > 0 ? " • " + check.DelayMs + " ms" : "") +
+                              " • " + MtprotoSecret.ModeName(check.Mode) +
+                              (check.Domain.Length > 0 ? " • " + check.Domain : "") +
+                              " • DC" + check.Dc + " • " + check.Detail;
+                entry.LastDelayMs = check.Connected ? check.DelayMs : -1;
+                entry.LastStatus = check.Status;
+                entry.LastError = check.Verified ? "" : check.Detail;
+                entry.LastTestUtc = DateTime.Now.ToString("HH:mm:ss");
+                Ui(delegate
+                {
+                    AppendLog("[mtproto] " + line);
+                    RefreshConnections();
+                    SetStatus(check.Verified
+                        ? L.T("تأیید شد — پروکسی واقعاً کار می‌کند", "verified - the proxy really works")
+                        : L.T("تأیید نشد: ", "not verified: ") + check.Detail);
+                });
+            });
+            thread.IsBackground = true;
+            thread.Start();
+        }
+
+        /// <summary>Measures the real resPQ delay to every Telegram DC through the selected proxy.</summary>
+        private void RankTelegramDcs()
+        {
+            ConnectionEntry entry = SelectedConnection();
+            if (entry == null || entry.Kind != ConnectionKind.Mtproto)
+            {
+                SetStatus(L.T("برای این کار یک اتصال MTProto را انتخاب کنید",
+                              "select an MTProto entry for this"));
+                return;
+            }
+            int timeout = _settings.ConnectionTestTimeoutMs;
+            SetStatus(L.T("اندازه‌گیری تأخیر دیتاسنترهای تلگرام…", "measuring the Telegram data centres…"));
+
+            var thread = new Thread(delegate ()
+            {
+                var results = new List<string>();
+                var delays = new Dictionary<int, int>();
+                int bestDc = 0, bestDelay = int.MaxValue;
+
+                // one connection per DC; run them at the same time so nothing is compared unfairly
+                var done = new ManualResetEvent[MtprotoClient.DataCenters.Length];
+                for (int i = 0; i < MtprotoClient.DataCenters.Length; i++)
+                {
+                    int dc = MtprotoClient.DataCenters[i];
+                    var handle = new ManualResetEvent(false);
+                    done[i] = handle;
+                    var worker = new Thread(delegate ()
+                    {
+                        try
+                        {
+                            MtprotoCheck check = MtprotoClient.Check(entry.Host, entry.Port, entry.Secret, dc, timeout);
+                            lock (results)
+                            {
+                                delays[dc] = check.Connected ? check.DelayMs : -1;
+                                results.Add("DC" + dc + ": " +
+                                            (check.Connected ? (check.DelayMs > 0 ? check.DelayMs + " ms" : L.T("بدون پاسخ", "no answer")) : L.T("وصل نشد", "unreachable")) +
+                                            (check.Verified ? "" : " (" + check.Status + ")"));
+                            }
+                        }
+                        catch { }
+                        finally { handle.Set(); }
+                    });
+                    worker.IsBackground = true;
+                    worker.Start();
+                }
+
+                foreach (var handle in done)
+                {
+                    handle.WaitOne(TimeSpan.FromMilliseconds(timeout + 4000));
+                    handle.Close();
+                }
+
+                foreach (var pair in delays)
+                {
+                    if (pair.Value > 0 && pair.Value < bestDelay) { bestDelay = pair.Value; bestDc = pair.Key; }
+                }
+
+                var report = new System.Text.StringBuilder();
+                report.AppendLine(L.T("تأخیر واقعی هر دیتاسنتر تلگرام از این پروکسی:", "real delay to each Telegram DC through this proxy:"));
+                report.AppendLine();
+                for (int dc = 1; dc <= 5; dc++)
+                {
+                    int value;
+                    if (!delays.TryGetValue(dc, out value) || value <= 0) continue;
+                    report.AppendLine("DC" + dc + " → " + value + " ms" + (dc == entry.Dc ? "   ← " + L.T("فعلی", "current") : ""));
+                }
+                if (bestDc > 0)
+                {
+                    report.AppendLine();
+                    report.AppendLine(L.T("سریع‌ترین: DC", "fastest: DC") + bestDc + " (" + bestDelay + " ms)");
+                    if (bestDc != entry.Dc)
+                        report.AppendLine(L.T("پیشنهاد: دیتاسنتر این اتصال را به DC", "suggestion: change this entry to DC") + bestDc + L.T(" تغییر دهید", ""));
+                }
+                else
+                {
+                    report.AppendLine(L.T("هیچ دیتاسنتری جواب نداد — پروکسی یا سکرت مشکل دارد.",
+                                          "no data centre answered - the proxy or the secret is broken."));
+                }
+
+                string text = report.ToString();
+                Ui(delegate
+                {
+                    AppendLog("[mtproto] " + text.Replace(Environment.NewLine, " | "));
+                    SetStatus(L.T("رتبه‌بندی دیتاسنترها تمام شد", "the data centre ranking is ready"));
+                    if (bestDc > 0 && bestDc != entry.Dc)
+                    {
+                        DialogResult answer = MessageBox.Show(this,
+                            text + Environment.NewLine + L.T("دیتاسنتر این اتصال به DC", "set this entry to DC") + bestDc + "?",
+                            L.T("رتبه‌بندی تلگرام", "Telegram ranking"), MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                        if (answer == DialogResult.Yes)
+                        {
+                            entry.Dc = bestDc;
+                            SettingsStore.Save(_settings);
+                            RefreshConnections();
+                            SetStatus(L.T("دیتاسنتر ثبت شد: DC", "data centre saved: DC") + bestDc);
+                        }
+                    }
+                    else
+                    {
+                        MessageBox.Show(this, text, L.T("رتبه‌بندی تلگرام", "Telegram ranking"),
+                                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                });
+            });
+            thread.IsBackground = true;
+            thread.Start();
+        }
+
+        /// <summary>Copies a tg:// link for the selected proxy so it can be handed to Telegram.</summary>
+        private void CopyTelegramLink()
+        {
+            ConnectionEntry entry = SelectedConnection();
+            if (entry == null || entry.Kind != ConnectionKind.Mtproto)
+            {
+                SetStatus(L.T("برای این کار یک اتصال MTProto را انتخاب کنید", "select an MTProto entry for this"));
+                return;
+            }
+            var secret = MtprotoSecret.Parse(entry.Secret);
+            if (!secret.Ok)
+            {
+                SetStatus(L.T("سکرت خوانده نشد: ", "the secret cannot be read: ") + secret.Error);
+                return;
+            }
+            string link = secret.ToLink(entry.Host, entry.Port);
+            try
+            {
+                Clipboard.SetText(link);
+                SetStatus(L.T("لینک کپی شد: ", "link copied: ") + link);
+                AppendLog("[mtproto] " + link);
+            }
+            catch (Exception ex)
+            {
+                SetStatus(L.T("کپی نشد: ", "could not copy: ") + ex.Message);
+            }
         }
 
         private void RefreshVersions()
