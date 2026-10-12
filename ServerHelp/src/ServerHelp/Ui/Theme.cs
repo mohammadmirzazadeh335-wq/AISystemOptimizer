@@ -76,6 +76,67 @@ namespace ServerHelp.Ui
             if (root == null) return;
             ApplyOne(root);
             foreach (Control child in root.Controls) Apply(child);
+
+            // Every window in the app calls this as the last thing in its constructor, once the whole
+            // layout is standing - which makes it the one place where the hand-placed pixels can be
+            // stretched to the screen's scaling factor.
+            var form = root as Form;
+            if (form != null) ScaleForDpi(form);
+        }
+
+        /// <summary>
+        /// The screen's scaling factor, 96 dpi being 1.0. The app declares itself system-DPI aware in
+        /// its manifest, so nothing else rescales it: without this a 125% or 150% screen would show
+        /// text 1.25x/1.5x bigger inside boxes that stayed exactly the same size, and every label
+        /// would be cut off.
+        /// </summary>
+        public static float ScaleFactor()
+        {
+            try
+            {
+                using (var g = Graphics.FromHwnd(IntPtr.Zero)) return g.DpiX / 96f;
+            }
+            catch { return 1f; }
+        }
+
+        /// <summary>
+        /// Scales one hand-built window to the screen. Windows Forms' own automatic scaling is
+        /// switched off first, so this is the only pass that ever runs - a second pass would square
+        /// the factor and blow the layout up.
+        /// </summary>
+        public static void ScaleForDpi(Form form)
+        {
+            if (form == null) return;
+            form.AutoScaleMode = AutoScaleMode.None;
+
+            float factor = ScaleFactor();
+            if (factor < 1.01f) return;   // a plain 100% screen is left exactly as designed
+            if (factor > 3f) factor = 3f; // a strange report must not blow the window up
+
+            try
+            {
+                form.Scale(new SizeF(factor, factor));
+                ScaleColumns(form, factor);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// ListView columns are not part of Control.Scale, so at 125% or 150% the names in the tables
+        /// would be cut off while the rows grew around them. Scaled here, once, with the rest.
+        /// </summary>
+        private static void ScaleColumns(Control root, float factor)
+        {
+            var list = root as ListView;
+            if (list != null)
+            {
+                for (int i = 0; i < list.Columns.Count; i++)
+                {
+                    list.Columns[i].Width = Math.Max(40, (int)Math.Round(list.Columns[i].Width * factor));
+                }
+            }
+
+            foreach (Control child in root.Controls) ScaleColumns(child, factor);
         }
 
         private static void ApplyOne(Control control)

@@ -36,6 +36,9 @@ namespace ServerHelp.Ui
             Width = 760;
             Height = 620;
             StartPosition = FormStartPosition.CenterParent;
+            FormBorderStyle = FormBorderStyle.Sizable;
+            MaximizeBox = false;
+            MinimizeBox = false;
 
             var hint = new Label();
             hint.Dock = DockStyle.Top;
@@ -116,7 +119,20 @@ namespace ServerHelp.Ui
             _input.Font = new Font("Consolas", 9.5f);
             _input.Text = initialText ?? "";
             Controls.Add(_input);
-            _input.BringToFront();
+
+            // Docking runs through the controls from the back of the z-order to the front, and the
+            // first one it reaches takes the outermost strip - so the rows have to be sent forward in
+            // the order they are meant to be read, and the box that fills the rest comes last.
+            buttons.BringToFront();   // very bottom
+            _summary.BringToFront();  // the counts, right above the buttons
+            _preview.BringToFront();  // the checked list
+            hint.BringToFront();      // the one-line help at the top
+            _input.BringToFront();    // the paste box takes what is left
+
+            // Enter adds, Escape closes - same as every other dialog in the window.
+            AcceptButton = ok;
+            CancelButton = cancel;
+
             Theme.Apply(this);
             Theme.StyleButton(ok, true);
         }

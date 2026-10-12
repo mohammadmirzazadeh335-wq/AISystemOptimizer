@@ -63,6 +63,10 @@ namespace ServerHelp.Ui
         private NumericUpDown _connTimeoutBox;
         private Label _connectionSummary;
         private bool _connectionsBusy;
+        private readonly List<string[]> _stepRows = new List<string[]>();  // kept across a window rebuild
+        private int _pendingConnectionRow = -1;        // the row to reselect after a rebuild
+        private int _pendingVersionIndex = -1;         // ditto for the version list
+        private bool _serversBusy;                     // repopulating the server combo is not a choice
 
         private List<McVersion> _versions = new List<McVersion>();
         private List<WarpEndpoint> _lastScan = new List<WarpEndpoint>();
@@ -118,6 +122,13 @@ namespace ServerHelp.Ui
             Text = L.T("Server Help — دستیار سرور ماینکرفت", "Server Help — Minecraft server helper");
             BackColor = Theme.Background;
 
+            // a language switch rebuilds the whole window: come back to the tab the user was on, and
+            // to the row of the connections table, instead of dropping them at the top of the app
+            int keepTab = _tabs != null ? _tabs.SelectedIndex : 0;
+            if (_connectionList != null && _connectionList.SelectedIndices.Count > 0)
+                _pendingConnectionRow = _connectionList.SelectedIndices[0];
+            if (_versionCombo != null && _versionCombo.SelectedIndex >= 0)
+                _pendingVersionIndex = _versionCombo.SelectedIndex;
             while (Controls.Count > 0) Controls[0].Dispose();
 
             // Docking works out when the Fill control is added first, then the Top/Bottom ones.
@@ -143,6 +154,8 @@ namespace ServerHelp.Ui
             _tabs.TabPages.Add(BuildVersionsTab());
             _tabs.TabPages.Add(BuildSettingsTab());
             _tabs.TabPages.Add(BuildLogTab());
+
+            if (keepTab > 0 && keepTab < _tabs.TabPages.Count) _tabs.SelectedIndex = keepTab;
 
             var footer = new SHPanel();
             footer.Dock = DockStyle.Bottom;
@@ -406,8 +419,6 @@ namespace ServerHelp.Ui
             tgHint.Height = 30;
             telegram.Controls.Add(tgHint);
             card.Controls.Add(telegram);
-            telegram.BringToFront();
-            buttons.BringToFront();
 
             var options = new FlowLayoutPanel();
             options.Dock = DockStyle.Top;
@@ -557,6 +568,16 @@ namespace ServerHelp.Ui
             _connectionList.Columns.Add(L.T("فعال", "On"), 60);
             _connectionList.DoubleClick += delegate { EditConnection(SelectedConnection()); };
             card.Controls.Add(_connectionList);
+
+            // Dock layout runs from the back of the z-order to the front: the first control it reaches
+            // takes the outermost strip. Bringing the rows forward in the order they are meant to be
+            // read - the buttons, the measuring row, the Telegram row, the options, the summary bar and
+            // then the table that fills what is left - is the only thing that decides their order.
+            buttons.BringToFront();
+            measuring.BringToFront();
+            telegram.BringToFront();
+            options.BringToFront();
+            _connectionSummary.BringToFront();
             _connectionList.BringToFront();
 
             page.Controls.Add(card);
@@ -581,7 +602,11 @@ namespace ServerHelp.Ui
             _serverCombo.DropDownStyle = ComboBoxStyle.DropDownList;
             _serverCombo.Location = new Point(12, 60);
             _serverCombo.Width = 300;
-            _serverCombo.SelectedIndexChanged += delegate { if (_serverCombo.SelectedIndex >= 0) SelectServer(_serverCombo.SelectedIndex); };
+            _serverCombo.SelectedIndexChanged += delegate
+            {
+                if (_serversBusy) return;   // this change came from repopulating the list
+                if (_serverCombo.SelectedIndex >= 0) SelectServer(_serverCombo.SelectedIndex);
+            };
             top.Controls.Add(_serverCombo);
 
             var lblVersion = UiKit.Sub(L.T("نسخه ماینکرفت:", "Minecraft version:"));
@@ -702,6 +727,15 @@ namespace ServerHelp.Ui
             _stepList.Columns.Add(L.T("جزئیات", "Detail"), 430);
             steps.Controls.Add(_stepList);
 
+            // whatever the launch table already showed is put back after a rebuild
+            foreach (string[] row in _stepRows)
+            {
+                if (row.Length < 4) continue;
+                StepState state;
+                if (!Enum.TryParse<StepState>(row[3], out state)) state = StepState.Skip;
+                DrawStepRow(row[0], row[1], row[2], state);
+            }
+
             page.Controls.Add(steps);
             page.Controls.Add(top);
             return page;
@@ -807,6 +841,12 @@ namespace ServerHelp.Ui
             _endpointList.Columns.Add(L.T("تأخیر واقعی (پورت تونل)", "Real delay (tunnel port)"), 170);
             _endpointList.Columns.Add(L.T("تأخیر از داخل تونل", "Delay inside the tunnel"), 180);
             card.Controls.Add(_endpointList);
+
+            // same rule here: without this the table is laid out first and the buttons are drawn over
+            // its columns
+            buttons.BringToFront();
+            _tunnelInfoLabel.BringToFront();
+            _endpointList.BringToFront();
 
             page.Controls.Add(card);
             return page;
@@ -995,6 +1035,12 @@ namespace ServerHelp.Ui
             bottom.Height = 30;
             card.Controls.Add(bottom);
 
+            // the rows have to be laid out before the list fills the rest, or the version row ends up
+            // drawn over the list's column headers
+            top.BringToFront();
+            bottom.BringToFront();
+            _versionList.BringToFront();
+
             page.Controls.Add(card);
             return page;
         }
@@ -1104,6 +1150,11 @@ namespace ServerHelp.Ui
             _logBox.Dock = DockStyle.Fill;
             _logBox.Font = new Font("Consolas", 9f);
             _logBox.ReadOnly = true;
+
+            // a rebuild (a language switch) must not wipe the visible log, and at startup there is
+            // always something to show - the lines written before the window existed
+            try { _logBox.Text = Log.TailFile(AppPaths.AppLog, 60000); }
+            catch { }
             card.Controls.Add(_logBox);
 
             var buttons = new FlowLayoutPanel();
@@ -1237,23 +1288,49 @@ namespace ServerHelp.Ui
         private void RefreshServerList()
         {
             if (_serverList == null) return;
-            _serverList.Items.Clear();
-            if (_serverCombo != null)
+
+            // repopulating the combo is not the user picking another server
+            _serversBusy = true;
+            try
             {
-                int keep = _serverCombo.SelectedIndex;
-                _serverCombo.Items.Clear();
-                foreach (ServerProfile profile in _settings.Servers) _serverCombo.Items.Add(profile.Name);
-                _serverCombo.SelectedIndex = Math.Max(0, Math.Min(keep, _serverCombo.Items.Count - 1));
+                // the table is cleared and refilled in one go: no flicker, no scroll jump and no
+                // lost selection
+                _serverList.BeginUpdate();
+                try
+                {
+                    _serverList.Items.Clear();
+                    if (_serverCombo != null)
+                    {
+                        int keep = _serverCombo.SelectedIndex;
+                        if (keep < 0)
+                        {
+                            // nothing to keep - a rebuilt window, say: come back to the server that is actually active
+                            // instead of silently switching to the first one in the list
+                            for (int i = 0; i < _settings.Servers.Count; i++)
+                                if (string.Equals(_settings.Servers[i].Name, _settings.ActiveServer, StringComparison.OrdinalIgnoreCase)) keep = i;
+                        }
+                        _serverCombo.BeginUpdate();
+                        try
+                        {
+                            _serverCombo.Items.Clear();
+                            foreach (ServerProfile profile in _settings.Servers) _serverCombo.Items.Add(profile.Name);
+                            _serverCombo.SelectedIndex = Math.Max(0, Math.Min(keep, _serverCombo.Items.Count - 1));
+                        }
+                        finally { _serverCombo.EndUpdate(); }
+                    }
+                    foreach (ServerProfile profile in _settings.Servers)
+                    {
+                        var item = new ListViewItem(profile.Name);
+                        item.SubItems.Add(profile.Endpoint);
+                        item.SubItems.Add(string.IsNullOrEmpty(profile.DirectIp) ? "—" : profile.DirectIp);
+                        item.SubItems.Add(string.Equals(profile.Name, _settings.ActiveServer, StringComparison.OrdinalIgnoreCase)
+                            ? L.T("بله", "yes") : "—");
+                        _serverList.Items.Add(item);
+                    }
+                }
+                finally { _serverList.EndUpdate(); }
             }
-            foreach (ServerProfile profile in _settings.Servers)
-            {
-                var item = new ListViewItem(profile.Name);
-                item.SubItems.Add(profile.Endpoint);
-                item.SubItems.Add(string.IsNullOrEmpty(profile.DirectIp) ? "—" : profile.DirectIp);
-                item.SubItems.Add(string.Equals(profile.Name, _settings.ActiveServer, StringComparison.OrdinalIgnoreCase)
-                    ? L.T("بله", "yes") : "—");
-                _serverList.Items.Add(item);
-            }
+            finally { _serversBusy = false; }
         }
 
         private ServerProfile SelectedServer()
@@ -1320,36 +1397,49 @@ namespace ServerHelp.Ui
         private void RefreshConnections()
         {
             if (_connectionList == null) return;
-            // the table is rebuilt after every result: keep the row the user was working on selected
-            int wanted = _connectionList.SelectedIndices.Count > 0 ? _connectionList.SelectedIndices[0] : -1;
-            _connectionList.Items.Clear();
-            foreach (ConnectionEntry entry in _settings.Connections)
+            // the table is rebuilt in one go after every result: it must not flicker, and the row the user
+            // was working on has to stay the selected one
+            _connectionList.BeginUpdate();
+            try
             {
-                var item = new ListViewItem(entry.Name);
-                item.SubItems.Add(entry.Info.Title);
-                item.SubItems.Add(entry.Target);
-                // a Telegram or DNS number is not a game ping, and the table has to say so
-                string note = entry.Info.DelayNote;
-                item.SubItems.Add(entry.LastDelayMs > 0
-                    ? L.N(entry.LastDelayMs) + " ms" + (note.Length > 0 ? "  (" + note + ")" : "")
-                    : "—");
-                item.SubItems.Add(entry.Info.Carries);
-                item.SubItems.Add(entry.QualityText().Length > 0 ? entry.QualityText() : "—");
-                item.SubItems.Add(string.IsNullOrEmpty(entry.LastStatus) ? L.T("تست نشده", "not tested") : entry.StatusText);
-                item.SubItems.Add(string.IsNullOrEmpty(entry.LastTestUtc) ? "—" : entry.LastTestUtc);
-                item.SubItems.Add(entry.Enabled ? L.T("بله", "yes") : L.T("خیر", "no"));
-                if (!entry.Enabled) item.ForeColor = Color.FromArgb(140, 140, 140);
-                else if (entry.LastDelayMs > 0) item.ForeColor = Color.FromArgb(24, 120, 50);
-                else if (!string.IsNullOrEmpty(entry.LastError)) item.ForeColor = Color.FromArgb(180, 40, 70);
-                _connectionList.Items.Add(item);
-            }
+                // the table is rebuilt after every result: keep the row the user was working on selected
+                int wanted = _connectionList.SelectedIndices.Count > 0
+                    ? _connectionList.SelectedIndices[0]
+                    : _pendingConnectionRow;
+                _pendingConnectionRow = -1;   // asked for once, by the rebuild that was about to happen
+                _connectionList.Items.Clear();
+                foreach (ConnectionEntry entry in _settings.Connections)
+                {
+                    var item = new ListViewItem(entry.Name);
+                    item.SubItems.Add(entry.Info.Title);
+                    item.SubItems.Add(entry.Target);
+                    // a Telegram or DNS number is not a game ping, and the table has to say so
+                    string note = entry.Info.DelayNote;
+                    item.SubItems.Add(entry.LastDelayMs > 0
+                        ? L.N(entry.LastDelayMs) + " ms" + (note.Length > 0 ? "  (" + note + ")" : "")
+                        : "—");
+                    item.SubItems.Add(entry.Info.Carries);
+                    item.SubItems.Add(entry.QualityText().Length > 0 ? entry.QualityText() : "—");
+                    item.SubItems.Add(string.IsNullOrEmpty(entry.LastStatus) ? L.T("تست نشده", "not tested") : entry.StatusText);
+                    item.SubItems.Add(string.IsNullOrEmpty(entry.LastTestUtc) ? "—" : entry.LastTestUtc);
+                    item.SubItems.Add(entry.Enabled ? L.T("بله", "yes") : L.T("خیر", "no"));
+                    if (!entry.Enabled) item.ForeColor = Color.FromArgb(140, 140, 140);
+                    else if (entry.LastDelayMs > 0) item.ForeColor = Color.FromArgb(24, 120, 50);
+                    else if (!string.IsNullOrEmpty(entry.LastError)) item.ForeColor = Color.FromArgb(180, 40, 70);
+                    _connectionList.Items.Add(item);
+                }
 
-            if (wanted >= 0 && _connectionList.Items.Count > 0)
-                _connectionList.Items[Math.Min(wanted, _connectionList.Items.Count - 1)].Selected = true;
+                if (wanted >= 0 && _connectionList.Items.Count > 0)
+                    _connectionList.Items[Math.Min(wanted, _connectionList.Items.Count - 1)].Selected = true;
+            }
+            finally { _connectionList.EndUpdate(); }
 
             _connectionsBusy = true;
             try
             {
+                _pinCombo.BeginUpdate();
+                try
+                {
                     _pinCombo.Items.Clear();
                     _pinCombo.Items.Add(L.T("خودکار (سریع‌ترین)", "Automatic (fastest)"));
                     foreach (ConnectionEntry entry in _settings.Connections)
@@ -1365,6 +1455,8 @@ namespace ServerHelp.Ui
                             if (string.Equals(_pinCombo.Items[i].ToString(), _settings.PinnedConnection, StringComparison.OrdinalIgnoreCase)) index = i;
                     }
                     _pinCombo.SelectedIndex = index;
+                }
+                finally { _pinCombo.EndUpdate(); }
             }
             finally { _connectionsBusy = false; }
 
@@ -2633,24 +2725,36 @@ namespace ServerHelp.Ui
         {
             string dir = VersionScanner.ResolveVersionsDir(_settings.GameDirOverride, _settings.VersionsDir);
             if (_versionList == null) return;
-            _versionList.Items.Clear();
-            _versionCombo.Items.Clear();
-            _versions = VersionScanner.Scan(dir);
-            foreach (McVersion version in _versions)
+            _versionList.BeginUpdate();
+            _versionCombo.BeginUpdate();
+            try
             {
-                var item = new ListViewItem(version.Id);
-                item.SubItems.Add(string.IsNullOrEmpty(version.Type) ? "—" : version.Type);
-                item.SubItems.Add(version.Detail);
-                item.SubItems.Add(version.Folder);
-                _versionList.Items.Add(item);
-                _versionCombo.Items.Add(version.Display);
+                _versionList.Items.Clear();
+                _versionCombo.Items.Clear();
+                _versions = VersionScanner.Scan(dir);
+                foreach (McVersion version in _versions)
+                {
+                    var item = new ListViewItem(version.Id);
+                    item.SubItems.Add(string.IsNullOrEmpty(version.Type) ? "—" : version.Type);
+                    item.SubItems.Add(version.Detail);
+                    item.SubItems.Add(version.Folder);
+                    _versionList.Items.Add(item);
+                    _versionCombo.Items.Add(version.Display);
+                }
+                if (_versionCombo.Items.Count > 0)
+                {
+                    int preferred = 0;
+                    for (int i = 0; i < _versions.Count; i++)
+                        if (_versions[i].Type == "release" && _versions[i].RequiredJavaMajor > 0) preferred = i;
+                    int keep = _pendingVersionIndex;
+                    _pendingVersionIndex = -1;
+                    _versionCombo.SelectedIndex = keep >= 0 && keep < _versionCombo.Items.Count ? keep : preferred;
+                }
             }
-            if (_versionCombo.Items.Count > 0)
+            finally
             {
-                int preferred = 0;
-                for (int i = 0; i < _versions.Count; i++)
-                    if (_versions[i].Type == "release" && _versions[i].RequiredJavaMajor > 0) preferred = i;
-                _versionCombo.SelectedIndex = preferred;
+                _versionList.EndUpdate();
+                _versionCombo.EndUpdate();
             }
             SetStatus(_versions.Count > 0
                 ? L.T("نسخه‌ها پیدا شد: ", "versions found: ") + L.N(_versions.Count)
@@ -2787,17 +2891,22 @@ namespace ServerHelp.Ui
                 var best = WarpEndpoints.PickBest(scan.Endpoints, 12);
                 Ui(delegate
                 {
-                    _endpointList.Items.Clear();
-                    foreach (WarpEndpoint endpoint in best)
+                    _endpointList.BeginUpdate();
+                    try
                     {
-                        var item = new ListViewItem(endpoint.Address);
-                        item.SubItems.Add(endpoint.IcmpRtt >= 0 ? endpoint.IcmpRtt + " ms" : "—");
-                        item.SubItems.Add(endpoint.TcpRtt >= 0 ? endpoint.TcpRtt + " ms" : "—");
-                        item.SubItems.Add(endpoint.Score.ToString());
-                        item.SubItems.Add(endpoint.TunnelRtt >= 0 ? endpoint.TunnelRtt + " ms" : "—");
-                        item.SubItems.Add("—");
-                        _endpointList.Items.Add(item);
+                        _endpointList.Items.Clear();
+                        foreach (WarpEndpoint endpoint in best)
+                        {
+                            var item = new ListViewItem(endpoint.Address);
+                            item.SubItems.Add(endpoint.IcmpRtt >= 0 ? endpoint.IcmpRtt + " ms" : "—");
+                            item.SubItems.Add(endpoint.TcpRtt >= 0 ? endpoint.TcpRtt + " ms" : "—");
+                            item.SubItems.Add(endpoint.Score.ToString());
+                            item.SubItems.Add(endpoint.TunnelRtt >= 0 ? endpoint.TunnelRtt + " ms" : "—");
+                            item.SubItems.Add("—");
+                            _endpointList.Items.Add(item);
+                        }
                     }
+                    finally { _endpointList.EndUpdate(); }
                     _tunnelInfoLabel.Text = L.T("بهترین آدرس‌ها انتخاب شد؛ هنگام اجرا، تونل روی سریع‌ترین آن‌ها ساخته می‌شود.",
                                                 "Best addresses selected; the tunnel is built on the fastest ones on launch.")
                                             + "  (" + L.N(scan.Reachable) + "/" + L.N(scan.Probed) + ")";
@@ -2926,6 +3035,7 @@ namespace ServerHelp.Ui
             }
 
             _stepList.Items.Clear();
+            _stepRows.Clear();
             _playButton.Enabled = false;
             _stopButton.Enabled = true;
             _runWatch = Stopwatch.StartNew();
@@ -3029,6 +3139,15 @@ namespace ServerHelp.Ui
 
         private void AddStepRow(string title, string state, string detail, StepState stepState)
         {
+            // remembered so that a rebuild of the window can put the run that is on screen back
+            _stepRows.Add(new string[] { title, state, detail ?? "", ((int)stepState).ToString() });
+            DrawStepRow(title, state, detail, stepState);
+            AppendLog("[step] " + title + " — " + state + (string.IsNullOrEmpty(detail) ? "" : " (" + detail + ")"));
+        }
+
+        /// <summary>Puts one row into the launch table.</summary>
+        private void DrawStepRow(string title, string state, string detail, StepState stepState)
+        {
             if (_stepList == null) return;
             var item = new ListViewItem(title);
             item.SubItems.Add(state);
@@ -3042,7 +3161,6 @@ namespace ServerHelp.Ui
             }
             _stepList.Items.Add(item);
             _stepList.EnsureVisible(_stepList.Items.Count - 1);
-            AppendLog("[step] " + title + " — " + state + (string.IsNullOrEmpty(detail) ? "" : " (" + detail + ")"));
         }
 
         private void SetStatus(string text)
