@@ -25,6 +25,13 @@ namespace ServerHelp.Tunnel
         public string LastError = "";
         public string LogTail { get { return string.IsNullOrEmpty(_logPath) ? "" : LogFileTail(_logPath, 4000); } }
 
+        /// <summary>
+        /// Every probe that is running right now. A probe is a real process: if the window is closed
+        /// while a measurement is still going, nothing else would ever stop it, and a stray tunnel
+        /// process holding the user's configuration is exactly what this app must never leave behind.
+        /// </summary>
+        private static readonly List<ProbeTunnel> Live = new List<ProbeTunnel>();
+
         /// <summary>Ports handed out to probes so a probe can never collide with the live session.</summary>
         private static int _next = 22460;
 
@@ -112,6 +119,7 @@ namespace ServerHelp.Tunnel
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
                 probe._process = process;
+                Register(probe);
 
                 // wait for the local SOCKS port to answer
                 int waited = 0;
@@ -120,7 +128,7 @@ namespace ServerHelp.Tunnel
                     if (process.HasExited)
                     {
                         error = L.T("تونل آزمایشی بلافاصله بسته شد: ", "the test tunnel exited immediately: ") + Shorten(stderr.ToString());
-                        probe.Cleanup();
+                        probe.Stop();
                         return false;
                     }
                     if (NetUtil.TcpPing(IPAddress.Loopback, socksPort, 400) > 0)
@@ -131,8 +139,11 @@ namespace ServerHelp.Tunnel
                     System.Threading.Thread.Sleep(200);
                     waited += 200;
                 }
+                // The process is up but never answered on its local port. Stop it here: this used to
+                // delete the configuration file and walk away, leaving a sing-box process running with
+                // the user's proxy in it - one more of those for every failed test.
                 error = L.T("پورت محلی تونل بالا نیامد", "the local tunnel port never came up");
-                probe.Cleanup();
+                probe.Stop();
                 return false;
             }
             catch (Exception ex)
@@ -164,6 +175,7 @@ namespace ServerHelp.Tunnel
 
         public void Stop()
         {
+            lock (Live) { Live.Remove(this); }
             try
             {
                 if (_process != null && !_process.HasExited)
@@ -183,9 +195,32 @@ namespace ServerHelp.Tunnel
             Stop();
         }
 
+        private static void Register(ProbeTunnel probe)
+        {
+            lock (Live) { Live.Add(probe); }
+        }
+
+        /// <summary>
+        /// Stops every probe that is still running, and says how many there were. Called when the
+        /// window closes, and once more when the process itself goes away, so a measurement that was
+        /// interrupted cannot leave an engine (or its configuration) behind.
+        /// </summary>
+        public static int StopAll()
+        {
+            List<ProbeTunnel> running;
+            lock (Live) { running = new List<ProbeTunnel>(Live); }
+            foreach (ProbeTunnel probe in running)
+            {
+                try { probe.Stop(); }
+                catch (Exception ex) { Log.Debug("probe stop-all: " + ex.Message); }
+            }
+            return running.Count;
+        }
+
         private void Cleanup()
         {
             try { if (!string.IsNullOrEmpty(_configPath) && File.Exists(_configPath)) File.Delete(_configPath); } catch { }
+            try { if (!string.IsNullOrEmpty(_logPath) && File.Exists(_logPath)) File.Delete(_logPath); } catch { }
         }
 
         private static string Shorten(string text)

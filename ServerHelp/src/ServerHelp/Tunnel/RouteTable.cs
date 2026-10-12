@@ -204,8 +204,19 @@ namespace ServerHelp.Tunnel
         public static readonly string Path =
             System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "drivers", "etc", "hosts");
 
-        private const string Begin = "# >>> ServerHelp (managed block, do not edit) >>>";
-        private const string End = "# <<< ServerHelp <<<";
+        public const string Begin = "# >>> ServerHelp (managed block, do not edit) >>>";
+        public const string End = "# <<< ServerHelp <<<";
+
+        /// <summary>Read-only: is our managed block in the hosts file right now?</summary>
+        public static bool HasBlock()
+        {
+            try
+            {
+                if (!File.Exists(Path)) return false;
+                return File.ReadAllText(Path, Encoding.UTF8).IndexOf(Begin, StringComparison.Ordinal) >= 0;
+            }
+            catch { return false; }
+        }
 
         public static bool IsApplied(string hostname, string ip)
         {
@@ -264,7 +275,11 @@ namespace ServerHelp.Tunnel
             catch (Exception ex) { Log.Warn("could not clean the hosts file: " + ex.Message); }
         }
 
-        private static string StripBlock(string content)
+        /// <summary>
+        /// The file with our own block taken out and every other line left exactly as it was. Public so
+        /// the self test can pin that promise: only the lines between our own markers disappear.
+        /// </summary>
+        public static string StripBlock(string content)
         {
             var sb = new StringBuilder();
             bool inside = false;

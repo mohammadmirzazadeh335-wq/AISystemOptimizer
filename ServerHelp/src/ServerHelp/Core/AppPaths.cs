@@ -50,22 +50,27 @@ namespace ServerHelp.Core
         }
 
         /// <summary>
-        /// Removes throwaway files earlier runs left in the cache folder: a check copy written just
-        /// before the machine was switched off, or by a version that did not clean up after itself.
-        /// Only files this app created there are touched, and only ones older than an hour, so a
-        /// second copy of the app that is measuring something right now keeps its own files.
+        /// Removes throwaway files earlier runs left behind: a check copy written just before the
+        /// machine was switched off, a half-downloaded archive, a probe log. Only files this app
+        /// creates there are touched, and only ones older than an hour, so a second copy of the app
+        /// that is measuring something right now keeps its own files.
         /// </summary>
-        public static int CleanCache()
+        public static int CleanThrowaways()
+        {
+            return Sweep(Cache, new string[] { "probe-*.json", "probe-check-*.json", "download-*.zip" }) +
+                   Sweep(Logs, new string[] { "probe-*.log" });
+        }
+
+        private static int Sweep(string folder, string[] patterns)
         {
             int removed = 0;
-            string[] patterns = new string[] { "probe-*.json", "download-*.zip" };
             try
             {
-                if (!Directory.Exists(Cache)) return 0;
+                if (!Directory.Exists(folder)) return 0;
                 DateTime cutoff = DateTime.Now.AddHours(-1);
                 foreach (string pattern in patterns)
                 {
-                    foreach (string path in Directory.GetFiles(Cache, pattern))
+                    foreach (string path in Directory.GetFiles(folder, pattern))
                     {
                         try
                         {

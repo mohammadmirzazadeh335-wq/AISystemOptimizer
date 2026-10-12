@@ -38,9 +38,12 @@ namespace ServerHelp.Core
 
                 AppPaths.EnsureAll();
                 Log.Open();
+                // Last line of defence: if the process is going away for any reason at all - a crash, a
+                // task kill, the user logging off - the throwaway engine processes go with it.
+                AppDomain.CurrentDomain.ProcessExit += delegate { ServerHelp.Tunnel.ProbeTunnel.StopAll(); };
                 Log.Info("=== Server Help starting (v" + Version() + ", " + (IsAdmin() ? "admin" : "user") + ") ===");
                 Log.Info("data folder: " + AppPaths.Data);
-                int swept = AppPaths.CleanCache();
+                int swept = AppPaths.CleanThrowaways();
                 if (swept > 0) Log.Info("cache: removed " + swept + " leftover file(s) from an earlier run");
                 Log.FlushPending();
 

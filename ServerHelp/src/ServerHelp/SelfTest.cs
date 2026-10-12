@@ -94,6 +94,7 @@ namespace ServerHelp
             Guard("the launch report", failures, delegate { CheckReport(failures, passes); });
             Guard("the firewall rule lookup", failures, delegate { CheckFirewall(failures, passes); });
             Guard("the cache sweep", failures, delegate { CheckCacheSweep(failures, passes); });
+            Guard("the leftover sweep", failures, delegate { CheckLeftovers(failures, passes); });
             Guard("the tester", failures, delegate { CheckTesterAnswers(failures, passes); });
             Guard("the subscription reader", failures, delegate { CheckSubscription(failures, passes); });
             Guard("the OpenVPN profile", failures, delegate { CheckOvpn(failures, passes); });
@@ -566,22 +567,58 @@ namespace ServerHelp
             AppPaths.EnsureAll();
             string stale = Path.Combine(AppPaths.Cache, "probe-check-selftest-old.json");
             string fresh = Path.Combine(AppPaths.Cache, "probe-check-selftest-fresh.json");
+            string staleLog = Path.Combine(AppPaths.Logs, "probe-selftest-old.log");
             try
             {
                 File.WriteAllText(stale, "{}", new UTF8Encoding(false));
                 File.WriteAllText(fresh, "{}", new UTF8Encoding(false));
+                File.WriteAllText(staleLog, "x", new UTF8Encoding(false));
                 File.SetLastWriteTime(stale, DateTime.Now.AddHours(-3));
+                File.SetLastWriteTime(staleLog, DateTime.Now.AddHours(-3));
                 File.SetLastWriteTime(fresh, DateTime.Now);
-                int removed = AppPaths.CleanCache();
-                Expect(removed >= 1 && !File.Exists(stale) && File.Exists(fresh),
-                       "a check file left behind by an interrupted run is swept away, a fresh one is kept",
+                int removed = AppPaths.CleanThrowaways();
+                Expect(removed >= 2 && !File.Exists(stale) && !File.Exists(staleLog) && File.Exists(fresh),
+                       "a check file and a probe log left by an interrupted run are swept away, a fresh one is kept",
                        failures, passes);
             }
             finally
             {
                 try { if (File.Exists(stale)) File.Delete(stale); } catch { }
+                try { if (File.Exists(staleLog)) File.Delete(staleLog); } catch { }
                 try { if (File.Exists(fresh)) File.Delete(fresh); } catch { }
             }
+        }
+
+        /// <summary>
+        /// What a crashed session can leave behind: an engine process, and our line in the hosts file.
+        /// Both are decided by string rules that are checked here, so a change cannot quietly widen
+        /// "ours" into "whatever is running".
+        /// </summary>
+        private static void CheckLeftovers(List<string> failures, List<string> passes)
+        {
+            string data = AppPaths.Data;
+            string session = Path.Combine(data, "bin", "serverhelp-singbox.json");
+            string probe = Path.Combine(data, "cache", "probe-12ab34.json");
+            string list = "4242|sing-box.exe run -c \"" + session + "\"\n" +
+                          "5151|sing-box.exe run -c \"C:\\Other\\config.json\"\n" +
+                          "6262|sing-box.exe\n" +
+                          data + " is not a pid line\n" +
+                          "7272|sing-box.exe run -c \"" + probe + "\"\n";
+            List<int> claimed = SingBoxRunner.OurEnginePids(list);
+            Expect(claimed.Count == 2 && claimed[0] == 4242 && claimed[1] == 7272,
+                   "only an engine running this app's own configuration is claimed as ours", failures, passes);
+            Expect(SingBoxRunner.OurEnginePids("").Count == 0 &&
+                   SingBoxRunner.OurEnginePids("nothing to see here").Count == 0,
+                   "an unreadable process list claims nothing", failures, passes);
+            Expect(ProbeTunnel.StopAll() == 0, "stopping every test tunnel is safe when none is running",
+                   failures, passes);
+
+            string hosts = "127.0.0.1 localhost\n" + HostsFile.Begin + "\n203.0.113.5 smp3.mcsh.io\n" +
+                           HostsFile.End + "\n8.8.8.8 dns.google\n";
+            string stripped = HostsFile.StripBlock(hosts);
+            Expect(stripped.Contains("127.0.0.1 localhost") && stripped.Contains("8.8.8.8 dns.google") &&
+                   !stripped.Contains("smp3.mcsh.io"),
+                   "the hosts cleanup takes out our own block and leaves every other line", failures, passes);
         }
 
         /// <summary>The numbers a route is judged by, checked without touching the network.</summary>

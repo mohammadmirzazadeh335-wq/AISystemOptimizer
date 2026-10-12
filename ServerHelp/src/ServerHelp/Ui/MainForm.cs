@@ -1334,6 +1334,23 @@ namespace ServerHelp.Ui
                           string.Join(", ", leftovers.ToArray()));
                 SetStatus(L.T("مسیرهای جامانده پاک شد", "leftover routes cleaned"));
             }
+            // A crash leaves more than a route behind: the tunnel engine itself may still be running,
+            // and our line in the hosts file may still pin the server name to an address that is no
+            // longer routed. Both go now, before the first version scan and the first server check, so
+            // a machine that was switched off in the middle of a game starts from a clean state.
+            int strayEngines = SingBoxRunner.KillStrayEngines();
+            if (strayEngines > 0)
+            {
+                AppendLog(L.T("موتور تونلِ جامانده از اجرای قبلی بسته شد: ", "a tunnel engine left behind by an earlier run was stopped: ")
+                          + L.N(strayEngines));
+                SetStatus(L.T("موتور جامانده بسته شد", "stray engine stopped"));
+            }
+            if (HostsFile.HasBlock())
+            {
+                HostsFile.Remove();
+                AppendLog(L.T("خط جاماندهٔ فایل hosts از اجرای قبلی پاک شد",
+                              "the hosts entry left behind by an earlier run was removed"));
+            }
             RefreshVersions();
             CheckServerAsync();
             AppendLog(Log.Recent());
@@ -1359,6 +1376,9 @@ namespace ServerHelp.Ui
                 // the app is still open. Leaving a sing-box process and its interface behind after
                 // the app is gone is exactly the kind of leftover this app promises not to leave.
                 _pipeline.Shutdown(false);
+                // A measurement may still be running in the background; its throwaway engine is a real
+                // process and has to go with the window.
+                ProbeTunnel.StopAll();
                 if (_worker != null) _worker.Interrupt();
             }
             catch (Exception ex) { Log.Warn("closing: " + ex.Message); }

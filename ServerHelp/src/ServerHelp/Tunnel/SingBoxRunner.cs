@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
@@ -204,6 +205,78 @@ namespace ServerHelp.Tunnel
             {
                 try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
             }
+        }
+
+        /// <summary>
+        /// Kills a tunnel engine that an earlier session left behind. A crash takes the window with it,
+        /// but not the child process - and such an engine still holds the machine's routing and the
+        /// user's configuration. Only processes whose command line points at a configuration of ours
+        /// are touched, and this runs while the app holds its single-instance lock, so nothing that
+        /// belongs to a session in use can be hit. Returns how many were stopped.
+        /// </summary>
+        public static int KillStrayEngines()
+        {
+            int killed = 0;
+            try
+            {
+                var script = new StringBuilder();
+                script.Append("$ErrorActionPreference='Stop';");
+                script.Append("foreach($p in @(Get-CimInstance Win32_Process -Filter \"Name='sing-box.exe'\")){");
+                script.Append("$p.ProcessId.ToString() + '|' + [string]$p.CommandLine}");
+                string encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script.ToString()));
+                Shell.Result result = Shell.Run("powershell.exe",
+                    "-NoProfile -NonInteractive -EncodedCommand " + encoded, 20000);
+                if (!result.Ok)
+                {
+                    Log.Debug("stray engine check unavailable: " + result.All);
+                    return 0;
+                }
+                foreach (int pid in OurEnginePids(result.StdOut))
+                {
+                    try
+                    {
+                        using (var process = System.Diagnostics.Process.GetProcessById(pid))
+                        {
+                            process.Kill();
+                            killed++;
+                            Log.Warn("stopped a tunnel engine left behind by an earlier run (pid " + pid + ")");
+                        }
+                    }
+                    catch (Exception ex) { Log.Debug("could not stop pid " + pid + ": " + ex.Message); }
+                }
+            }
+            catch (Exception ex) { Log.Debug("stray engine cleanup failed: " + ex.Message); }
+            return killed;
+        }
+
+        /// <summary>
+        /// The pids in a "pid|command line" listing that belong to this app: the command line has to
+        /// point at a configuration inside our own data folder, and at a name only this app creates.
+        /// Anything else that happens to be called sing-box.exe belongs to somebody else and is left
+        /// alone. Kept separate from the lookup so the self test can pin that decision.
+        /// </summary>
+        public static List<int> OurEnginePids(string processList)
+        {
+            var pids = new List<int>();
+            if (string.IsNullOrEmpty(processList)) return pids;
+            string data = AppPaths.Data;
+            foreach (string raw in processList.Split('\n'))
+            {
+                string line = raw.Trim();
+                if (line.Length == 0) continue;
+                int bar = line.IndexOf('|');
+                if (bar <= 0) continue;
+                int pid;
+                if (!int.TryParse(line.Substring(0, bar).Trim(), out pid) || pid <= 0) continue;
+                string command = line.Substring(bar + 1).Trim();
+                if (command.IndexOf(data, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                bool ours = command.IndexOf("serverhelp-singbox.json", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            command.IndexOf("probe-", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (!ours) continue;
+                if (command.IndexOf(".json", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                pids.Add(pid);
+            }
+            return pids;
         }
 
         private static bool IsAmd64Entry(string fullName)
