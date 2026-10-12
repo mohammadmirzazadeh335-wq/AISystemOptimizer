@@ -1303,6 +1303,25 @@ namespace ServerHelp.Ui
                 _settings.Nickname = string.IsNullOrEmpty(guess) ? "Player" : guess;
                 if (_nicknameBox != null) _nicknameBox.Text = _settings.Nickname;
             }
+            // A session that was killed while the kill switch was armed leaves a black hole route
+            // behind: just opening the app clears the ones belonging to the servers it knows, so the
+            // user never has to repair the routing table by hand.
+            var addresses = new List<string>();
+            foreach (ServerProfile known in _settings.Servers)
+            {
+                if (!string.IsNullOrEmpty(known.DirectIp)) addresses.Add(known.DirectIp);
+                System.Net.IPAddress parsed;
+                if (!string.IsNullOrEmpty(known.Host) && System.Net.IPAddress.TryParse(known.Host, out parsed))
+                    addresses.Add(known.Host);
+            }
+            List<string> leftovers = RouteTable.CleanLeftoverBlackholes(addresses);
+            if (leftovers.Count > 0)
+            {
+                AppendLog(L.T("مسیرهای مسدودِ جامانده از اجرای قبلی پاک شد: ",
+                              "blocked routes left behind by an earlier run were removed: ") +
+                          string.Join(", ", leftovers.ToArray()));
+                SetStatus(L.T("مسیرهای جامانده پاک شد", "leftover routes cleaned"));
+            }
             RefreshVersions();
             CheckServerAsync();
             AppendLog(Log.Recent());

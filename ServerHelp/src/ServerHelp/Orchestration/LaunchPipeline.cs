@@ -236,6 +236,17 @@ namespace ServerHelp.Orchestration
             if (candidates.Count == 0)
                 candidates.Add("");
 
+            // an earlier session that died with the kill switch armed left these behind
+            List<string> leftovers = RouteTable.CleanLeftoverBlackholes(candidates);
+            if (leftovers.Count > 0)
+            {
+                Report.Warnings.Add(L.T("مسیرهای مسدودِ جامانده از اجرای قبل پاک شد: ",
+                                        "blocked routes left by an earlier run were removed: ") +
+                                    string.Join(", ", leftovers.ToArray()));
+                Step("پاک‌سازی مسیرهای جامانده", "Clear leftover routes", StepState.Done,
+                     string.Join(", ", leftovers.ToArray()), 0);
+            }
+
             string bestIp = "";
             int bestPing = -1;
             McStatus bestStatus = null;

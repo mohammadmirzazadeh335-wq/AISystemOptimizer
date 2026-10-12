@@ -113,6 +113,23 @@ jobs:
             }
           }
 
+      - name: The app and this workflow pin the same engine hashes
+        shell: pwsh
+        # The app carries the same two hashes and checks them again whenever it has to download an
+        # engine at run time. Two copies of a security value drift apart sooner or later, so the build
+        # refuses to continue when they disagree.
+        run: |
+          $app = Get-Content 'ServerHelp/src/ServerHelp/Tunnel/SingBoxRunner.cs' -Raw
+          $flow = Get-Content '.github/workflows/serverhelp-build.yml' -Raw
+          $appSingBox = [regex]::Match($app, 'SingBoxZipSha256\s*=\s*"([0-9a-f]{64})"').Groups[1].Value
+          $appWintun = [regex]::Match($app, 'WintunZipSha256\s*=\s*"([0-9a-f]{64})"').Groups[1].Value
+          $flowSingBox = [regex]::Match($flow, 'SINGBOX_SHA256:\s*([0-9a-f]{64})').Groups[1].Value
+          $flowWintun = [regex]::Match($flow, "expected\s*=\s*'([0-9a-f]{64})'").Groups[1].Value
+          if (-not $appSingBox -or -not $appWintun) { throw 'the app does not pin both engine hashes' }
+          if ($appSingBox -ne $flowSingBox) { throw "sing-box hash drift: app $appSingBox, workflow $flowSingBox" }
+          if ($appWintun -ne $flowWintun) { throw "wintun hash drift: app $appWintun, workflow $flowWintun" }
+          Write-Host "engine hashes agree: sing-box $appSingBox, wintun $appWintun"
+
       - name: Check that every string carries both languages
         shell: pwsh
         # The app is bilingual by construction: a string is written as L.T("فارسی", "English").

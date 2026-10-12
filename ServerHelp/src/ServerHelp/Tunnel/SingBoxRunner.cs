@@ -18,6 +18,15 @@ namespace ServerHelp.Tunnel
     public sealed class SingBoxRunner
     {
         public const string PinnedVersion = "1.14.3";
+
+        /// <summary>
+        /// sha256 of the archives this build accepts, read from the GitHub release asset digests and
+        /// from the hash wintun.net publishes. The release workflow checks the same values before it
+        /// bundles the engine; the app checks them again when it has to download one at run time, so a
+        /// swapped archive is refused instead of being unpacked and run.
+        /// </summary>
+        public const string SingBoxZipSha256 = "d8b86ef58936dba9230ec6a57ffa4243933f3c14ef4809828b6c553440ed1518";
+        public const string WintunZipSha256 = "07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51";
         public const string SingBoxZipUrl =
             "https://github.com/SagerNet/sing-box/releases/download/v" + PinnedVersion +
             "/sing-box-" + PinnedVersion + "-windows-amd64.zip";
@@ -76,7 +85,7 @@ namespace ServerHelp.Tunnel
                     try
                     {
                         if (report != null) report(L.T("دانلود موتور تونل (sing-box)…", "Downloading tunnel engine (sing-box)…"));
-                        DownloadZipEntry(SingBoxZipUrl, "sing-box.exe", AppPaths.SingBoxExe);
+                        DownloadZipEntry(SingBoxZipUrl, "sing-box.exe", AppPaths.SingBoxExe, SingBoxZipSha256);
                         Log.Info("sing-box downloaded from " + SingBoxZipUrl);
                     }
                     catch (Exception ex)
@@ -104,7 +113,7 @@ namespace ServerHelp.Tunnel
                     try
                     {
                         if (report != null) report(L.T("دانلود درایور شبکه (wintun)…", "Downloading network driver (wintun)…"));
-                        DownloadZipEntry(WintunZipUrl, "wintun.dll", AppPaths.WintunDll);
+                        DownloadZipEntry(WintunZipUrl, "wintun.dll", AppPaths.WintunDll, WintunZipSha256);
                         Log.Info("wintun.dll downloaded from " + WintunZipUrl);
                     }
                     catch (Exception ex)
@@ -145,7 +154,11 @@ namespace ServerHelp.Tunnel
             }
         }
 
-        private static void DownloadZipEntry(string zipUrl, string entryName, string targetPath)
+        /// <summary>
+        /// Downloads one file out of a release archive, after checking the archive against the hash
+        /// this build pins. <paramref name="expectedSha256"/> may be empty for an archive with no pin.
+        /// </summary>
+        private static void DownloadZipEntry(string zipUrl, string entryName, string targetPath, string expectedSha256)
         {
             string tempZip = Path.Combine(AppPaths.Cache, "download-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".zip");
             Directory.CreateDirectory(AppPaths.Cache);
@@ -158,6 +171,18 @@ namespace ServerHelp.Tunnel
                     var task = client.GetByteArrayAsync(zipUrl);
                     task.Wait(300000);
                     File.WriteAllBytes(tempZip, task.Result);
+                }
+                if (!string.IsNullOrEmpty(expectedSha256))
+                {
+                    string actual = Sha256(tempZip);
+                    if (!string.Equals(actual, expectedSha256, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Log.Error("downloaded archive failed its sha256 check (got " + actual + ", want " +
+                                  expectedSha256 + ")");
+                        throw new Exception(L.T("هش فایل دانلود‌شده با مقدار مورد انتظار نمی‌خواند؛ فایل استفاده نشد.",
+                                                "the downloaded file did not match the pinned hash, so it was not used."));
+                    }
+                    Log.Info("archive verified against the pinned sha256 (" + actual.Substring(0, 16) + "…)");
                 }
                 using (var archive = ZipFile.OpenRead(tempZip))
                 {

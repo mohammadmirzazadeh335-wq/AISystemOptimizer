@@ -140,6 +140,42 @@ namespace ServerHelp.Tunnel
             }
         }
 
+        /// <summary>
+        /// Removes the /32 routes over the loopback interface that a previous session left behind when
+        /// the kill switch fired and the app was killed before it could clean up. Without this the
+        /// server address would stay blocked (until the next reboot) with nothing saying why. Only the
+        /// addresses handed in are touched, so a route the user set up is never removed.
+        /// </summary>
+        public static List<string> CleanLeftoverBlackholes(IEnumerable<string> ips)
+        {
+            var cleaned = new List<string>();
+            try
+            {
+                string dump = Dump().Replace("\r\n", "\n");
+                foreach (string ip in ips)
+                {
+                    if (string.IsNullOrEmpty(ip)) continue;
+                    bool blackholed = false;
+                    foreach (string line in dump.Split('\n'))
+                    {
+                        string[] parts = line.Split(new char[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length < 5) continue;
+                        if (parts[0] != ip || parts[1] != "255.255.255.255") continue;
+                        if (parts[3].IndexOf("Loopback", StringComparison.OrdinalIgnoreCase) < 0 &&
+                            parts[3] != "127.0.0.1") continue;
+                        blackholed = true;
+                        break;
+                    }
+                    if (!blackholed) continue;
+                    Shell.Run("route", "delete " + ip, 10000);
+                    cleaned.Add(ip);
+                    Log.Info("leftover kill switch route removed: " + ip);
+                }
+            }
+            catch (Exception ex) { Log.Debug("leftover route cleanup failed: " + ex.Message); }
+            return cleaned;
+        }
+
         /// <summary>Best guess of the machine's normal gateway (used only for diagnostics).</summary>
         public static string DefaultGateway()
         {
