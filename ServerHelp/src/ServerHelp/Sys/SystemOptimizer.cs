@@ -53,7 +53,7 @@ namespace ServerHelp.Sys
     public sealed class SystemOptimizer
     {
         private readonly List<OptimizationStep> _steps = new List<OptimizationStep>();
-        private readonly List<string> _firewallRulesAdded = new List<string>();
+        private readonly List<Tunnel.CreatedRule> _firewallRulesAdded = new List<Tunnel.CreatedRule>();
         private string _previousPowerPlan = "";
         private string _createdPowerPlan = "";
         private bool _timerRaised;
@@ -113,11 +113,11 @@ namespace ServerHelp.Sys
                     _timerRaised = false;
                 }
                 RegistryTweaks.Restore(report);
-                foreach (string rule in _firewallRulesAdded)
+                foreach (Tunnel.CreatedRule rule in _firewallRulesAdded)
                 {
-                    Tunnel.FirewallHelper.RemoveRule(rule);
-                    Tunnel.FirewallHelper.RemoveRule(rule + " (in)");
-                    Tunnel.FirewallHelper.RemoveRule(rule + " (out)");
+                    // Only the exact rules this app wrote, and only while they still point at the
+                    // program they were written for; anything the user owns stays where it is.
+                    Tunnel.FirewallHelper.RemoveCreatedRule(rule);
                 }
                 _firewallRulesAdded.Clear();
             }
@@ -165,21 +165,17 @@ namespace ServerHelp.Sys
             if (!string.IsNullOrEmpty(TunnelExePath))
             {
                 string error;
-                if (Tunnel.FirewallHelper.EnsureProgramAllowed("ServerHelp sing-box", TunnelExePath, out error))
-                {
-                    _firewallRulesAdded.Add("ServerHelp sing-box");
+                if (Tunnel.FirewallHelper.EnsureProgramAllowed("ServerHelp sing-box", TunnelExePath, out error,
+                                                              _firewallRulesAdded))
                     done++;
-                }
                 else lastError = error;
             }
             if (!string.IsNullOrEmpty(JavaExePath))
             {
                 string error;
-                if (Tunnel.FirewallHelper.EnsureProgramAllowed("ServerHelp Java", JavaExePath, out error))
-                {
-                    _firewallRulesAdded.Add("ServerHelp Java");
+                if (Tunnel.FirewallHelper.EnsureProgramAllowed("ServerHelp Java", JavaExePath, out error,
+                                                              _firewallRulesAdded))
                     done++;
-                }
                 else lastError = error;
             }
             watch.Stop();
