@@ -19,7 +19,10 @@ namespace ServerHelp.Ui
         private readonly AppSettings _settings;
         private readonly LaunchPipeline _pipeline = new LaunchPipeline();
 
-        private TabControl _tabs;
+        private SHTabs _tabs;
+        private SHHeader _header;
+        private SHGauge _gaugePing, _gaugeRoute, _gaugeTunnel;
+        private SHProgress _runProgress;
         private ComboBox _versionCombo;
         private ComboBox _serverCombo;
         private TextBox _nicknameBox;
@@ -84,7 +87,11 @@ namespace ServerHelp.Ui
             // Subscribed once: subscribing inside every run would add the same row twice.
             _pipeline.StepChanged += delegate (PipelineStep step)
             {
-                Ui(delegate { AddStepRow(step.Title, step.StateTextFa, step.Detail, step.State); });
+                Ui(delegate
+                {
+                    AddStepRow(step.Title, step.StateTextFa, step.Detail, step.State);
+                    UpdateHeaderPills();
+                });
             };
             _pipeline.Progress += delegate (string message) { Ui(delegate { SetStatus(message); }); };
             _pipeline.Finished += delegate (LaunchReport report) { Ui(delegate { OnPipelineFinished(report); }); };
@@ -99,38 +106,25 @@ namespace ServerHelp.Ui
             RightToLeft = rtl ? RightToLeft.Yes : RightToLeft.No;
             RightToLeftLayout = rtl;
             Font = UiKit.UiFont(9.75f, false);
-            Text = L.T("Server Help — راهنمای سرور ماینکرفت", "Server Help — Minecraft server helper");
-            BackColor = Color.FromArgb(245, 246, 248);
+            Text = L.T("Server Help — دستیار سرور ماینکرفت", "Server Help — Minecraft server helper");
+            BackColor = Theme.Background;
 
             while (Controls.Count > 0) Controls[0].Dispose();
 
             // Docking works out when the Fill control is added first, then the Top/Bottom ones.
-            _tabs = new TabControl();
+            _tabs = new SHTabs();
             _tabs.Dock = DockStyle.Fill;
             Controls.Add(_tabs);
 
-            var header = new Panel();
-            header.Dock = DockStyle.Top;
-            header.Height = 74;
-            header.BackColor = Color.FromArgb(24, 32, 44);
-            Controls.Add(header);
-
-            var title = new Label();
-            title.Text = L.T("Server Help", "Server Help");
-            title.ForeColor = Color.White;
-            title.Font = UiKit.UiFont(17f, true);
-            title.AutoSize = true;
-            title.Location = new Point(20, 12);
-            header.Controls.Add(title);
-
-            _bannerLabel = new Label();
-            _bannerLabel.Text = L.T("اتصال به سرور، تونل با کمترین پینگ، و بهینه‌سازی سیستم — در یک کلیک",
-                                    "Connect, tunnel with the lowest ping, and tune the system — in one click");
-            _bannerLabel.ForeColor = Color.FromArgb(190, 200, 215);
-            _bannerLabel.Font = UiKit.UiFont(9.5f, false);
-            _bannerLabel.AutoSize = true;
-            _bannerLabel.Location = new Point(22, 44);
-            header.Controls.Add(_bannerLabel);
+            _header = new SHHeader();
+            _header.Title = "Server Help";
+            _header.Subtitle = L.T("شبکه را تشخیص می‌دهد، کم‌پینگ‌ترین مسیر را می‌سازد، سیستم را بهینه می‌کند و بازی را اجرا می‌کند",
+                                   "detects the network, builds the lowest ping route, tunes the system and launches the game");
+            _header.Right1 = L.T("شبکه: بررسی نشده", "network: unchecked");
+            _header.Right1Color = Theme.Warn;
+            _header.Right2 = L.T("تونل: خاموش", "tunnel: off");
+            _header.Right2Color = Theme.SubText;
+            Controls.Add(_header);
 
             _tabs.TabPages.Add(BuildHomeTab());
             _tabs.TabPages.Add(BuildServersTab());
@@ -141,33 +135,122 @@ namespace ServerHelp.Ui
             _tabs.TabPages.Add(BuildSettingsTab());
             _tabs.TabPages.Add(BuildLogTab());
 
-            var footer = new Panel();
+            var footer = new SHPanel();
             footer.Dock = DockStyle.Bottom;
-            footer.Height = 30;
-            footer.BackColor = Color.FromArgb(232, 234, 238);
+            footer.Height = 34;
+            footer.Radius = 0;
+            footer.ShowStripe = false;
+            footer.Padding = new Padding(10, 0, 10, 0);
+            footer.BackColor = Color.FromArgb(0xFA, 0xFB, 0xFD);
             Controls.Add(footer);
             footer.BringToFront();
 
             _statusLabel = new Label();
             _statusLabel.Text = L.T("آماده", "ready");
             _statusLabel.AutoSize = true;
-            _statusLabel.Location = new Point(10, 7);
+            _statusLabel.ForeColor = Theme.SubText;
+            _statusLabel.Location = new Point(12, 9);
             footer.Controls.Add(_statusLabel);
 
             _pingLabel = new Label();
             _pingLabel.AutoSize = true;
-            _pingLabel.Location = new Point(420, 7);
+            _pingLabel.ForeColor = Theme.SubText;
+            _pingLabel.Location = new Point(430, 9);
             footer.Controls.Add(_pingLabel);
 
             _timerLabel = new Label();
             _timerLabel.AutoSize = true;
-            _timerLabel.Location = new Point(700, 7);
+            _timerLabel.ForeColor = Theme.SubText;
+            _timerLabel.Location = new Point(710, 9);
             footer.Controls.Add(_timerLabel);
 
             ResumeLayout(true);
             RefreshVersions();
             RefreshServerList();
             RefreshConnections();
+            Theme.Apply(this);
+            UpdateHeaderPills();
+        }
+
+        /// <summary>Keeps the chips in the header honest about the current state.</summary>
+        private void UpdateHeaderPills()
+        {
+            if (_header == null) return;
+            LaunchReport report = _pipeline.Report;
+            bool checkedNetwork = report.Strategy.Length > 0;
+
+            string network;
+            Color networkColor;
+            if (!checkedNetwork)
+            {
+                network = L.T("شبکه: بررسی نشده", "network: unchecked");
+                networkColor = Theme.Warn;
+            }
+            else if (report.Strategy == "direct")
+            {
+                network = L.T("شبکه: مسیر مستقیم سالم", "network: direct works") +
+                          (report.DirectPing > 0 ? " • " + report.DirectPing + " ms" : "");
+                networkColor = Theme.Good;
+            }
+            else
+            {
+                network = L.T("شبکه: مسیر مستقیم فیلتر شده", "network: direct is filtered") +
+                          (report.DirectPing > 0 ? " • " + report.DirectPing + " ms" : "");
+                networkColor = Theme.Info;
+            }
+
+            string tunnel = report.TunnelUp
+                ? L.T("تونل: فعال", "tunnel: up") +
+                  (report.ConnectionUsed.Length > 0 ? " • " + report.ConnectionUsed : "") +
+                  (report.TunnelPing > 0 ? " • " + report.TunnelPing + " ms" : "")
+                : L.T("تونل: خاموش", "tunnel: off");
+
+            _header.Right1 = network;
+            _header.Right1Color = networkColor;
+            _header.Right2 = tunnel;
+            _header.Right2Color = report.TunnelUp ? Theme.Good : Theme.SubText;
+            _header.Invalidate();
+
+            if (_gaugePing != null)
+            {
+                int ping = report.TunnelPing > 0 ? report.TunnelPing : report.DirectPing;
+                _gaugePing.Unknown = ping <= 0;
+                _gaugePing.Unit = "ms";
+                _gaugePing.Caption = report.TunnelPing > 0 ? L.T("پینگ از داخل تونل", "ping inside the tunnel")
+                                                           : L.T("پینگ سرور بازی", "game server ping");
+                _gaugePing.Note = ping > 0 ? (ping < 120 ? L.T("عالی", "great") : (ping < 220 ? L.T("قابل قبول", "fine") : L.T("بالا", "high"))) : "";
+                _gaugePing.RingColor = ping <= 0 ? Theme.SubText : (ping < 120 ? Theme.Good : (ping < 220 ? Theme.Warn : Theme.Bad));
+                _gaugePing.Value = ping <= 0 ? 0f : Math.Max(0.05f, Math.Min(1f, 1f - Math.Min(400, ping) / 400f));
+                _gaugePing.Invalidate();
+            }
+
+            if (_gaugeRoute != null)
+            {
+                string route = report.Strategy.Length == 0 ? "—" : report.Strategy;
+                _gaugeRoute.Unit = route;
+                _gaugeRoute.Caption = L.T("مسیر انتخابی", "chosen route");
+                _gaugeRoute.Unknown = report.Strategy.Length == 0;
+                _gaugeRoute.Value = report.Strategy == "direct" ? 1f
+                                  : (report.Strategy == "none" ? 0.15f : 0.75f);
+                _gaugeRoute.RingColor = report.Strategy == "direct" ? Theme.Good : Theme.Info;
+                _gaugeRoute.Note = report.ConnectionUsed.Length > 0
+                    ? report.ConnectionUsed + (report.ConnectionDelayMs > 0 ? " • " + report.ConnectionDelayMs + " ms" : "")
+                    : "";
+                _gaugeRoute.Invalidate();
+            }
+
+            if (_gaugeTunnel != null)
+            {
+                _gaugeTunnel.Unknown = !report.TunnelUp;
+                _gaugeTunnel.Caption = L.T("تونل", "tunnel");
+                _gaugeTunnel.Unit = report.TunnelUp
+                    ? (report.ProxyOnlyMode ? L.T("پروکسی محلی", "local proxy") : "TUN")
+                    : L.T("خاموش", "off");
+                _gaugeTunnel.Value = report.TunnelUp ? 1f : 0f;
+                _gaugeTunnel.RingColor = report.TunnelUp ? Theme.Good : Theme.SubText;
+                _gaugeTunnel.Note = report.HostsApplied ? L.T("hosts ثبت شده", "hosts pinned") : "";
+                _gaugeTunnel.Invalidate();
+            }
         }
 
         private TabPage BuildConnectionsTab()
@@ -175,7 +258,7 @@ namespace ServerHelp.Ui
             var page = new TabPage(L.T("اتصالات", "Connections"));
             page.Padding = new Padding(12);
 
-            var card = UiKit.Card();
+            var card = new SHPanel();
             card.Dock = DockStyle.Fill;
 
             var buttons = new FlowLayoutPanel();
@@ -213,7 +296,20 @@ namespace ServerHelp.Ui
             buttons.Controls.Add(import);
             buttons.Controls.Add(up);
             buttons.Controls.Add(down);
+            var duplicate = new Button(); duplicate.Text = L.T("کپی", "Duplicate"); duplicate.Width = 90;
+            duplicate.Click += delegate { DuplicateConnection(); };
+            var sort = new Button(); sort.Text = L.T("ترتیب: تأخیر", "Sort: delay"); sort.Width = 130;
+            sort.Click += delegate { SortConnectionsByDelay(); };
+            var export = new Button(); export.Text = L.T("ذخیره در فایل", "Save to file"); export.Width = 140;
+            export.Click += delegate { ExportConnections(); };
+            var importFile = new Button(); importFile.Text = L.T("خواندن از فایل", "Load from file"); importFile.Width = 150;
+            importFile.Click += delegate { LoadConnectionsFromFile(); };
+
             buttons.Controls.Add(clean);
+            buttons.Controls.Add(duplicate);
+            buttons.Controls.Add(sort);
+            buttons.Controls.Add(export);
+            buttons.Controls.Add(importFile);
             card.Controls.Add(buttons);
 
             // second row: the Telegram side of things, because an MTProxy needs its own tools
@@ -324,6 +420,7 @@ namespace ServerHelp.Ui
             _connectionList.Columns.Add(L.T("مقصد", "Target"), 230);
             _connectionList.Columns.Add(L.T("تأخیر", "Delay"), 80);
             _connectionList.Columns.Add(L.T("وضعیت", "Status"), 240);
+            _connectionList.Columns.Add(L.T("آخرین تست", "Last test"), 110);
             _connectionList.Columns.Add(L.T("فعال", "On"), 60);
             _connectionList.DoubleClick += delegate { EditConnection(SelectedConnection()); };
             card.Controls.Add(_connectionList);
@@ -338,28 +435,29 @@ namespace ServerHelp.Ui
             var page = new TabPage(L.T("خانه و اجرا", "Home & Play"));
             page.Padding = new Padding(12);
 
-            var top = UiKit.Card();
+            var top = new SHPanel();
             top.Dock = DockStyle.Top;
-            top.Height = 214;
+            top.Height = 250;
+            top.Title = L.T("خانه و اجرا", "Home and play");
 
             var lblServer = UiKit.Sub(L.T("سرور:", "Server:"));
-            lblServer.Location = new Point(12, 12);
+            lblServer.Location = new Point(12, 40);
             top.Controls.Add(lblServer);
 
             _serverCombo = new ComboBox();
             _serverCombo.DropDownStyle = ComboBoxStyle.DropDownList;
-            _serverCombo.Location = new Point(12, 32);
+            _serverCombo.Location = new Point(12, 60);
             _serverCombo.Width = 300;
             _serverCombo.SelectedIndexChanged += delegate { if (_serverCombo.SelectedIndex >= 0) SelectServer(_serverCombo.SelectedIndex); };
             top.Controls.Add(_serverCombo);
 
             var lblVersion = UiKit.Sub(L.T("نسخه ماینکرفت:", "Minecraft version:"));
-            lblVersion.Location = new Point(330, 12);
+            lblVersion.Location = new Point(330, 40);
             top.Controls.Add(lblVersion);
 
             _versionCombo = new ComboBox();
             _versionCombo.DropDownStyle = ComboBoxStyle.DropDownList;
-            _versionCombo.Location = new Point(330, 32);
+            _versionCombo.Location = new Point(330, 60);
             _versionCombo.Width = 280;
             top.Controls.Add(_versionCombo);
 
@@ -367,30 +465,62 @@ namespace ServerHelp.Ui
             checkButton.Text = L.T("بررسی سرور", "Check server");
             checkButton.Height = 30;
             checkButton.Width = 150;
-            checkButton.Location = new Point(630, 30);
+            checkButton.Location = new Point(630, 58);
             checkButton.Click += delegate { CheckServerAsync(); };
             top.Controls.Add(checkButton);
 
+            // the three dials: ping, chosen route, tunnel state
+            _gaugePing = new SHGauge();
+            _gaugePing.Location = new Point(12, 100);
+            _gaugePing.Size = new Size(140, 140);
+            _gaugePing.Unknown = true;
+            _gaugePing.Unit = "ms";
+            _gaugePing.Caption = L.T("پینگ سرور بازی", "game server ping");
+            top.Controls.Add(_gaugePing);
+
+            _gaugeRoute = new SHGauge();
+            _gaugeRoute.Location = new Point(158, 100);
+            _gaugeRoute.Size = new Size(140, 140);
+            _gaugeRoute.Unknown = true;
+            _gaugeRoute.Unit = "—";
+            _gaugeRoute.Caption = L.T("مسیر انتخابی", "chosen route");
+            _gaugeRoute.RingColor = Theme.Info;
+            top.Controls.Add(_gaugeRoute);
+
+            _gaugeTunnel = new SHGauge();
+            _gaugeTunnel.Location = new Point(304, 100);
+            _gaugeTunnel.Size = new Size(140, 140);
+            _gaugeTunnel.Unknown = true;
+            _gaugeTunnel.Unit = L.T("خاموش", "off");
+            _gaugeTunnel.Caption = L.T("تونل", "tunnel");
+            top.Controls.Add(_gaugeTunnel);
+
+            _runProgress = new SHProgress();
+            _runProgress.Location = new Point(456, 104);
+            _runProgress.Width = 500;
+            _runProgress.Height = 40;
+            _runProgress.Caption = L.T("آماده — دکمه اجرا را بزنید", "ready - press play");
+            _runProgress.BarColor = Theme.Accent;
+            top.Controls.Add(_runProgress);
+
             var lblNick = UiKit.Sub(L.T("نام بازیکن (آفلاین):", "Player name (offline):"));
-            lblNick.Location = new Point(12, 72);
+            lblNick.Location = new Point(456, 150);
             top.Controls.Add(lblNick);
 
             _nicknameBox = new TextBox();
-            _nicknameBox.Location = new Point(12, 92);
+            _nicknameBox.Location = new Point(456, 170);
             _nicknameBox.Width = 300;
             _nicknameBox.Text = _settings.Nickname;
             _nicknameBox.TextChanged += delegate { _settings.Nickname = _nicknameBox.Text.Trim(); };
             top.Controls.Add(_nicknameBox);
 
-            _playButton = new Button();
+            _playButton = new SHButton();
             _playButton.Text = L.T("بهینه‌سازی و اجرای بازی", "Optimise and play");
-            _playButton.Font = UiKit.UiFont(11f, true);
+            _playButton.Accent = true;
+            _playButton.Font = UiKit.UiFont(11.5f, true);
             _playButton.Height = 46;
             _playButton.Width = 300;
-            _playButton.Location = new Point(630, 84);
-            _playButton.BackColor = Color.FromArgb(46, 160, 67);
-            _playButton.ForeColor = Color.White;
-            _playButton.FlatStyle = FlatStyle.Flat;
+            _playButton.Location = new Point(780, 166);
             _playButton.Click += delegate { StartPipeline(); };
             top.Controls.Add(_playButton);
 
@@ -398,7 +528,7 @@ namespace ServerHelp.Ui
             _stopButton.Text = L.T("توقف و بازگردانی", "Stop and restore");
             _stopButton.Height = 30;
             _stopButton.Width = 150;
-            _stopButton.Location = new Point(12, 132);
+            _stopButton.Location = new Point(456, 202);
             _stopButton.Enabled = false;
             _stopButton.Click += delegate { StopEverything(); };
             top.Controls.Add(_stopButton);
@@ -407,12 +537,13 @@ namespace ServerHelp.Ui
             _serverInfoLabel.AutoSize = false;
             _serverInfoLabel.Width = 920;
             _serverInfoLabel.Height = 42;
-            _serverInfoLabel.Location = new Point(12, 168);
+            _serverInfoLabel.Location = new Point(600, 202);
             _serverInfoLabel.Text = "—";
             top.Controls.Add(_serverInfoLabel);
 
-            var steps = UiKit.Card();
+            var steps = new SHPanel();
             steps.Dock = DockStyle.Fill;
+            steps.Title = L.T("مراحل (کمتر از یک دقیقه)", "steps (under one minute)");
 
             _stepList = new ListView();
             _stepList.Dock = DockStyle.Fill;
@@ -434,7 +565,7 @@ namespace ServerHelp.Ui
             var page = new TabPage(L.T("سرورها", "Servers"));
             page.Padding = new Padding(12);
 
-            var card = UiKit.Card();
+            var card = new SHPanel();
             card.Dock = DockStyle.Fill;
 
             _serverList = new ListView();
@@ -485,7 +616,7 @@ namespace ServerHelp.Ui
             var page = new TabPage(L.T("شبکه و تونل", "Network & tunnel"));
             page.Padding = new Padding(12);
 
-            var card = UiKit.Card();
+            var card = new SHPanel();
             card.Dock = DockStyle.Fill;
 
             var buttons = new FlowLayoutPanel();
@@ -537,7 +668,7 @@ namespace ServerHelp.Ui
             var page = new TabPage(L.T("بهینه‌سازی", "Optimisation"));
             page.Padding = new Padding(12);
 
-            var card = UiKit.Card();
+            var card = new SHPanel();
             card.Dock = DockStyle.Fill;
 
             var panel = new FlowLayoutPanel();
@@ -642,7 +773,7 @@ namespace ServerHelp.Ui
             var page = new TabPage(L.T("نسخه‌ها", "Versions"));
             page.Padding = new Padding(12);
 
-            var card = UiKit.Card();
+            var card = new SHPanel();
             card.Dock = DockStyle.Fill;
 
             var top = new Panel();
@@ -717,7 +848,7 @@ namespace ServerHelp.Ui
             var page = new TabPage(L.T("تنظیمات", "Settings"));
             page.Padding = new Padding(12);
 
-            var card = UiKit.Card();
+            var card = new SHPanel();
             card.Dock = DockStyle.Fill;
 
             var panel = new FlowLayoutPanel();
@@ -805,7 +936,7 @@ namespace ServerHelp.Ui
             var page = new TabPage(L.T("گزارش", "Log"));
             page.Padding = new Padding(12);
 
-            var card = UiKit.Card();
+            var card = new SHPanel();
             card.Dock = DockStyle.Fill;
 
             _logBox = new TextBox();
@@ -912,6 +1043,14 @@ namespace ServerHelp.Ui
                 string text = L.T("زمان: ", "elapsed: ") + L.N(ms / 1000.0, 1) + L.T(" ثانیه از ", " s of ") + L.N(60) + L.T(" ثانیه", " s");
                 if (ms > LaunchPipeline.BudgetMs) text += "  ⚠ " + L.T("از بودجه یک‌دقیقه‌ای گذشت", "over the one minute budget");
                 _timerLabel.Text = text;
+                if (_runProgress != null)
+                {
+                    _runProgress.Value = Math.Min(1f, ms / (float)LaunchPipeline.BudgetMs);
+                    _runProgress.BarColor = ms > LaunchPipeline.BudgetMs ? Theme.Warn : Theme.Accent;
+                    if (_runProgress.Caption.Length == 0 || _runProgress.Caption.StartsWith("!"))
+                        _runProgress.Caption = text;
+                    _runProgress.Invalidate();
+                }
             }
             if (_pipeline.TunnelRunning)
             {
@@ -1031,6 +1170,7 @@ namespace ServerHelp.Ui
                 item.SubItems.Add(entry.Target);
                 item.SubItems.Add(entry.LastDelayMs > 0 ? entry.LastDelayMs + " ms" : "—");
                 item.SubItems.Add(string.IsNullOrEmpty(entry.LastStatus) ? L.T("تست نشده", "not tested") : entry.StatusText);
+                item.SubItems.Add(string.IsNullOrEmpty(entry.LastTestUtc) ? "—" : entry.LastTestUtc);
                 item.SubItems.Add(entry.Enabled ? L.T("بله", "yes") : L.T("خیر", "no"));
                 if (!entry.Enabled) item.ForeColor = Color.FromArgb(140, 140, 140);
                 else if (entry.LastDelayMs > 0) item.ForeColor = Color.FromArgb(24, 120, 50);
@@ -1046,7 +1186,7 @@ namespace ServerHelp.Ui
                     foreach (ConnectionEntry entry in _settings.Connections)
                     {
                         if (!entry.Enabled) continue;
-                        if (!entry.UseForGame && !entry.Info.IsResolver) continue;
+                        if (!entry.CanCarryGame) continue;      // DNS and TG proxies are never a game route
                         _pinCombo.Items.Add(entry.Name);
                     }
                     int index = 0;
@@ -1208,10 +1348,14 @@ namespace ServerHelp.Ui
 
             var thread = new Thread(delegate ()
             {
+                int done = 0;
                 foreach (ConnectionEntry entry in targets)
                 {
+                    done++;
                     ConnectionEntry local = entry;
-                    Ui(delegate { SetStatus(L.T("تست: ", "testing: ") + local.Name); });
+                    int index = done + 1;
+                    int total = targets.Count;
+                    Ui(delegate { SetStatus("(" + index + "/" + total + ") " + L.T("تست: ", "testing: ") + local.Name); });
                     ConnectionTestResult result = ConnectionTester.Test(local, host, port, timeout, false);
                     local.LastDelayMs = result.Ok ? result.DelayMs : -1;
                     local.LastStatus = result.Status;
@@ -1420,6 +1564,124 @@ namespace ServerHelp.Ui
             catch (Exception ex)
             {
                 SetStatus(L.T("کپی نشد: ", "could not copy: ") + ex.Message);
+            }
+        }
+
+        /// <summary>One more copy of the selected entry - handy when comparing two variants.</summary>
+        private void DuplicateConnection()
+        {
+            ConnectionEntry entry = SelectedConnection();
+            if (entry == null)
+            {
+                SetStatus(L.T("اول یک اتصال را انتخاب کنید", "select a connection first"));
+                return;
+            }
+            ConnectionEntry copy = entry.Clone();
+            copy.Id = ConnectionEntry.NewId();
+            string name = entry.Name + " (2)";
+            int number = 2;
+            while (_settings.FindConnection(name) != null) name = entry.Name + " (" + (++number) + ")";
+            copy.Name = name;
+            copy.ForgetTest();
+            _settings.Connections.Add(copy);
+            SettingsStore.Save(_settings);
+            RefreshConnections();
+            SetStatus(L.T("کپی ساخته شد: ", "copied: ") + copy.Name);
+        }
+
+        /// <summary>Sorts the list by measured delay; entries that were never tested go last.</summary>
+        private void SortConnectionsByDelay()
+        {
+            var sorted = new List<ConnectionEntry>(_settings.Connections);
+            sorted.Sort(delegate (ConnectionEntry a, ConnectionEntry b)
+            {
+                int left = a.LastDelayMs > 0 ? a.LastDelayMs : int.MaxValue;
+                int right = b.LastDelayMs > 0 ? b.LastDelayMs : int.MaxValue;
+                if (left != right) return left.CompareTo(right);
+                return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+            });
+            _settings.Connections = sorted;
+            SettingsStore.Save(_settings);
+            RefreshConnections();
+            SetStatus(L.T("به ترتیب تأخیر مرتب شد", "sorted by delay"));
+        }
+
+        /// <summary>Saves every connection into one JSON file the user can keep or move to another PC.</summary>
+        private void ExportConnections()
+        {
+            if (_settings.Connections.Count == 0)
+            {
+                SetStatus(L.T("چیزی برای ذخیره نیست", "there is nothing to save"));
+                return;
+            }
+            using (var dialog = new SaveFileDialog())
+            {
+                dialog.Title = L.T("ذخیره اتصال‌ها", "Save connections");
+                dialog.Filter = "JSON (*.json)|*.json|" + L.T("همه فایل‌ها", "all files") + " (*.*)|*.*";
+                dialog.FileName = "serverhelp-connections.json";
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                try
+                {
+                    File.WriteAllText(dialog.FileName, ConnectionParser.SerializeList(_settings.Connections));
+                    SetStatus(L.T("ذخیره شد: ", "saved: ") + dialog.FileName);
+                    AppendLog("[connections] saved to " + dialog.FileName);
+                }
+                catch (Exception ex)
+                {
+                    SetStatus(L.T("ذخیره نشد: ", "could not save: ") + ex.Message);
+                }
+            }
+        }
+
+        /// <summary>Merges a saved file (or a pasted subscription in a text file) back in.</summary>
+        private void LoadConnectionsFromFile()
+        {
+            using (var dialog = new OpenFileDialog())
+            {
+                dialog.Title = L.T("خواندن اتصال‌ها از فایل", "Load connections from a file");
+                dialog.Filter = L.T("JSON یا متن", "JSON or text") + " (*.json;*.txt;*.conf)|*.json;*.txt;*.conf|" +
+                                L.T("همه فایل‌ها", "all files") + " (*.*)|*.*";
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                string text;
+                try { text = File.ReadAllText(dialog.FileName); }
+                catch (Exception ex)
+                {
+                    SetStatus(L.T("فایل خوانده نشد: ", "the file cannot be read: ") + ex.Message);
+                    return;
+                }
+
+                List<ConnectionEntry> loaded = null;
+                if (text.TrimStart().StartsWith("{"))
+                {
+                    string error;
+                    loaded = ConnectionParser.ParseListFile(text, out error);
+                    if (loaded.Count == 0)
+                    {
+                        SetStatus(L.T("فایل خوانده نشد: ", "the file cannot be read: ") + error);
+                        return;
+                    }
+                }
+                else
+                {
+                    List<string> problems;
+                    loaded = ConnectionParser.ParseBlob(text, out problems);
+                    foreach (string problem in problems) AppendLog("[connections] skipped: " + problem);
+                }
+
+                int added = 0;
+                foreach (ConnectionEntry entry in loaded)
+                {
+                    string name = entry.Name;
+                    int number = 2;
+                    while (_settings.FindConnection(name) != null) name = entry.Name + " " + (number++);
+                    entry.Name = name;
+                    entry.Id = ConnectionEntry.NewId();
+                    _settings.Connections.Add(entry);
+                    added++;
+                }
+                SettingsStore.Save(_settings);
+                RefreshConnections();
+                SetStatus(L.T("افزوده شد: ", "loaded: ") + L.N(added) + L.T(" اتصال", " connection(s)"));
             }
         }
 
@@ -1776,6 +2038,12 @@ namespace ServerHelp.Ui
         private void SetStatus(string text)
         {
             if (_statusLabel != null) _statusLabel.Text = text;
+            if (_runProgress != null && !string.IsNullOrEmpty(text))
+            {
+                _runProgress.Caption = text;
+                _runProgress.Invalidate();
+            }
+            if (_header != null) UpdateHeaderPills();
             AppendLog(text);
         }
 

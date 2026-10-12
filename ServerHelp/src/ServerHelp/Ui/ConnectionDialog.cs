@@ -178,6 +178,9 @@ namespace ServerHelp.Ui
             AcceptButton = _ok;
             CancelButton = cancel;
             OnKindChanged();
+            Theme.Apply(this);
+            Theme.StyleButton(_ok, true);
+            Theme.StyleButton(_test, false);
         }
 
         // ------------------------------------------------------------------ fields

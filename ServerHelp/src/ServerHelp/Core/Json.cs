@@ -352,6 +352,14 @@ namespace ServerHelp.Core
             return this;
         }
 
+        /// <summary>Writes a property name followed by a value the caller writes itself (array, object).</summary>
+        public JsonWriter PropName(string name)
+        {
+            Pre();
+            _sb.Append(Escape(name)).Append(':');
+            return this;
+        }
+
         public JsonWriter StartArray()
         {
             Pre();

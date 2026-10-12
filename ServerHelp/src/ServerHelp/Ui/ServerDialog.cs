@@ -99,6 +99,8 @@ namespace ServerHelp.Ui
             Controls.Add(cancel);
 
             AcceptButton = ok;
+            Theme.Apply(this);
+            Theme.StyleButton(ok, true);
             CancelButton = cancel;
         }
 

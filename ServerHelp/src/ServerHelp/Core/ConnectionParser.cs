@@ -16,26 +16,185 @@ namespace ServerHelp.Core
         /// <summary>Parses a whole text block; unparsable lines land in <paramref name="errors"/>.</summary>
         public static List<ConnectionEntry> ParseMany(string text, out List<string> errors)
         {
-            errors = new List<string>();
-            var result = new List<ConnectionEntry>();
-            if (string.IsNullOrEmpty(text)) return result;
+            return ParseBlob(text, out errors);
+        }
 
-            foreach (string rawLine in text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n'))
+        /// <summary>
+        /// Reads a whole blob: one entry per line, a multi line sing-box/WireGuard config, or a
+        /// base64 subscription (the format every proxy seller hands out). Every failed line is
+        /// reported instead of being dropped silently.
+        /// </summary>
+        public static List<ConnectionEntry> ParseBlob(string text, out List<string> problems)
+        {
+            var entries = new List<ConnectionEntry>();
+            problems = new List<string>();
+            if (string.IsNullOrEmpty(text)) return entries;
+
+            string cleaned = text.Replace("\r\n", "\n").Replace("\r", "\n").Trim();
+            if (cleaned.Length == 0) return entries;
+
+            // a subscription is one big base64 blob
+            string decoded = TryDecodeBase64Blob(cleaned);
+            if (decoded != null) cleaned = decoded;
+
+            var lines = new List<string>(cleaned.Split('\n'));
+            var buffer = new List<string>();
+            int depth = 0;
+
+            foreach (string rawLine in lines)
             {
                 string line = rawLine.Trim();
-                if (line.Length == 0) continue;
-                if (line.StartsWith("#") || line.StartsWith("//")) continue;
-
-                string error;
-                ConnectionEntry entry = ParseLine(line, out error);
-                if (entry == null)
+                if (line.Length == 0)
                 {
-                    if (!string.IsNullOrEmpty(error)) errors.Add(error);
+                    if (buffer.Count > 0) Flush(buffer, entries, problems);
                     continue;
                 }
-                result.Add(entry);
+                if (line.StartsWith("#") || line.StartsWith("//")) continue;
+
+                bool startsJson = line.StartsWith("{");
+                bool startsIni = line.Equals("[Interface]", StringComparison.OrdinalIgnoreCase);
+                bool startsEntry = LooksLikeNewEntry(line);
+
+                if (buffer.Count == 0)
+                {
+                    if (startsJson || startsIni)
+                    {
+                        buffer.Add(line);
+                        depth += CountBraces(line);
+                        if (startsJson && depth <= 0) Flush(buffer, entries, problems);
+                        continue;
+                    }
+                    ConnectionEntry single = ParseLine(line, out string error);
+                    if (single != null) entries.Add(single);
+                    else if (error.Length > 0) problems.Add(Trim(line, 40) + " — " + error);
+                    continue;
+                }
+
+                // we are inside a multi line block
+                bool inJson = buffer[0].StartsWith("{");
+                if (startsEntry && !inJson && !startsIni)
+                {
+                    Flush(buffer, entries, problems);           // the ini ended, a new entry began
+                    ConnectionEntry single = ParseLine(line, out string error);
+                    if (single != null) entries.Add(single);
+                    else if (error.Length > 0) problems.Add(Trim(line, 40) + " — " + error);
+                    continue;
+                }
+
+                buffer.Add(line);
+                if (inJson)
+                {
+                    depth += CountBraces(line);
+                    if (depth <= 0) Flush(buffer, entries, problems);
+                }
             }
-            return result;
+            if (buffer.Count > 0) Flush(buffer, entries, problems);
+
+            if (entries.Count == 0 && problems.Count == 0)
+                problems.Add(L.T("چیزی برای افزودن پیدا نشد", "nothing could be imported"));
+            return entries;
+        }
+
+        /// <summary>Crosses the line out as "a new entry starts here" (share link, URI, host:port).</summary>
+        private static bool LooksLikeNewEntry(string line)
+        {
+            if (line.StartsWith("tg://") || line.StartsWith("mtproto://") || line.StartsWith("wireguard://")) return true;
+            if (line.StartsWith("vless://") || line.StartsWith("vmess://") || line.StartsWith("trojan://") ||
+                line.StartsWith("ss://") || line.StartsWith("hysteria2://") || line.StartsWith("hy2://") ||
+                line.StartsWith("tuic://") || line.StartsWith("socks5://") || line.StartsWith("socks://")) return true;
+            if (line.StartsWith("http://") || line.StartsWith("https://")) return true;
+            if (line.IndexOf('=') >= 0) return false;              // key = value, part of an ini
+            return false;
+        }
+
+        private static int CountBraces(string line)
+        {
+            int open = 0, close = 0;
+            for (int i = 0; i < line.Length; i++)
+            {
+                if (line[i] == '{') open++;
+                else if (line[i] == '}') close++;
+            }
+            return open - close;
+        }
+
+        private static void Flush(List<string> buffer, List<ConnectionEntry> entries, List<string> problems)
+        {
+            string block = string.Join("\n", buffer.ToArray());
+            buffer.Clear();
+            if (block.Trim().Length == 0) return;
+            ConnectionEntry entry = ParseLine(block, out string error);
+            if (entry != null) entries.Add(entry);
+            else if (error.Length > 0) problems.Add(Trim(block, 40) + " — " + error);
+        }
+
+        // ------------------------------------------------------------------ files
+
+        /// <summary>Writes the whole list to a JSON file the app can read back on another machine.</summary>
+        public static string SerializeList(List<ConnectionEntry> entries)
+        {
+            var writer = new JsonWriter(true);
+            writer.StartObject();
+            writer.Prop("app", "ServerHelp");
+            writer.Prop("version", 1);
+            writer.Prop("saved", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+            writer.PropName("connections");
+            writer.StartArray();
+            foreach (ConnectionEntry entry in entries) entry.WriteTo(writer);
+            writer.EndArray();
+            writer.EndObject();
+            return writer.ToString();
+        }
+
+        public static List<ConnectionEntry> ParseListFile(string json, out string error)
+        {
+            error = "";
+            var list = new List<ConnectionEntry>();
+            try
+            {
+                Dictionary<string, object> root = Json.ParseObject(json);
+                if (root == null) { error = L.T("فایل JSON خوانده نشد", "the JSON file cannot be read"); return list; }
+                object raw = Json.Get(root, "connections");
+                List<object> array = Json.Arr(raw);
+                if (array == null) { error = L.T("کلید connections در فایل نیست", "the file has no connections key"); return list; }
+                foreach (object item in array)
+                {
+                    ConnectionEntry entry = ConnectionEntry.Read(Json.Obj(item));
+                    if (entry != null) list.Add(entry);
+                }
+                if (list.Count == 0) error = L.T("فایل خالی است", "the file is empty");
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+            }
+            return list;
+        }
+
+        /// <summary>Subscriptions are base64; returns the decoded text or null when it is not one.</summary>
+        public static string TryDecodeBase64Blob(string text)
+        {
+            string compact = text.Replace(" ", "").Replace("\n", "").Replace("\t", "").Replace("-", "+").Replace("_", "/");
+            if (compact.Length < 32) return null;
+            bool looksBase64 = true;
+            for (int i = 0; i < compact.Length; i++)
+            {
+                char c = compact[i];
+                bool ok = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '+' || c == '/' || c == '=';
+                if (!ok) { looksBase64 = false; break; }
+            }
+            if (!looksBase64) return null;
+            try
+            {
+                while (compact.Length % 4 != 0) compact += "=";
+                byte[] bytes = Convert.FromBase64String(compact);
+                string decoded = System.Text.Encoding.UTF8.GetString(bytes);
+                // only treat it as a subscription when the result really holds links or JSON
+                if (decoded.Contains("://") || decoded.Contains("[Interface]") || decoded.Contains("outbounds"))
+                    return decoded;
+                return null;
+            }
+            catch { return null; }
         }
 
         /// <summary>A single line. Never throws: the reason lands in <paramref name="error"/>.</summary>
