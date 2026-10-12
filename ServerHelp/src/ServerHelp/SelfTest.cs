@@ -26,25 +26,36 @@ namespace ServerHelp
             Console.WriteLine("Server Help self test");
             output.Add("Server Help self test");
 
-            // the engine travels inside the exe, exactly as it does for a user; unpack it first so
-            // the configurations can be validated by the real thing
-            var runner = new SingBoxRunner();
-            string engineError;
-            runner.EnsureBinaries(false, null, out engineError);
-            Console.WriteLine("engine: " + (File.Exists(AppPaths.SingBoxExe) ? AppPaths.SingBoxExe : "MISSING - " + engineError));
-            Console.WriteLine();
+            try
+            {
+                AppPaths.EnsureAll();
 
-            // ---- 1. the connection parser: every shape a user can paste
-            CheckParser(failures, passes);
+                // the engine travels inside the exe, exactly as it does for a user; unpack it first
+                // so the configurations can be validated by the real thing
+                var runner = new SingBoxRunner();
+                string engineError;
+                runner.EnsureBinaries(false, null, out engineError);
+                string engine = File.Exists(AppPaths.SingBoxExe) ? AppPaths.SingBoxExe : "MISSING - " + engineError;
+                Console.WriteLine("engine: " + engine);
+                output.Add("engine: " + engine);
+                output.Add("");
 
-            // ---- 2. an OpenVPN profile: parsing and the endpoint it turns into
-            CheckOvpn(failures, passes);
-
-            // ---- 3. every tunnel configuration, validated by the engine itself
-            CheckConfigs(failures, passes);
-
-            // ---- 4. the route optimiser plans chains sensibly
-            CheckOptimizer(failures, passes);
+                RunChecks(failures, passes);
+            }
+            catch (Exception ex)
+            {
+                // a self test that crashes must still say why: a build failure with no message is
+                // worse than no self test at all
+                failures.Add("the self test itself failed: " + ex.GetType().Name + " " + ex.Message);
+                int line = 0;
+                try
+                {
+                    var frame = new System.Diagnostics.StackTrace(ex, true).GetFrame(1);
+                    if (frame != null) line = frame.GetFileLineNumber();
+                }
+                catch { }
+                failures.Add("at line " + line);
+            }
 
             output.Add("");
             foreach (string line in passes) output.Add("  ok    " + line);
@@ -65,6 +76,21 @@ namespace ServerHelp
                 Console.WriteLine(line);
             }
             return failures.Count == 0 ? 0 : 1;
+        }
+
+        /// <summary>Every check, with each group guarded so one broken check cannot hide the rest.</summary>
+        private static void RunChecks(List<string> failures, List<string> passes)
+        {
+            Guard("the connection parser", failures, delegate { CheckParser(failures, passes); });
+            Guard("the OpenVPN profile", failures, delegate { CheckOvpn(failures, passes); });
+            Guard("the generated tunnel configurations", failures, delegate { CheckConfigs(failures, passes); });
+            Guard("the route optimiser", failures, delegate { CheckOptimizer(failures, passes); });
+        }
+
+        private static void Guard(string what, List<string> failures, Action body)
+        {
+            try { body(); }
+            catch (Exception ex) { failures.Add(what + " threw " + ex.GetType().Name + ": " + ex.Message); }
         }
 
         private static void Expect(bool condition, string what, List<string> failures, List<string> passes)

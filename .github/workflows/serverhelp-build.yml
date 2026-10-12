@@ -121,6 +121,8 @@ jobs:
 
       - name: Self test the generated tunnel configurations
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # The app writes every configuration it can produce (plain proxy, two hop relay, OpenVPN
         # with the pushed resolvers, DNS only mode) and lets the bundled engine validate them.
         # A schema mistake must break the build here, not on a user's machine mid game.
@@ -143,7 +145,15 @@ jobs:
           $report | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
           # every failure becomes an annotation, so it is readable from the run page and the API
           $report | Where-Object { $_ -match 'FAIL' } | ForEach-Object { Write-Output "::error::$_" }
-          if ($code -ne 0) { throw "self test failed with exit code $code" }
+          if ($code -ne 0) {
+            # the report is also posted as a commit comment: a build failure has to be readable
+            # from the API, not only from a job log
+            $body = ($report -join "`n")
+            $body | Out-File -Encoding utf8 "$env:RUNNER_TEMP\selftest-body.md"
+            gh api --method POST "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" `
+              -f body="Server Help self test failed:`n`n``````n$body`n``````" | Out-Null
+            throw "self test failed with exit code $code"
+          }
 
       - name: Collect artefact
         shell: pwsh
