@@ -40,6 +40,8 @@ namespace ServerHelp.Core
                 Log.Open();
                 Log.Info("=== Server Help starting (v" + Version() + ", " + (IsAdmin() ? "admin" : "user") + ") ===");
                 Log.Info("data folder: " + AppPaths.Data);
+                int swept = AppPaths.CleanCache();
+                if (swept > 0) Log.Info("cache: removed " + swept + " leftover file(s) from an earlier run");
                 Log.FlushPending();
 
                 var settings = SettingsStore.Load();

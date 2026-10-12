@@ -49,6 +49,38 @@ namespace ServerHelp.Core
             }
         }
 
+        /// <summary>
+        /// Removes throwaway files earlier runs left in the cache folder: a check copy written just
+        /// before the machine was switched off, or by a version that did not clean up after itself.
+        /// Only files this app created there are touched, and only ones older than an hour, so a
+        /// second copy of the app that is measuring something right now keeps its own files.
+        /// </summary>
+        public static int CleanCache()
+        {
+            int removed = 0;
+            string[] patterns = new string[] { "probe-*.json", "download-*.zip" };
+            try
+            {
+                if (!Directory.Exists(Cache)) return 0;
+                DateTime cutoff = DateTime.Now.AddHours(-1);
+                foreach (string pattern in patterns)
+                {
+                    foreach (string path in Directory.GetFiles(Cache, pattern))
+                    {
+                        try
+                        {
+                            if (File.GetLastWriteTime(path) > cutoff) continue;
+                            File.Delete(path);
+                            removed++;
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch { }
+            return removed;
+        }
+
         public static void EnsureAll()
         {
             Directory.CreateDirectory(Data);

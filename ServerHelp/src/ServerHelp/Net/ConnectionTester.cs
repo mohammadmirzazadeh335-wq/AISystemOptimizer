@@ -441,15 +441,22 @@ namespace ServerHelp.Net
             if (HasTunInbound(entry.Config))
             {
                 // Starting it would create a TUN interface, which is exactly what a *test* must not
-                // do, so only the configuration itself is verified here.
-                var check = Shell.Run(AppPaths.SingBoxExe, "check -c " + Shell.Quote(WriteTempConfig(entry.Config)), 20000);
-                result.Ok = check.Ok;
-                result.Status = check.Ok ? L.T("کانفیگ معتبر (TUN)", "valid config (TUN)") : L.T("کانفیگ نامعتبر", "invalid config");
-                result.Detail = check.Ok
-                    ? L.T("این کانفیگ اینترفیس TUN می‌سازد، پس در تست اجرا نشد تا مسیرهای ویندوز دست‌نخورده بماند؛ هنگام بازی خودش بالا می‌آید.",
-                          "this config creates a TUN interface, so it was not started during the test to keep the Windows routing untouched; it comes up when you play.")
-                    : Shorten(check.All);
-                return result;
+                // do, so only the configuration itself is verified here. The copy that check runs on
+                // is thrown away again: a user's configuration carries their proxies and passwords,
+                // and a test must not leave a second copy of that lying in the cache folder.
+                string checkPath = WriteTempConfig(entry.Config);
+                try
+                {
+                    var check = Shell.Run(AppPaths.SingBoxExe, "check -c " + Shell.Quote(checkPath), 20000);
+                    result.Ok = check.Ok;
+                    result.Status = check.Ok ? L.T("کانفیگ معتبر (TUN)", "valid config (TUN)") : L.T("کانفیگ نامعتبر", "invalid config");
+                    result.Detail = check.Ok
+                        ? L.T("این کانفیگ اینترفیس TUN می‌سازد، پس در تست اجرا نشد تا مسیرهای ویندوز دست‌نخورده بماند؛ هنگام بازی خودش بالا می‌آید.",
+                              "this config creates a TUN interface, so it was not started during the test to keep the Windows routing untouched; it comes up when you play.")
+                        : Shorten(check.All);
+                    return result;
+                }
+                finally { DeleteQuietly(checkPath); }
             }
 
             int port = ProbeTunnel.NextPort();
@@ -582,6 +589,21 @@ namespace ServerHelp.Net
                 return changed ? Json.Serialize(parsed) : configJson;
             }
             catch { return configJson; }
+        }
+
+        /// <summary>
+        /// Removes a throwaway file. The shared configuration is never touched: it is owned by the
+        /// launch pipeline, and that is also what WriteTempConfig falls back to when writing fails.
+        /// </summary>
+        private static void DeleteQuietly(string path)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(path)) return;
+                if (string.Equals(path, AppPaths.SingBoxConfig, StringComparison.OrdinalIgnoreCase)) return;
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+            catch { }
         }
 
         private static string WriteTempConfig(string json)

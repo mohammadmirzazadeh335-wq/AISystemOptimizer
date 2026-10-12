@@ -93,6 +93,7 @@ namespace ServerHelp
             Guard("the launcher folder", failures, delegate { CheckVersions(failures, passes); });
             Guard("the launch report", failures, delegate { CheckReport(failures, passes); });
             Guard("the firewall rule lookup", failures, delegate { CheckFirewall(failures, passes); });
+            Guard("the cache sweep", failures, delegate { CheckCacheSweep(failures, passes); });
             Guard("the tester", failures, delegate { CheckTesterAnswers(failures, passes); });
             Guard("the subscription reader", failures, delegate { CheckSubscription(failures, passes); });
             Guard("the OpenVPN profile", failures, delegate { CheckOvpn(failures, passes); });
@@ -553,6 +554,34 @@ namespace ServerHelp
                    !FirewallHelper.SameProgram("Any", "C:\\X\\sing-box.exe") &&
                    !FirewallHelper.SameProgram("", ""),
                    "a rule counts as ours only when it points at our program", failures, passes);
+        }
+
+        /// <summary>
+        /// The cache sweep. A test writes a throwaway copy of the user's configuration; if the machine
+        /// is switched off in the middle of one, that copy stays. The sweep has to remove exactly those
+        /// and leave everything else - including a file another copy of the app is using right now.
+        /// </summary>
+        private static void CheckCacheSweep(List<string> failures, List<string> passes)
+        {
+            AppPaths.EnsureAll();
+            string stale = Path.Combine(AppPaths.Cache, "probe-check-selftest-old.json");
+            string fresh = Path.Combine(AppPaths.Cache, "probe-check-selftest-fresh.json");
+            try
+            {
+                File.WriteAllText(stale, "{}", new UTF8Encoding(false));
+                File.WriteAllText(fresh, "{}", new UTF8Encoding(false));
+                File.SetLastWriteTime(stale, DateTime.Now.AddHours(-3));
+                File.SetLastWriteTime(fresh, DateTime.Now);
+                int removed = AppPaths.CleanCache();
+                Expect(removed >= 1 && !File.Exists(stale) && File.Exists(fresh),
+                       "a check file left behind by an interrupted run is swept away, a fresh one is kept",
+                       failures, passes);
+            }
+            finally
+            {
+                try { if (File.Exists(stale)) File.Delete(stale); } catch { }
+                try { if (File.Exists(fresh)) File.Delete(fresh); } catch { }
+            }
         }
 
         /// <summary>The numbers a route is judged by, checked without touching the network.</summary>
