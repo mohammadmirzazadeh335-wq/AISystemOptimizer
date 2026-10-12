@@ -610,7 +610,7 @@ namespace ServerHelp.Ui
 
             var top = new SHPanel();
             top.Dock = DockStyle.Top;
-            top.Height = 350;
+            top.Height = 360;
             top.Title = L.T("خانه و اجرا", "Home and play");
 
             // Everything below is hand-placed, so the width it is placed against is worked out here and
@@ -671,16 +671,16 @@ namespace ServerHelp.Ui
 
             // the three dials: ping, chosen route, tunnel state
             _gaugePing = new SHGauge();
-            _gaugePing.Location = new Point(12, 198);
-            _gaugePing.Size = new Size(140, 140);
+            _gaugePing.Location = new Point(12, 200);
+            _gaugePing.Size = new Size(144, 150);   // ring + caption + note, all inside the control
             _gaugePing.Unknown = true;
             _gaugePing.Unit = "ms";
             _gaugePing.Caption = L.T("پینگ سرور بازی", "game server ping");
             top.Controls.Add(_gaugePing);
 
             _gaugeRoute = new SHGauge();
-            _gaugeRoute.Location = new Point(158, 198);
-            _gaugeRoute.Size = new Size(140, 140);
+            _gaugeRoute.Location = new Point(160, 200);
+            _gaugeRoute.Size = new Size(144, 150);
             _gaugeRoute.Unknown = true;
             _gaugeRoute.Unit = "—";
             _gaugeRoute.Caption = L.T("مسیر انتخابی", "chosen route");
@@ -688,8 +688,8 @@ namespace ServerHelp.Ui
             top.Controls.Add(_gaugeRoute);
 
             _gaugeTunnel = new SHGauge();
-            _gaugeTunnel.Location = new Point(304, 198);
-            _gaugeTunnel.Size = new Size(140, 140);
+            _gaugeTunnel.Location = new Point(308, 200);
+            _gaugeTunnel.Size = new Size(144, 150);
             _gaugeTunnel.Unknown = true;
             _gaugeTunnel.Unit = L.T("خاموش", "off");
             _gaugeTunnel.Caption = L.T("تونل", "tunnel");
@@ -721,7 +721,7 @@ namespace ServerHelp.Ui
             _playButton.Font = UiKit.UiFont(11.5f, true);
             _playButton.Height = 46;
             _playButton.Width = rightW;
-            _playButton.Location = new Point(rightX, 294);
+            _playButton.Location = new Point(rightX, 296);
             _playButton.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             _playButton.Click += delegate { StartPipeline(); };
             top.Controls.Add(_playButton);

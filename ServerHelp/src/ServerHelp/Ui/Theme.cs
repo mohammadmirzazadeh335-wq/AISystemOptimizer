@@ -71,6 +71,19 @@ namespace ServerHelp.Ui
         /// Walks the form once and gives every stock control the same skin. Cheap, safe, and it
         /// means the older dialogs inherit the new look without being rewritten.
         /// </summary>
+        /// <summary>
+        /// The screen's scaling factor, read once. Control.Scale stretches the bounds and the padding of
+        /// everything we build, but it knows nothing about the numbers the custom painting below uses -
+        /// so those go through S() and the two agree.
+        /// </summary>
+        public static readonly float Dpi = ScaleFactor();
+
+        /// <summary>A pixel offset from the 96 dpi design, on the screen's scale.</summary>
+        public static int S(int pixels)
+        {
+            return Dpi < 1.01f ? pixels : (int)Math.Round(pixels * Dpi);
+        }
+
         public static void Apply(Control root)
         {
             if (root == null) return;
@@ -376,11 +389,18 @@ namespace ServerHelp.Ui
             Theme.FillRounded(g, bounds, Radius, BackColor);
             Theme.DrawRounded(g, bounds, Radius, Theme.Border, 1f);
 
+            // the band the title sits in is Padding.Top, which Control.Scale has already stretched:
+            // the stripe and the text are centred in it rather than pinned to 96 dpi coordinates
+            int band = Padding.Top;
+            int stripeH = S(22);
+            int titleH = S(28);
+
             if (ShowStripe && _title.Length > 0)
             {
-                int stripeX = RightToLeft == RightToLeft.Yes ? Width - 5 : 1;
+                int stripeX = RightToLeft == RightToLeft.Yes ? Width - S(5) : S(1);
+                int stripeY = band > stripeH ? (band - stripeH) / 2 : S(8);
                 using (var brush = new SolidBrush(StripeColor))
-                    g.FillRectangle(brush, new Rectangle(stripeX, 8, 4, 22));
+                    g.FillRectangle(brush, new Rectangle(stripeX, stripeY, S(4), stripeH));
             }
 
             if (_title.Length > 0)
@@ -388,8 +408,10 @@ namespace ServerHelp.Ui
                 TextFormatFlags flags = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine |
                                         TextFormatFlags.EndEllipsis | TextFormatFlags.Left;
                 if (RightToLeft == RightToLeft.Yes) flags |= TextFormatFlags.RightToLeft | TextFormatFlags.Right;
+                int titleY = band > titleH ? (band - titleH) / 2 : S(6);
                 using (var font = Theme.Font(11.5f, true))
-                    TextRenderer.DrawText(g, _title, font, new Rectangle(14, 6, Math.Max(40, Width - 24), 28), Theme.Text, flags);
+                    TextRenderer.DrawText(g, _title, font, new Rectangle(S(14), titleY, Math.Max(S(40), Width - S(24)), titleH),
+                                          Theme.Text, flags);
             }
         }
     }
@@ -425,39 +447,39 @@ namespace ServerHelp.Ui
 
             // a soft wave so the header does not look like a flat rectangle
             using (var glow = new SolidBrush(Color.FromArgb(28, 255, 255, 255)))
-                g.FillEllipse(glow, bounds.Width - 260, -90, 380, 220);
+                g.FillEllipse(glow, bounds.Width - S(260), -S(90), S(380), S(220));
             using (var glow = new SolidBrush(Color.FromArgb(22, 255, 255, 255)))
-                g.FillEllipse(glow, -80, 30, 240, 140);
+                g.FillEllipse(glow, -S(80), S(30), S(240), S(140));
 
             // logo dot: on the reading side of the header
-            int logoX = Mirrored ? bounds.Width - 48 : 16;
+            int logoX = Mirrored ? bounds.Width - S(48) : S(16);
             using (var logo = new SolidBrush(Color.FromArgb(255, 255, 255)))
-                g.FillEllipse(logo, logoX, 18, 32, 32);
+                g.FillEllipse(logo, logoX, S(18), S(32), S(32));
             using (var pen = new Pen(Theme.HeaderTop, 3.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
             {
-                g.DrawLine(pen, logoX + 8, 41, logoX + 14, 30);
-                g.DrawLine(pen, logoX + 14, 30, logoX + 19, 39);
-                g.DrawLine(pen, logoX + 19, 39, logoX + 28, 24);
+                g.DrawLine(pen, logoX + S(8), S(41), logoX + S(14), S(30));
+                g.DrawLine(pen, logoX + S(14), S(30), logoX + S(19), S(39));
+                g.DrawLine(pen, logoX + S(19), S(39), logoX + S(28), S(24));
             }
 
             TextFormatFlags titleFlags = TextFormatFlags.VerticalCenter | TextFormatFlags.Left;
             TextFormatFlags subtitleFlags = TextFormatFlags.VerticalCenter | TextFormatFlags.Left;
-            int textLeft = 60;
-            int pillsWidth = Measure(1) + (Measure(1) > 0 && Measure(2) > 0 ? 8 : 0) + Measure(2) + 24;
+            int textLeft = S(60);
+            int pillsWidth = Measure(1) + (Measure(1) > 0 && Measure(2) > 0 ? 8 : 0) + Measure(2) + S(24);
             if (Mirrored)
             {
                 titleFlags = TextFormatFlags.VerticalCenter | TextFormatFlags.Right | TextFormatFlags.RightToLeft;
                 subtitleFlags = titleFlags;
-                textLeft = 20;
+                textLeft = S(20);
             }
 
-            int textWidth = Math.Max(160, Width - textLeft - (Mirrored ? 70 : pillsWidth));
+            int textWidth = Math.Max(S(160), Width - textLeft - (Mirrored ? S(70) : pillsWidth));
             using (var font = Theme.Font(15f, true))
-                TextRenderer.DrawText(g, Title, font, new Rectangle(textLeft, 12, textWidth, 26), Color.White, titleFlags);
+                TextRenderer.DrawText(g, Title, font, new Rectangle(textLeft, S(12), textWidth, S(26)), Color.White, titleFlags);
             if (Subtitle.Length > 0)
             {
                 using (var font = Theme.Font(8.75f, false))
-                    TextRenderer.DrawText(g, Subtitle, font, new Rectangle(textLeft, 36, Math.Max(120, textWidth), 20),
+                    TextRenderer.DrawText(g, Subtitle, font, new Rectangle(textLeft, S(36), Math.Max(S(120), textWidth), S(20)),
                                           Color.FromArgb(210, 255, 255, 255), subtitleFlags);
             }
 
@@ -474,8 +496,8 @@ namespace ServerHelp.Ui
                 int width = size.Width + 34;
                 int offset = slot == 1 ? 0 : Measure(1) + 8;
                 int x = Mirrored ? 16 + offset : Width - 16 - width - offset;
-                int top = Math.Max(10, (Height - 30) / 2);
-                var bounds = new Rectangle(x, top, width, 30);
+                int top = Math.Max(S(10), (Height - S(30)) / 2);
+                var bounds = new Rectangle(x, top, width, S(30));
                 Theme.FillRounded(g, bounds, 15, Color.FromArgb(46, 255, 255, 255));
                 int dotX = Mirrored ? bounds.Right - 20 : bounds.X + 12;
                 using (var dot = new SolidBrush(color))
@@ -534,9 +556,15 @@ namespace ServerHelp.Ui
                 using (var back = new SolidBrush(parentColor)) g.FillRectangle(back, ClientRectangle);
             }
 
-            int size = Math.Min(Width, Height) - 16;
+            // the ring leaves room for the caption and the note underneath it: they used to be drawn
+            // past the bottom of the control, so the dials were anonymous and the "great / fine / high"
+            // line never appeared at all
+            int captionH = Caption.Length > 0 ? S(20) : 0;
+            int noteH = Note.Length > 0 ? S(18) : 0;
+            int size = Math.Min(Width - S(16), Height - S(16) - captionH - noteH);
+            if (size < S(56)) size = Math.Max(S(40), Math.Min(Width - S(8), Height - S(8)));
             int left = (Width - size) / 2;
-            int top = 4;
+            int top = S(4);
             var ring = new Rectangle(left, top, size, size);
             float thickness = Math.Max(8f, size * 0.11f);
 
@@ -568,16 +596,18 @@ namespace ServerHelp.Ui
             using (var font = Theme.Font(8.5f, false))
                 TextRenderer.DrawText(g, Unit, font, new Rectangle(ring.Left, ring.Top + (int)(ring.Height * 0.58f), ring.Width, 18),
                                       Theme.SubText, TextFormatFlags.HorizontalCenter);
+            int textY = Height - captionH - noteH - S(2);
             if (Caption.Length > 0)
             {
                 using (var font = Theme.Font(9f, true))
-                    TextRenderer.DrawText(g, Caption, font, new Rectangle(0, ring.Bottom + 2, Width, 20),
-                                          Theme.Text, TextFormatFlags.HorizontalCenter);
+                    TextRenderer.DrawText(g, Caption, font, new Rectangle(0, textY, Width, captionH),
+                                          Theme.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.EndEllipsis);
+                textY += captionH;
             }
             if (Note.Length > 0)
             {
                 using (var font = Theme.Font(8f, false))
-                    TextRenderer.DrawText(g, Note, font, new Rectangle(0, ring.Bottom + 22, Width, 18),
+                    TextRenderer.DrawText(g, Note, font, new Rectangle(0, textY, Width, noteH),
                                           Theme.SubText, TextFormatFlags.HorizontalCenter | TextFormatFlags.EndEllipsis);
             }
         }
