@@ -84,34 +84,9 @@ namespace ServerHelp
 
         private static void CheckOvpn(List<string> failures, List<string> passes)
         {
-            const string profile =
-                "client\n" +
-                "dev tun\n" +
-                "proto udp\n" +
-                "remote 198.51.100.9 443\n" +
-                "resolv-retry infinite\n" +
-                "nobind\n" +
-                "persist-key\n" +
-                "remote-cert-tls server\n" +
-                "cipher AES-256-CBC\n" +
-                "auth SHA256\n" +
-                "comp-lzo no\n" +
-                "verb 3\n" +
-                "key-direction 1\n" +
-                "tls-auth [inline] 1\n" +
-                "<ca>\n" +
-                "-----BEGIN CERTIFICATE-----\n" +
-                "MIIBkTCB+wIJAKHBfpegPjMCMA0GCSqGSIb3DQEBCwUAMBExDzANBgNVBAMMBnRl\n" +
-                "c3QxMB4XDTIzMDEwMTAwMDAwMFoXDTI0MDEwMTAwMDAwMFowETEPMA0GA1UEAwwG\n" +
-                "dGVzdDEwXDANBgkqhkiG9w0BAQEFAANLADBIAkEA0Z8k9d1k3nQ0m6kQ4k6eQ1qD\n" +
-                "-----END CERTIFICATE-----\n" +
-                "</ca>\n" +
-                "<tls-auth>\n" +
-                "-----BEGIN OpenVPN Static key V1-----\n" +
-                "00000000000000000000000000000000\n" +
-                "-----END OpenVPN Static key V1-----\n" +
-                "</tls-auth>\n" +
-                "auth-user-pass\n";
+            string profile = SampleOvpn() + "cipher AES-256-CBC\nauth SHA256\nkey-direction 1\n" +
+                             "tls-auth [inline] 1\n<ca>\n" + SampleCert() + "</ca>\n" +
+                             "<tls-auth>\n" + SampleStaticKey() + "</tls-auth>\n";
 
             OvpnProfile parsed = OvpnProfile.Parse(profile, "");
             Expect(parsed.Ok && parsed.Host == "198.51.100.9" && parsed.Port == 443,
@@ -139,6 +114,24 @@ namespace ServerHelp
             var blob = ConnectionParser.ParseBlob(profile, out List<string> problems);
             Expect(blob.Count == 1 && blob[0].Kind == ConnectionKind.OpenVpn,
                    "an .ovpn profile pasted among other lines stays one entry", failures, passes);
+        }
+
+        /// <summary>The head of a realistic .ovpn profile without the certificates.</summary>
+        private static string SampleOvpn()
+        {
+            return "client\ndev tun\nproto udp\nremote 198.51.100.9 443\nresolv-retry infinite\n" +
+                   "nobind\npersist-key\nremote-cert-tls server\ncomp-lzo no\nverb 3\nauth-user-pass\n";
+        }
+
+        /// <summary>A real certificate: the engine parses these fields, so a fake one must not be used.</summary>
+        private static string SampleCert()
+        {
+            return "-----BEGIN CERTIFICATE-----\nMIIDJTCCAg2gAwIBAgIUJqjxjnPDCLJqRNbE4lhswgs6pTYwDQYJKoZIhvcNAQEL\nBQAwIjEgMB4GA1UEAwwXU2VydmVySGVscCBTZWxmIFRlc3QgQ0EwHhcNMjYxMDEy\nMTMwMTQ5WhcNMzYxMDA5MTMwMTQ5WjAiMSAwHgYDVQQDDBdTZXJ2ZXJIZWxwIFNl\nbGYgVGVzdCBDQTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBANHP7E9K\nF5myT3bDzb0PhCJU6BAz+akbjun3GaB3hCsc9JiyKcNzzZoSssxdkz56EuADFdG7\nx3N+AZivtr81ooYckV/JdxzQSnWuGXYC5oF2+zj0Yy1/tQ7FkuAsYDeY4SZBObaW\nSZb7EGiBeC40zS5qH7ShYRipHRl98svWZpOaAmR6azy2uqAg1CakhAS09XKlMq0g\n58HiJry3E0VqflrFTgjrz+sAxdbFMnXBKtFW50l8IYBvlqVOlTuslX4co5VAVIpZ\nGrHuj4gY26Uz6FR4so70/UM+cHUWFq7w+VkeWp34sIHYHsrrlw07YQF28SVsAiHm\nAU8UgYajmlEfqZMCAwEAAaNTMFEwHQYDVR0OBBYEFHxpAvR6AMOFrDgUeezy5tnP\ngIAJMB8GA1UdIwQYMBaAFHxpAvR6AMOFrDgUeezy5tnPgIAJMA8GA1UdEwEB/wQF\nMAMBAf8wDQYJKoZIhvcNAQELBQADggEBAFdVMdr2bfDTGrYub7VreBshDG2PA7Dd\nIIXqr9Aii2XY9SLpiU1r0fQ2+xvYAYIAKVIndWE4Gt46F6GO47eV5/7SXccMeTpf\nt0kkt9UV+vrPyVF8vf6ajET9tP7SaZRKPvSpmVvoAP38xfZOdHBpAQyoT8QVQ2QI\nS+Ng2IZMfcmIW/GFVonWBJru30wxHtZ3L61eAZ4z0YTPZZMo4GjWFejJnBtsGTWJ\n0aIn6ndEvztLikp/xIK41oQAKIzDoYpvlxPri/O8Y8FarjegqFBI8Uc42x9i0pHT\n1wpL3DUZUjjVmU7zApJ29/g02+1e98HCHA4+fFY5HMRo2cCg0odV7Qw=\n-----END CERTIFICATE-----\n";
+        }
+
+        private static string SampleStaticKey()
+        {
+            return "3d989cd1f5e5d405166a7666a053f54a\n2cfe83bb7c79beae2fed1d579f864c53\n4a833c0fc8d57e32dd60a97001d4a0d7\nf8d63f601969f671ff4bd21c8ac5a13e\n8ddc6ea3c50e08d4fa8802fefb7cc524\nfd49200fafc7952df846122134edf9cd\nb69b72120643177033344483d700578c\n4339e94315958dd7a16f408b59097f8d\nefe3f4eea0f19419b50bb71e7d2d9a57\n13d6d03e0a41c8d6c7198281c5c59769\n0e5270184b5bccf07640cb2e0b06e097\nb966bb0e7c5f2b2412db2d440ffd5e81\nfc0a8438d7c1871506ad5afa89d17f7f\n93c18e4d1ddce062327ef09899355200\nf45e14380d72e1c35c9523d53f236028\nf80b7e8ef48c9aa0b3617ea7490871e5\n";
         }
 
         private static void CheckConfigs(List<string> failures, List<string> passes)
@@ -185,7 +178,8 @@ namespace ServerHelp
             ovpnEntry.Port = 443;
             ovpnEntry.User = "account";
             ovpnEntry.Password = "password";
-            OvpnProfile profile = OvpnProfile.Parse(SampleOvpn(), "");
+            OvpnProfile profile = OvpnProfile.Parse(
+                SampleOvpn() + "<ca>\n" + SampleCert() + "</ca>\n<tls-auth>\n" + SampleStaticKey() + "</tls-auth>\n", "");
             var ovpnPlan = new TunnelPlan();
             ovpnPlan.IncludeTun = true;
             ovpnPlan.ServerIps.Add("163.5.201.3");
@@ -220,15 +214,6 @@ namespace ServerHelp
             bool hasChain = false;
             foreach (RouteCandidate candidate in candidates) if (candidate.IsChain && candidate.Hops == 2) hasChain = true;
             Expect(hasChain, "the optimiser offers a two hop relay", failures, passes);
-        }
-
-        private static string SampleOvpn()
-        {
-            return
-                "client\ndev tun\nproto udp\nremote 198.51.100.9 443\nnobind\n" +
-                "remote-cert-tls server\nauth-user-pass\n" +
-                "<ca>\n-----BEGIN CERTIFICATE-----\nMIIBkTCB+wIJAKHBfpegPjMCMA0GCSqGSIb3DQEBCwUAMBExDzANBgNVBAMMBnRl\n" +
-                "-----END CERTIFICATE-----\n</ca>\n";
         }
 
         /// <summary>Writes the config and asks the bundled engine whether it would run it.</summary>
