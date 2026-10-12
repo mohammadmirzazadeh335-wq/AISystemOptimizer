@@ -329,7 +329,7 @@ namespace ServerHelp.Net
             result.CanCarryGame = entry.CanCarryGame;
             result.DelayMs = handshakeMs;
             result.Status = okStatus;
-            result.Detail = L.T("دست‌دادن: ", "handshake: ") + handshakeMs.ToString(CultureInfo.InvariantCulture) + " ms";
+            result.Detail = L.T("دست‌دادن: ", "handshake: ") + L.N(handshakeMs) + " ms";
 
             if (string.IsNullOrEmpty(targetHost)) return result;
 
@@ -338,7 +338,7 @@ namespace ServerHelp.Net
             {
                 result.DelayMs = status.LatencyMs;
                 result.Status = L.T("بازی از این مسیر", "game path");
-                result.Detail = L.T("پینگ بازی: ", "game ping: ") + status.LatencyMs.ToString(CultureInfo.InvariantCulture) + " ms" +
+                result.Detail = L.T("پینگ بازی: ", "game ping: ") + L.N(status.LatencyMs) + " ms" +
                                 (string.IsNullOrEmpty(status.Motd) ? "" : " • " + status.Motd);
                 return result;
             }
@@ -352,7 +352,7 @@ namespace ServerHelp.Net
                 result.Status = L.T("TCP از این مسیر", "TCP path");
                 result.Detail = L.T("سرور بازی به پینگ Minecraft جواب نداد، ولی اتصال TCP برقرار شد: ",
                                     "the game server did not answer the Minecraft ping, but the TCP connection worked: ") +
-                                tcp.ToString(CultureInfo.InvariantCulture) + " ms";
+                                L.N(tcp) + " ms";
                 return result;
             }
             catch (Exception ex)

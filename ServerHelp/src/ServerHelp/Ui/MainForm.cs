@@ -201,20 +201,20 @@ namespace ServerHelp.Ui
             else if (report.Strategy == "direct")
             {
                 network = L.T("شبکه: مسیر مستقیم سالم", "network: direct works") +
-                          (report.DirectPing > 0 ? " • " + report.DirectPing + " ms" : "");
+                          (report.DirectPing > 0 ? " • " + L.N(report.DirectPing) + " ms" : "");
                 networkColor = Theme.Good;
             }
             else
             {
                 network = L.T("شبکه: مسیر مستقیم فیلتر شده", "network: direct is filtered") +
-                          (report.DirectPing > 0 ? " • " + report.DirectPing + " ms" : "");
+                          (report.DirectPing > 0 ? " • " + L.N(report.DirectPing) + " ms" : "");
                 networkColor = Theme.Info;
             }
 
             string tunnel = report.TunnelUp
                 ? L.T("تونل: فعال", "tunnel: up") +
                   (report.ConnectionUsed.Length > 0 ? " • " + report.ConnectionUsed : "") +
-                  (report.TunnelPing > 0 ? " • " + report.TunnelPing + " ms" : "")
+                  (report.TunnelPing > 0 ? " • " + L.N(report.TunnelPing) + " ms" : "")
                 : L.T("تونل: خاموش", "tunnel: off");
 
             _header.Right1 = network;
@@ -246,7 +246,7 @@ namespace ServerHelp.Ui
                                   : (report.Strategy == "none" ? 0.15f : 0.75f);
                 _gaugeRoute.RingColor = report.Strategy == "direct" ? Theme.Good : Theme.Info;
                 _gaugeRoute.Note = report.ConnectionUsed.Length > 0
-                    ? report.ConnectionUsed + (report.ConnectionDelayMs > 0 ? " • " + report.ConnectionDelayMs + " ms" : "")
+                    ? report.ConnectionUsed + (report.ConnectionDelayMs > 0 ? " • " + L.N(report.ConnectionDelayMs) + " ms" : "")
                     : "";
                 _gaugeRoute.Invalidate();
             }
@@ -2225,7 +2225,7 @@ namespace ServerHelp.Ui
             {
                 MtprotoCheck check = MtprotoClient.Check(entry.Host, entry.Port, entry.Secret, entry.Dc, timeout);
                 string line = entry.Name + " — " + check.Status +
-                              (check.DelayMs > 0 ? " • " + check.DelayMs + " ms" : "") +
+                              (check.DelayMs > 0 ? " • " + L.N(check.DelayMs) + " ms" : "") +
                               " • " + MtprotoSecret.ModeName(check.Mode) +
                               (check.Domain.Length > 0 ? " • " + check.Domain : "") +
                               " • DC" + check.Dc + " • " + check.Detail;

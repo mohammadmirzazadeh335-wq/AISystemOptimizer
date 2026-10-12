@@ -426,7 +426,7 @@ namespace ServerHelp.Core
         public string Line()
         {
             string state = !Enabled ? L.T("خاموش", "off")
-                         : LastDelayMs > 0 ? LastDelayMs.ToString(CultureInfo.InvariantCulture) + " ms"
+                         : LastDelayMs > 0 ? L.N(LastDelayMs) + " ms"
                          : string.IsNullOrEmpty(LastStatus) ? L.T("تست نشده", "not tested") : LastStatus;
             return Name + " [" + Info.Title + "] " + Target + " — " + state;
         }

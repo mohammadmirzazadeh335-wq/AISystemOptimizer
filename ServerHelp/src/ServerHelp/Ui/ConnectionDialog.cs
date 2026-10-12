@@ -211,6 +211,21 @@ namespace ServerHelp.Ui
 
             AcceptButton = _ok;
             CancelButton = cancel;
+            // Saving an entry with holes in it is allowed, but never silent: the row would sit in the
+            // table looking ready while the pipeline skips it.
+            FormClosing += delegate (object sender, FormClosingEventArgs e)
+            {
+                if (DialogResult != DialogResult.OK) return;
+                Collect();
+                string missing = Entry.Missing();
+                if (missing.Length == 0) return;
+                DialogResult answer = MessageBox.Show(this,
+                    L.T("این فیلدها هنوز خالی است: ", "these fields are still empty: ") + missing +
+                    Environment.NewLine + Environment.NewLine +
+                    L.T("با همین حال ذخیره شود؟ (می‌توانید بعداً ویرایش کنید)", "save it like this? (you can edit it later)"),
+                    "Server Help", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (answer == DialogResult.No) e.Cancel = true;
+            };
             OnKindChanged();
             Theme.Apply(this);
             Theme.StyleButton(_ok, true);
