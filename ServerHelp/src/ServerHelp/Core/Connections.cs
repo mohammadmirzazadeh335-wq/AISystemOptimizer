@@ -174,6 +174,45 @@ namespace ServerHelp.Core
             return string.Join(", ", missing.ToArray());
         }
 
+        /// <summary>True when two entries carry the same connection settings (the test result is ignored).</summary>
+        public bool SameConfig(ConnectionEntry other)
+        {
+            if (other == null) return false;
+            return Kind == other.Kind
+                && string.Equals(Host, other.Host, StringComparison.OrdinalIgnoreCase)
+                && Port == other.Port
+                && string.Equals(User, other.User, StringComparison.Ordinal)
+                && string.Equals(Password, other.Password, StringComparison.Ordinal)
+                && string.Equals(Secret, other.Secret, StringComparison.Ordinal)
+                && string.Equals(DnsUrl, other.DnsUrl, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(Address, other.Address, StringComparison.Ordinal)
+                && string.Equals(AddressV6, other.AddressV6, StringComparison.Ordinal)
+                && string.Equals(PeerPublicKey, other.PeerPublicKey, StringComparison.Ordinal)
+                && string.Equals(PeerHost, other.PeerHost, StringComparison.OrdinalIgnoreCase)
+                && PeerPort == other.PeerPort
+                && string.Equals(Reserved, other.Reserved, StringComparison.Ordinal)
+                && Mtu == other.Mtu
+                && string.Equals(Config, other.Config, StringComparison.Ordinal)
+                && LocalSocksPort == other.LocalSocksPort;
+        }
+
+        public void ForgetTest()
+        {
+            LastDelayMs = -1;
+            LastStatus = "";
+            LastError = "";
+            LastTestUtc = "";
+        }
+
+        public void CopyTestFrom(ConnectionEntry other)
+        {
+            if (other == null) { ForgetTest(); return; }
+            LastDelayMs = other.LastDelayMs;
+            LastStatus = other.LastStatus;
+            LastError = other.LastError;
+            LastTestUtc = other.LastTestUtc;
+        }
+
         public ConnectionEntry Clone()
         {
             return (ConnectionEntry)MemberwiseClone();

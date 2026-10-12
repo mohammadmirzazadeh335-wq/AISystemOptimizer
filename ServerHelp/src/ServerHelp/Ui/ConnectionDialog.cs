@@ -33,6 +33,7 @@ namespace ServerHelp.Ui
         private Button _ok;
 
         public ConnectionEntry Entry { get; private set; }
+        private ConnectionEntry _original;
 
         public ConnectionDialog(ConnectionEntry existing, AppSettings settings, ServerProfile server)
         {
@@ -51,6 +52,8 @@ namespace ServerHelp.Ui
             MaximizeBox = false;
 
             Entry = existing == null ? ConnectionEntry.Create("", ConnectionKind.Socks5) : existing.Clone();
+            _original = Entry.Clone();
+            _original.ForgetTest();   // only results measured in this dialog count
 
             var panel = new Panel();
             panel.Dock = DockStyle.Fill;
@@ -319,6 +322,9 @@ namespace ServerHelp.Ui
             Entry.Config = _config.Text.Trim();
             Entry.LocalSocksPort = (int)_socksPort.Value;
             Entry.Notes = _notes.Text.Trim();
+
+            // a changed address invalidates the delay that was measured for the old one
+            if (_original != null && !_original.SameConfig(Entry)) Entry.ForgetTest();
         }
 
         private void RunTest()
@@ -349,6 +355,13 @@ namespace ServerHelp.Ui
                     BeginInvoke((Action)delegate
                     {
                         _test.Enabled = true;
+                        if (Entry.SameConfig(snapshot))   // fields were not edited while the test ran
+                        {
+                            Entry.LastDelayMs = result.Ok ? result.DelayMs : -1;
+                            Entry.LastStatus = result.Status;
+                            Entry.LastError = result.Ok ? "" : result.Detail;
+                            Entry.LastTestUtc = DateTime.Now.ToString("HH:mm:ss");
+                        }
                         _result.ForeColor = result.Ok ? Color.FromArgb(24, 120, 50) : Color.FromArgb(180, 40, 40);
                         _result.Text = (result.Ok ? L.T("کار کرد", "works") : L.T("کار نکرد", "failed")) + " • " + result.Status +
                                        (result.DelayMs > 0 ? " • " + result.DelayMs + " ms" : "") +
