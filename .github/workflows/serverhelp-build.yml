@@ -113,6 +113,15 @@ jobs:
             }
           }
 
+      - name: Check that every string carries both languages
+        shell: pwsh
+        # The app is bilingual by construction: a string is written as L.T("فارسی", "English").
+        # This step fails the build when one of the two is missing, so a half translated screen
+        # cannot be shipped.
+        run: |
+          python ServerHelp/tools/langlint.py
+          if ($LASTEXITCODE -ne 0) { throw "translation check failed" }
+
       - name: Restore
         run: dotnet restore ServerHelp/src/ServerHelp/ServerHelp.csproj
 

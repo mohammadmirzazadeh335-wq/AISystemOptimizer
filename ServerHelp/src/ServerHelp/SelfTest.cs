@@ -81,7 +81,11 @@ namespace ServerHelp
         /// <summary>Every check, with each group guarded so one broken check cannot hide the rest.</summary>
         private static void RunChecks(List<string> failures, List<string> passes)
         {
+            Guard("both languages", failures, delegate { CheckLanguages(failures, passes); });
             Guard("the connection parser", failures, delegate { CheckParser(failures, passes); });
+            Guard("the connection model", failures, delegate { CheckConnectionModel(failures, passes); });
+            Guard("the connection list file", failures, delegate { CheckListFile(failures, passes); });
+            Guard("the subscription reader", failures, delegate { CheckSubscription(failures, passes); });
             Guard("the OpenVPN profile", failures, delegate { CheckOvpn(failures, passes); });
             Guard("the generated tunnel configurations", failures, delegate { CheckConfigs(failures, passes); });
             Guard("the route optimiser", failures, delegate { CheckOptimizer(failures, passes); });
@@ -97,6 +101,207 @@ namespace ServerHelp
         {
             if (condition) { if (passes.Count < 60) passes.Add(what); }
             else failures.Add(what);
+        }
+
+        /// <summary>
+        /// The app promises both languages. This proves the switch really reaches the text, the
+        /// direction and the digits, then puts the previous language back.
+        /// </summary>
+        private static void CheckLanguages(List<string> failures, List<string> passes)
+        {
+            string original = L.Lang;
+            try
+            {
+                L.SetLang(L.En);
+                Expect(L.T("فارسی", "English") == "English" && !L.IsRtl,
+                       "English mode answers in English and is left to right", failures, passes);
+                Expect(L.N(42) == "42", "English mode uses Western digits", failures, passes);
+
+                L.SetLang(L.Fa);
+                Expect(L.T("فارسی", "English") == "فارسی" && L.IsRtl,
+                       "Persian mode answers in Persian and is right to left", failures, passes);
+                Expect(L.N(42) == "۴۲", "Persian mode uses Persian digits", failures, passes);
+
+                // every connection kind must be named in both languages: the table has no room for
+                // an empty cell, and a missing translation is the usual way one appears
+                int named = 0;
+                foreach (ConnectionKind kind in new ConnectionKind[]
+                         {
+                             ConnectionKind.Warp, ConnectionKind.Dns, ConnectionKind.Socks5, ConnectionKind.Http,
+                             ConnectionKind.Mtproto, ConnectionKind.WireGuard, ConnectionKind.SingBoxOutbound,
+                             ConnectionKind.SingBoxConfig, ConnectionKind.OpenVpn
+                         })
+                {
+                    ConnectionKindInfo info = ConnectionKindInfo.Of(kind);
+                    if (info.Kind != kind) failures.Add("kind " + kind + " has no description of its own");
+                    L.SetLang(L.En);
+                    string english = info.Title;
+                    L.SetLang(L.Fa);
+                    string persian = info.Title;
+                    if (english.Length == 0 || persian.Length == 0 || english == persian)
+                        failures.Add("kind " + kind + " is not named in both languages");
+                    else named++;
+                }
+                if (named == 9) passes.Add("every connection kind is named in both languages");
+            }
+            finally
+            {
+                L.SetLang(original);
+            }
+        }
+
+        /// <summary>
+        /// The connection model: every kind must say what it is missing, survive a save/load round
+        /// trip with all of its fields, and produce a usable outbound or endpoint when it is complete.
+        /// </summary>
+        private static void CheckConnectionModel(List<string> failures, List<string> passes)
+        {
+            var kinds = new ConnectionKind[]
+            {
+                ConnectionKind.Warp, ConnectionKind.Dns, ConnectionKind.Socks5, ConnectionKind.Http,
+                ConnectionKind.Mtproto, ConnectionKind.WireGuard, ConnectionKind.SingBoxOutbound,
+                ConnectionKind.SingBoxConfig, ConnectionKind.OpenVpn
+            };
+
+            // a fresh entry must never look complete when it needs fields
+            int complaining = 0;
+            foreach (ConnectionKind kind in kinds)
+            {
+                ConnectionEntry fresh = ConnectionEntry.Create("test " + kind, kind);
+                if (fresh.Missing().Length > 0 || kind == ConnectionKind.Warp) complaining++;
+            }
+            Expect(complaining == kinds.Length - 1, "an empty entry reports what it is missing", failures, passes);
+
+            // a filled entry must survive save/load unchanged
+            var filled = ConnectionEntry.Create("filled", ConnectionKind.Socks5);
+            filled.Host = "203.0.113.9";
+            filled.Port = 1080;
+            filled.User = "user";
+            filled.Password = "pass";
+            filled.FragmentTls = true;
+            filled.LastDelayMs = 42;
+            filled.LastJitterMs = 6;
+            filled.LastLossPercent = 0;
+            filled.LastSpeedKbps = 512;
+            filled.LastPingMin = 38;
+            filled.LastPingMax = 55;
+            filled.LastTestUtc = "12:00:00";
+
+            var writer = new JsonWriter(false);
+            filled.WriteTo(writer);
+            ConnectionEntry back = ConnectionEntry.Read(Json.ParseObject(writer.ToString()));
+            Expect(back != null && back.Host == filled.Host && back.Port == 1080 && back.User == "user" &&
+                   back.FragmentTls && back.LastJitterMs == 6 && back.LastSpeedKbps == 512 &&
+                   back.LastPingMin == 38 && back.LastPingMax == 55 && back.LastLossPercent == 0,
+                   "a connection survives a save and load with every field", failures, passes);
+            Expect(back.SameConfig(filled), "the round trip keeps the entry equal to itself", failures, passes);
+            Expect(back.QualityText().Length > 0, "the measured quality is readable again after loading",
+                   failures, passes);
+
+            // outbounds and endpoints
+            var socks = ConnectionEntry.Create("s", ConnectionKind.Socks5);
+            socks.Host = "203.0.113.4"; socks.Port = 1080; socks.FragmentTls = true;
+            ConnectionRoute.FragmentTlsByDefault = false;
+            Dictionary<string, object> outbound = ConnectionRoute.BuildOutbound(socks, "t1");
+            Expect(Json.GetStr(outbound, "type", "") == "socks" && Json.GetStr(outbound, "tag", "") == "t1",
+                   "a SOCKS5 entry becomes a socks outbound", failures, passes);
+
+            // fragmentation only lands on an outbound that actually speaks TLS
+            var vless = ConnectionEntry.Create("v", ConnectionKind.SingBoxOutbound);
+            vless.Config = "{"type":"vless","server":"example.org","server_port":443,"uuid":"00000000-0000-0000-0000-000000000000","tls":{"enabled":true,"server_name":"example.org"}}";
+            vless.FragmentTls = true;
+            Dictionary<string, object> tlsOutbound = ConnectionRoute.BuildOutbound(vless, "t2");
+            var tls = Json.Obj(Json.Get(tlsOutbound, "tls"));
+            Expect(tls != null && Json.GetBool(tls, "fragment", false) && Json.GetBool(tls, "record_fragment", false),
+                   "TLS fragmentation is written into the handshake of an outbound", failures, passes);
+
+            var plain = ConnectionEntry.Create("p", ConnectionKind.Socks5);
+            plain.Host = "203.0.113.4"; plain.Port = 1080; plain.FragmentTls = true;
+            var plainOutbound = ConnectionRoute.BuildOutbound(plain, "t3");
+            Expect(Json.Get(plainOutbound, "tls") == null,
+                   "a route without TLS is left alone when fragmentation is on", failures, passes);
+
+            // every tag must be unique: two entries of the same kind would collide in the config
+            var first = ConnectionEntry.Create("one", ConnectionKind.Socks5);
+            first.Host = "203.0.113.1"; first.Port = 1080;
+            var second = ConnectionEntry.Create("two", ConnectionKind.Socks5);
+            second.Host = "203.0.113.2"; second.Port = 1080;
+            Expect(ConnectionRoute.TagFor(first) != ConnectionRoute.TagFor(second),
+                   "two connections of the same kind get different tags", failures, passes);
+
+            // the wireguard endpoint needs its keys, and must say so instead of throwing something odd
+            var wg = ConnectionEntry.Create("wg", ConnectionKind.WireGuard);
+            wg.PeerHost = "198.51.100.4"; wg.PeerPort = 2408;
+            Expect(wg.Missing().Contains("client address") || wg.Missing().Length > 0,
+                   "an incomplete WireGuard entry lists what is missing", failures, passes);
+            wg.Address = "172.16.0.2/32";
+            wg.Secret = new string('A', 44);
+            wg.PeerPublicKey = new string('B', 44);
+            Dictionary<string, object> endpoint = ConnectionRoute.BuildEndpoint(wg, "wg-1");
+            Expect(Json.GetStr(endpoint, "type", "") == "wireguard" && Json.Get(endpoint, "peers") != null,
+                   "a complete WireGuard entry becomes an endpoint", failures, passes);
+        }
+
+        /// <summary>Saving the list and reading it back is how a user moves machines: it must round trip.</summary>
+        private static void CheckListFile(List<string> failures, List<string> passes)
+        {
+            var list = new List<ConnectionEntry>();
+            var socks = ConnectionEntry.Create("home", ConnectionKind.Socks5);
+            socks.Host = "203.0.113.5"; socks.Port = 1080;
+            var dns = ConnectionEntry.Create("resolver", ConnectionKind.Dns);
+            dns.DnsUrl = "tls://1.1.1.1:853";
+            var ovpn = ConnectionEntry.Create("bear", ConnectionKind.OpenVpn);
+            ovpn.Config = "client
+dev tun
+proto udp
+remote 198.51.100.9 443
+";
+            list.Add(socks);
+            list.Add(dns);
+            list.Add(ovpn);
+
+            string json = ConnectionParser.SerializeList(list);
+            string error;
+            List<ConnectionEntry> back = ConnectionParser.ParseListFile(json, out error);
+            Expect(back.Count == 3, "the saved list comes back with all three entries", failures, passes);
+            Expect(error.Length == 0, "reading the list file reports no error", failures, passes);
+            bool kindsOk = back.Count == 3 && back[0].Kind == ConnectionKind.Socks5 &&
+                           back[1].Kind == ConnectionKind.Dns && back[2].Kind == ConnectionKind.OpenVpn;
+            Expect(kindsOk, "the kinds survive the list file", failures, passes);
+
+            // a bare array is what other tools export
+            string bare = "[{"name":"x","kind":2,"host":"203.0.113.6","port":1080}]";
+            List<ConnectionEntry> fromArray = ConnectionParser.ParseListFile(bare, out error);
+            Expect(fromArray.Count == 1 && fromArray[0].Host == "203.0.113.6",
+                   "a bare JSON array of connections is accepted", failures, passes);
+
+            // and the import blob: every line becomes one entry, bad lines are reported not thrown
+            var blob = ConnectionParser.ParseBlob("203.0.113.7:1080
+
+garbage line here
+", out List<string> problems);
+            Expect(blob.Count == 1 && problems.Count >= 1,
+                   "a mixed paste imports what it can and reports the rest", failures, passes);
+        }
+
+        /// <summary>A subscription is a base64 list of share links; both shapes must import.</summary>
+        private static void CheckSubscription(List<string> failures, List<string> passes)
+        {
+            string links = "vless://11111111-1111-1111-1111-111111111111@203.0.113.8:443?type=tcp&security=tls&sni=example.org#node-1
+" +
+                           "trojan://password@203.0.113.9:443#node-2
+";
+            string encoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(links));
+
+            List<string> problems;
+            List<ConnectionEntry> decoded = Subscription.Parse(encoded, out problems);
+            Expect(decoded.Count == 2, "a base64 subscription becomes two connections", failures, passes);
+
+            List<ConnectionEntry> plainText = Subscription.Parse(links, out problems);
+            Expect(plainText.Count == 2, "an already decoded subscription is accepted too", failures, passes);
+
+            List<ConnectionEntry> empty = Subscription.Parse("", out problems);
+            Expect(empty.Count == 0, "an empty subscription adds nothing instead of throwing", failures, passes);
         }
 
         private static void CheckParser(List<string> failures, List<string> passes)

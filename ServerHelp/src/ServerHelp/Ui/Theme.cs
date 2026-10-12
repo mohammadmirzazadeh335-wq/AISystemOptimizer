@@ -317,8 +317,9 @@ namespace ServerHelp.Ui
 
             if (ShowStripe && _title.Length > 0)
             {
+                int stripeX = RightToLeft == RightToLeft.Yes ? Width - 5 : 1;
                 using (var brush = new SolidBrush(StripeColor))
-                    g.FillRectangle(brush, new Rectangle(1, 8, 4, 22));
+                    g.FillRectangle(brush, new Rectangle(stripeX, 8, 4, 22));
             }
 
             if (_title.Length > 0)
@@ -327,7 +328,7 @@ namespace ServerHelp.Ui
                                         TextFormatFlags.EndEllipsis | TextFormatFlags.Left;
                 if (RightToLeft == RightToLeft.Yes) flags |= TextFormatFlags.RightToLeft | TextFormatFlags.Right;
                 using (var font = Theme.Font(11.5f, true))
-                    TextRenderer.DrawText(g, _title, font, new Rectangle(14, 6, Width - 24, 28), Theme.Text, flags);
+                    TextRenderer.DrawText(g, _title, font, new Rectangle(14, 6, Math.Max(40, Width - 24), 28), Theme.Text, flags);
             }
         }
     }
@@ -350,12 +351,15 @@ namespace ServerHelp.Ui
             Dock = DockStyle.Top;
         }
 
+        /// <summary>True when the header is mirrored: the logo moves to the right and the pills left.</summary>
+        public bool Mirrored { get { return RightToLeft == RightToLeft.Yes; } }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
             var bounds = ClientRectangle;
-            using (var brush = new LinearGradientBrush(bounds, Theme.HeaderTop, Theme.HeaderBottom, 25f))
+            using (var brush = new LinearGradientBrush(bounds, Theme.HeaderTop, Theme.HeaderBottom, Mirrored ? 155f : 25f))
                 g.FillRectangle(brush, bounds);
 
             // a soft wave so the header does not look like a flat rectangle
@@ -364,24 +368,36 @@ namespace ServerHelp.Ui
             using (var glow = new SolidBrush(Color.FromArgb(22, 255, 255, 255)))
                 g.FillEllipse(glow, -80, 30, 240, 140);
 
-            // logo dot
+            // logo dot: on the reading side of the header
+            int logoX = Mirrored ? bounds.Width - 48 : 16;
             using (var logo = new SolidBrush(Color.FromArgb(255, 255, 255)))
-                g.FillEllipse(logo, 16, 18, 32, 32);
+                g.FillEllipse(logo, logoX, 18, 32, 32);
             using (var pen = new Pen(Theme.HeaderTop, 3.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
             {
-                g.DrawLine(pen, 24, 41, 30, 30);
-                g.DrawLine(pen, 30, 30, 35, 39);
-                g.DrawLine(pen, 35, 39, 44, 24);
+                g.DrawLine(pen, logoX + 8, 41, logoX + 14, 30);
+                g.DrawLine(pen, logoX + 14, 30, logoX + 19, 39);
+                g.DrawLine(pen, logoX + 19, 39, logoX + 28, 24);
             }
 
+            TextFormatFlags titleFlags = TextFormatFlags.VerticalCenter | TextFormatFlags.Left;
+            TextFormatFlags subtitleFlags = TextFormatFlags.VerticalCenter | TextFormatFlags.Left;
+            int textLeft = 60;
+            int pillsWidth = Measure(1) + (Measure(1) > 0 && Measure(2) > 0 ? 8 : 0) + Measure(2) + 24;
+            if (Mirrored)
+            {
+                titleFlags = TextFormatFlags.VerticalCenter | TextFormatFlags.Right | TextFormatFlags.RightToLeft;
+                subtitleFlags = titleFlags;
+                textLeft = 20;
+            }
+
+            int textWidth = Math.Max(160, Width - textLeft - (Mirrored ? 70 : pillsWidth));
             using (var font = Theme.Font(15f, true))
-                TextRenderer.DrawText(g, Title, font, new Rectangle(60, 12, 420, 26), Color.White,
-                                      TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+                TextRenderer.DrawText(g, Title, font, new Rectangle(textLeft, 12, textWidth, 26), Color.White, titleFlags);
             if (Subtitle.Length > 0)
             {
                 using (var font = Theme.Font(8.75f, false))
-                    TextRenderer.DrawText(g, Subtitle, font, new Rectangle(60, 36, Math.Max(120, Width - 480), 20),
-                                          Color.FromArgb(210, 255, 255, 255), TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+                    TextRenderer.DrawText(g, Subtitle, font, new Rectangle(textLeft, 36, Math.Max(120, textWidth), 20),
+                                          Color.FromArgb(210, 255, 255, 255), subtitleFlags);
             }
 
             DrawPill(g, Right1, Right1Color, 1);
@@ -395,14 +411,16 @@ namespace ServerHelp.Ui
             {
                 Size size = TextRenderer.MeasureText(g, text, font);
                 int width = size.Width + 34;
-                int x = Width - 16 - (slot == 1 ? width : width + (Measure(1) + 8));
-                var bounds = new Rectangle(x, 19, width, 30);
+                int offset = slot == 1 ? 0 : Measure(1) + 8;
+                int x = Mirrored ? 16 + offset : Width - 16 - width - offset;
+                var bounds = new Rectangle(x, Mirrored ? LoginPillTop : 19, width, 30);
                 Theme.FillRounded(g, bounds, 15, Color.FromArgb(46, 255, 255, 255));
+                int dotX = Mirrored ? bounds.Right - 20 : bounds.X + 12;
                 using (var dot = new SolidBrush(color))
-                    g.FillEllipse(dot, bounds.X + 12, bounds.Y + 11, 8, 8);
-                using (var border = new Pen(Color.FromArgb(70, 255, 255, 255)))
-                    Theme.DrawRounded(g, bounds, 15, Color.FromArgb(70, 255, 255, 255), 1f);
-                TextRenderer.DrawText(g, text, font, new Rectangle(bounds.X + 26, bounds.Y, width - 30, bounds.Height),
+                    g.FillEllipse(dot, dotX, bounds.Y + 11, 8, 8);
+                TextRenderer.DrawText(g, text, font,
+                                      new Rectangle(Mirrored ? bounds.X + 10 : bounds.X + 26, bounds.Y,
+                                                    width - 30, bounds.Height),
                                       Color.White, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
             }
         }
@@ -577,7 +595,10 @@ namespace ServerHelp.Ui
             float fraction = Math.Max(0f, Math.Min(1f, _value));
             if (fraction > 0.004f)
             {
-                var filled = new Rectangle(0, barTop, Math.Max(8, (int)((Width - 1) * fraction)), 11);
+                int fillWidth = Math.Max(8, (int)((Width - 1) * fraction));
+                var filled = RightToLeft == RightToLeft.Yes
+                    ? new Rectangle(Math.Max(0, Width - 1 - fillWidth), barTop, fillWidth, 11)
+                    : new Rectangle(0, barTop, fillWidth, 11);
                 using (var brush = new LinearGradientBrush(filled, BarColor, Color.FromArgb(
                            Math.Min(255, BarColor.R + 40), Math.Min(255, BarColor.G + 40), Math.Min(255, BarColor.B + 40)), 0f))
                     g.FillPath(brush, Theme.Rounded(filled, 5));
