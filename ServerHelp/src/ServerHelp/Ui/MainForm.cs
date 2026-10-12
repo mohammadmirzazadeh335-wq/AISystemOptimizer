@@ -37,12 +37,15 @@ namespace ServerHelp.Ui
         private ListView _versionList;
         private TextBox _planBox;
         private string _planBuildingFor = "";      // keeps one preparation per version in flight
+        private bool _routeBusy;                   // one route hunt at a time
         private ListView _endpointList;
         private TextBox _logBox;
         private TextBox _versionsDirBox;
         private TextBox _gameDirBox;
         private CheckBox _chkOptimize, _chkPower, _chkTrim, _chkClose, _chkPriority, _chkTuneNetwork, _chkFirewall, _chkTimer;
         private CheckBox _chkAikar, _chkQuickPlay, _chkHosts, _chkKeepTunnel, _chkAutoRestore, _chkMinimize, _chkOpenGl;
+        private CheckBox _chkDnsInTunnel;
+        private NumericUpDown _chainCount;
         private ComboBox _tunnelCombo;
         private NumericUpDown _heapBox, _endpointBox;
         private TextBox _extraJvmBox;
@@ -334,6 +337,18 @@ namespace ServerHelp.Ui
             rank.Click += delegate { RankTelegramDcs(); };
             telegram.Controls.Add(rank);
 
+            var optimise = new Button();
+            optimise.Text = L.T("بهینه‌سازی مسیر بازی (پینگ واقعی)", "Optimise game route (real ping)");
+            optimise.Width = 240;
+            optimise.Click += delegate { OptimiseGameRoute(); };
+            telegram.Controls.Add(optimise);
+
+            var dnsTest = new Button();
+            dnsTest.Text = L.T("تست DNS داخل تونل", "Test DNS inside the tunnel");
+            dnsTest.Width = 200;
+            dnsTest.Click += delegate { TestDnsThroughTunnel(); };
+            telegram.Controls.Add(dnsTest);
+
             var copyLink = new Button();
             copyLink.Text = L.T("کپی لینک تلگرام", "Copy tg:// link");
             copyLink.Width = 160;
@@ -370,6 +385,38 @@ namespace ServerHelp.Ui
                 PinConnection(_pinCombo.SelectedIndex == 0 ? "" : _pinCombo.Items[_pinCombo.SelectedIndex].ToString());
             };
             options.Controls.Add(_pinCombo);
+
+            _chkDnsInTunnel = new CheckBox();
+            _chkDnsInTunnel.Text = L.T("DNS از داخل تونل (برای اینترنت ملی که DNS ندارد)",
+                                       "DNS inside the tunnel (for lines where DNS does not work)");
+            _chkDnsInTunnel.AutoSize = true;
+            _chkDnsInTunnel.Checked = _settings.DnsThroughTunnel;
+            _chkDnsInTunnel.CheckedChanged += delegate
+            {
+                _settings.DnsThroughTunnel = _chkDnsInTunnel.Checked;
+                SettingsStore.Save(_settings);
+                SetStatus(_chkDnsInTunnel.Checked
+                    ? L.T("نام‌ها از داخل تونل حل می‌شوند", "names will be resolved inside the tunnel")
+                    : L.T("نام‌ها با DNS سیستم حل می‌شوند", "names will be resolved by the system DNS"));
+            };
+            options.Controls.Add(_chkDnsInTunnel);
+
+            var chainLabel = UiKit.Sub(L.T("زنجیره رله:", "relay chains:"));
+            chainLabel.Width = 90;
+            chainLabel.Height = 30;
+            options.Controls.Add(chainLabel);
+
+            _chainCount = new NumericUpDown();
+            _chainCount.Minimum = 0;
+            _chainCount.Maximum = 12;
+            _chainCount.Value = Math.Max(0, Math.Min(12, _settings.OptimiseChains));
+            _chainCount.Width = 60;
+            _chainCount.ValueChanged += delegate
+            {
+                _settings.OptimiseChains = (int)_chainCount.Value;
+                SettingsStore.Save(_settings);
+            };
+            options.Controls.Add(_chainCount);
 
             _chkFallback = new CheckBox();
             _chkFallback.Text = L.T("اگر مسیر انتخابی کار نکرد، مسیر خودکار امتحان شود", "If the chosen route fails, use the automatic one");
@@ -1420,6 +1467,171 @@ namespace ServerHelp.Ui
         }
 
         /// <summary>Runs the real MTProto handshake + req_pq on the selected proxy and reports it.</summary>
+        /// <summary>
+        /// Packet-raft style route hunting: every candidate (the plain line, each connection, and
+        /// relay chains of two) is brought up in a throwaway engine and measured with a real
+        /// Minecraft handshake to the real server. The winner can be pinned, and it is the route the
+        /// game will use from then on.
+        /// </summary>
+        private void OptimiseGameRoute()
+        {
+            if (_routeBusy)
+            {
+                SetStatus(L.T("بهینه‌سازی مسیر در جریان است", "a route optimisation is already running"));
+                return;
+            }
+            var profile = SelectedServer();
+            if (profile == null)
+            {
+                SetStatus(L.T("اول یک سرور انتخاب کنید", "select a server first"));
+                return;
+            }
+
+            string host = profile.Host;
+            int port = profile.Port;
+            int timeout = Math.Max(2500, _settings.ConnectionTestTimeoutMs);
+            int chains = _settings.OptimiseChains;
+
+            _routeBusy = true;
+            SetStatus(L.T("بهینه‌سازی مسیر بازی…", "optimising the game route…"));
+            AppendLog("[route] optimising for " + host + ":" + port);
+
+            var thread = new Thread(delegate ()
+            {
+                try
+                {
+                    List<RouteCandidate> candidates = RouteOptimizer.Plan(_settings.Connections, true, chains, true);
+                    // the direct line first, because it is the baseline every other route is compared to
+                    var measured = new List<RouteCandidate>();
+                    int baseline = -1;
+                    int index = 0;
+                    foreach (RouteCandidate candidate in candidates)
+                    {
+                        index++;
+                        int shown = index;
+                        Ui(delegate
+                        {
+                            SetStatus(L.T("بهینه‌سازی مسیر ", "optimising route ") + shown + "/" + candidates.Count +
+                                      " — " + candidate.Describe());
+                        });
+                        string error;
+                        RouteOptimizer.Measure(candidate, host, port, timeout, timeout, out error);
+                        measured.Add(candidate);
+                        if (candidate.IsDirect && candidate.Ok) baseline = candidate.GamePingMs;
+
+                        var line = RouteOptimizer.Describe(candidate, baseline);
+                        Ui(delegate { AppendLog("[route] " + line); });
+                    }
+
+                    List<RouteCandidate> ranked = RouteOptimizer.Rank(measured);
+                    RouteCandidate winner = ranked.Count > 0 && ranked[0].Ok ? ranked[0] : null;
+
+                    var report = new System.Text.StringBuilder();
+                    report.AppendLine(L.T("مسیرها روی سرور واقعی بازی اندازه‌گیری شدند:", "every route was measured on the real game server:"));
+                    foreach (RouteCandidate candidate in ranked) report.AppendLine(RouteOptimizer.Describe(candidate, baseline));
+                    if (winner != null)
+                    {
+                        report.AppendLine();
+                        report.AppendLine(L.T("سریع‌ترین مسیر: ", "the fastest route: ") + winner.Describe());
+                    }
+
+                    Ui(delegate
+                    {
+                        _routeBusy = false;
+                        SetStatus(winner == null
+                            ? L.T("هیچ مسیری جواب نداد", "no route answered")
+                            : L.T("سریع‌ترین مسیر: ", "fastest route: ") + winner.Describe() +
+                              (winner.GamePingMs > 0 ? " • " + winner.GamePingMs + " ms" : ""));
+
+                        if (winner == null)
+                        {
+                            MessageBox.Show(this, report.ToString(), L.T("بهینه‌سازی مسیر", "Route optimisation"),
+                                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            return;
+                        }
+                        DialogResult answer = MessageBox.Show(this,
+                            report.ToString() + Environment.NewLine +
+                            L.T("همین مسیر برای بازی پین شود؟", "pin this route for the game?"),
+                            L.T("بهینه‌سازی مسیر", "Route optimisation"),
+                            MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+                        if (answer == DialogResult.Yes)
+                        {
+                            _settings.PinnedConnection = winner.PinName;
+                            _settings.PinnedChainHop = winner.PinSecondName;
+                            SettingsStore.Save(_settings);
+                            RefreshConnections();
+                            SetStatus(L.T("مسیر پین شد: ", "route pinned: ") + winner.Describe());
+                        }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("route optimisation failed", ex);
+                    Ui(delegate
+                    {
+                        _routeBusy = false;
+                        SetStatus(L.T("بهینه‌سازی مسیر شکست خورد: ", "route optimisation failed: ") + ex.Message);
+                    });
+                }
+            });
+            thread.IsBackground = true;
+            thread.Start();
+        }
+
+        /// <summary>
+        /// Proves the DNS story on the user's own machine: what the local resolver says against what
+        /// the resolver inside the running tunnel says. Different answers mean the local one is
+        /// tampered with - the usual reason a Minecraft join fails on a filtered line.
+        /// </summary>
+        private void TestDnsThroughTunnel()
+        {
+            var profile = SelectedServer();
+            if (profile == null || string.IsNullOrEmpty(profile.Host))
+            {
+                SetStatus(L.T("اول یک سرور انتخاب کنید", "select a server first"));
+                return;
+            }
+            if (!_pipeline.TunnelRunning)
+            {
+                SetStatus(L.T("تونل بالا نیست؛ اول «بهینه‌سازی و اجرای بازی» را بزنید، بعد این تست را.",
+                              "the tunnel is not up; press Optimise and play once, then run this test."));
+                return;
+            }
+
+            string host = profile.Host;
+            int timeout = Math.Min(6000, Math.Max(3000, _settings.ConnectTimeoutMs));
+            string resolver = "1.1.1.1";
+            foreach (ConnectionEntry entry in _settings.Connections)
+            {
+                if (!entry.Enabled || !entry.Info.IsResolver) continue;
+                ResolverSpec spec = ResolverSpec.Parse(entry.DnsUrl);
+                if (spec != null && (spec.Scheme == "udp" || spec.Scheme == "tcp")) resolver = spec.Host;
+            }
+
+            SetStatus(L.T("تست DNS از داخل تونل…", "testing DNS through the tunnel…"));
+            var thread = new Thread(delegate ()
+            {
+                string systemAnswer = "";
+                try { systemAnswer = string.Join(", ", NetUtil.ResolveSimple(host).ToArray()); }
+                catch { }
+                DnsAnswer answer = ProxyDns.ResolveThrough("127.0.0.1", _pipeline.Report.SocksPort > 0
+                                                               ? _pipeline.Report.SocksPort : 22345,
+                                                           resolver, host, timeout, "", "");
+                string text = ProxyDns.Compare(host, systemAnswer, answer);
+                Ui(delegate
+                {
+                    AppendLog("[dns] " + text.Replace(Environment.NewLine, " | "));
+                    SetStatus(answer.Ok
+                        ? L.T("DNS از داخل تونل جواب داد", "DNS through the tunnel answered")
+                        : L.T("DNS از داخل تونل جواب نداد", "DNS through the tunnel did not answer"));
+                    MessageBox.Show(this, text, L.T("DNS", "DNS"), MessageBoxButtons.OK,
+                                    answer.Ok ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                });
+            });
+            thread.IsBackground = true;
+            thread.Start();
+        }
+
         private void VerifyMtprotoSelected()
         {
             ConnectionEntry entry = SelectedConnection();

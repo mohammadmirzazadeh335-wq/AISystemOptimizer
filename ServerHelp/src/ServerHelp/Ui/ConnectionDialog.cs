@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.IO;
 using System.Threading;
 using System.Windows.Forms;
 using ServerHelp.Core;
@@ -26,6 +27,8 @@ namespace ServerHelp.Ui
         private Label _lblHost, _lblPort, _lblUser, _lblPassword, _lblSecret, _lblDns, _lblAddress, _lblAddressV6,
                       _lblPeerKey, _lblPeerHost, _lblPeerPort, _lblReserved, _lblMtu, _lblConfig, _lblSocksPort, _lblNotes;
         private TextBox _host, _user, _password, _secret, _dns, _address, _addressV6, _peerKey, _peerHost, _reserved, _config, _notes;
+        private Button _ovpnBrowse;
+        private Label _ovpnHint;
         private NumericUpDown _port, _peerPort, _mtu, _socksPort;
         private NumericUpDown _dc;
         private Label _lblDc, _secretHint;
@@ -122,6 +125,22 @@ namespace ServerHelp.Ui
             lblConfig.Location = new Point(12, y);
             panel.Controls.Add(lblConfig);
             _lblConfig = lblConfig;
+            _ovpnBrowse = new Button();
+            _ovpnBrowse.Text = L.T("خواندن از فایل .ovpn…", "Load an .ovpn file…");
+            _ovpnBrowse.Width = 200;
+            _ovpnBrowse.Left = 12;
+            _ovpnBrowse.Top = 8;
+            _ovpnBrowse.Click += delegate { LoadOvpnFile(); };
+            panel.Controls.Add(_ovpnBrowse);
+
+            _ovpnHint = new Label();
+            _ovpnHint.Left = 220;
+            _ovpnHint.Top = 12;
+            _ovpnHint.Width = 380;
+            _ovpnHint.Height = 34;
+            _ovpnHint.ForeColor = Color.FromArgb(120, 120, 120);
+            panel.Controls.Add(_ovpnHint);
+
             _config = new TextBox();
             _config.Multiline = true;
             _config.ScrollBars = ScrollBars.Both;
@@ -308,8 +327,14 @@ namespace ServerHelp.Ui
             Show(_lblMtu, isWireGuard);
             Show(_mtu, isWireGuard);
 
-            Show(_lblConfig, isRaw);
-            Show(_config, isRaw);
+            bool isOvpn = kind == ConnectionKind.OpenVpn;
+            Show(_lblConfig, isRaw || isOvpn);
+            Show(_config, isRaw || isOvpn);
+            if (isOvpn)
+                _lblConfig.Text = L.T("متن فایل .ovpn (TunnelBear و مانند آن) را اینجا بچسبانید یا از فایل بخوانید:",
+                                     "paste the .ovpn profile here (TunnelBear and similar) or load it from a file:");
+            else if (isRaw)
+                _lblConfig.Text = L.T("کانفیگ JSON", "JSON configuration");
             Show(_lblSocksPort, kind == ConnectionKind.SingBoxConfig);
             Show(_socksPort, kind == ConnectionKind.SingBoxConfig);
 
@@ -322,11 +347,39 @@ namespace ServerHelp.Ui
                 Show(_port, false);
             }
 
+            // an OpenVPN profile brings its own server address and its own certificates; the only
+            // thing it may still need from the user is the account of the provider
+            if (isOvpn)
+            {
+                Show(_lblHost, false);
+                Show(_host, false);
+                Show(_lblPort, false);
+                Show(_port, false);
+                OvpnProfile profile = OvpnProfile.Parse(_config.Text, "");
+                Show(_lblUser, true);
+                Show(_user, true);
+                Show(_lblPassword, true);
+                Show(_password, true);
+                _lblUser.Text = L.T("نام کاربری حساب (اگر سرویس‌دهنده می‌خواهد)",
+                                    "account username (only when the provider asks for one)");
+                _lblPassword.Text = L.T("رمز حساب", "account password");
+                if (_ovpnHint != null)
+                {
+                    _ovpnHint.Text = profile.Ok
+                        ? "✓ " + profile.Summary() + (profile.Warnings.Count > 0
+                            ? "  •  " + string.Join(" ", profile.Warnings.ToArray()) : "")
+                        : L.T("فایل .ovpn را از فایل بخوانید یا متنش را بچسبانید.", "load or paste an .ovpn profile.");
+                    _ovpnHint.ForeColor = profile.Ok ? Color.FromArgb(24, 120, 50) : Color.FromArgb(120, 120, 120);
+                }
+            }
+            if (_ovpnBrowse != null) Show(_ovpnBrowse, isOvpn);
+
             // only the kinds that can really carry a game may join the automatic route
             _useForGame.Enabled = ConnectionKindInfo.Of(kind).CanCarryGame;
             if (!_useForGame.Enabled) _useForGame.Checked = false;
 
             UpdateSecretHint();
+            if (kind == ConnectionKind.OpenVpn && _config != null) _config.TextChanged += delegate { UpdateSecretHint(); };
         }
 
         /// <summary>Live explanation of what the pasted secret means - the main MTProto debug aid.</summary>
@@ -362,6 +415,23 @@ namespace ServerHelp.Ui
                 return;
             }
 
+            if (kind == ConnectionKind.OpenVpn)
+            {
+                OvpnProfile profile = OvpnProfile.Parse(_config == null ? "" : _config.Text, "");
+                if (_ovpnHint == null) return;
+                if (!profile.Ok)
+                {
+                    _ovpnHint.ForeColor = Color.FromArgb(120, 120, 120);
+                    _ovpnHint.Text = L.T("فایل .ovpn را از فایل بخوانید یا متنش را بچسبانید.",
+                                         "load or paste an .ovpn profile.");
+                    return;
+                }
+                _ovpnHint.ForeColor = profile.Warnings.Count > 0 ? Color.FromArgb(180, 110, 0) : Color.FromArgb(24, 120, 50);
+                _ovpnHint.Text = (profile.Warnings.Count > 0 ? "! " : "✓ ") + profile.Summary() +
+                                 (profile.Warnings.Count > 0 ? "  •  " + string.Join(" ", profile.Warnings.ToArray()) : "");
+                return;
+            }
+
             if (kind == ConnectionKind.WireGuard)
             {
                 string key = _secret.Text.Trim();
@@ -390,7 +460,54 @@ namespace ServerHelp.Ui
         }
 
 
+        /// <summary>Loads an .ovpn profile: the file may name certificates beside it, so the path is passed on.</summary>
+        private void LoadOvpnFile()
+        {
+            using (var dialog = new OpenFileDialog())
+            {
+                dialog.Title = L.T("انتخاب فایل OpenVPN", "Choose an OpenVPN profile");
+                dialog.Filter = "OpenVPN (*.ovpn)|*.ovpn|" + L.T("همه فایل‌ها", "all files") + " (*.*)|*.*";
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                try
+                {
+                    string text = File.ReadAllText(dialog.FileName);
+                    OvpnProfile profile = OvpnProfile.Parse(text, dialog.FileName);
+                    if (!profile.Ok)
+                    {
+                        MessageBox.Show(L.T("این فایل کانفیگ OpenVPN نیست: ", "this file is not an OpenVPN profile: ") +
+                                        string.Join(" ", profile.Warnings.ToArray()),
+                            "Server Help", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    _config.Text = text;
+                    _name.Text = ConnectionParser.OvpnName(dialog.FileName, profile);
+                    if (profile.NeedsCredentials && _user.Text.Length == 0)
+                        _user.Focus();
+                    else
+                        OnKindChanged();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message, "Server Help", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+
         // ------------------------------------------------------------------ actions
+
+        /// <summary>The one place the dialog writes back what the .ovpn said about itself.</summary>
+        private void CollectOvpnFlags(ConnectionEntry entry)
+        {
+            if (entry == null || entry.Kind != ConnectionKind.OpenVpn) return;
+            OvpnProfile profile = OvpnProfile.Parse(entry.Config, "");
+            entry.NeedsCredentials = profile.NeedsCredentials;
+            if (profile.Ok)
+            {
+                entry.Host = profile.Host;
+                entry.Port = profile.Port;
+                entry.Notes = profile.Summary();
+            }
+        }
 
         private void Collect()
         {
@@ -416,6 +533,7 @@ namespace ServerHelp.Ui
             Entry.LocalSocksPort = (int)_socksPort.Value;
             Entry.Notes = _notes.Text.Trim();
             Entry.Dc = (int)_dc.Value;
+            CollectOvpnFlags(Entry);
 
             // a changed address invalidates the delay that was measured for the old one
             if (_original != null && !_original.SameConfig(Entry)) Entry.ForgetTest();

@@ -313,6 +313,12 @@ namespace ServerHelp.Core
             return entry;
         }
 
+        /// <summary>The name an .ovpn file suggests (its own file name).</summary>
+        public static string OvpnName(string sourceName, OvpnProfile profile)
+        {
+            return NameFromSource(sourceName, profile);
+        }
+
         private static string NameFromSource(string sourceName, OvpnProfile profile)
         {
             string name = sourceName == null ? "" : Path.GetFileName(sourceName);

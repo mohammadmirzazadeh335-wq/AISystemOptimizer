@@ -106,6 +106,8 @@ namespace ServerHelp.Core
         public string PinnedChainHop = "";
         /// <summary>Send name lookups through the chosen route instead of the local DNS.</summary>
         public bool DnsThroughTunnel = true;
+        /// <summary>How many two hop relay chains the route optimiser tries.</summary>
+        public int OptimiseChains = 4;
         /// <summary>When the chosen route fails, keep going with the automatic one.</summary>
         public bool AllowRouteFallback = true;
         /// <summary>Group every working proxy so sing-box itself fails over to the fastest one.</summary>
@@ -233,6 +235,7 @@ namespace ServerHelp.Core
                 s.PinnedConnection = Json.GetStr(d, "pinnedConnection", s.PinnedConnection);
                 s.PinnedChainHop = Json.GetStr(d, "pinnedChainHop", s.PinnedChainHop);
                 s.DnsThroughTunnel = Json.GetBool(d, "dnsThroughTunnel", s.DnsThroughTunnel);
+                s.OptimiseChains = Clamp(Json.GetInt(d, "optimiseChains", s.OptimiseChains), 0, 12);
                 s.AllowRouteFallback = Json.GetBool(d, "allowRouteFallback", s.AllowRouteFallback);
                 s.ProxyFailover = Json.GetBool(d, "proxyFailover", s.ProxyFailover);
                 s.KillSwitch = Json.GetBool(d, "killSwitch", s.KillSwitch);
@@ -324,6 +327,7 @@ namespace ServerHelp.Core
                 w.Prop("pinnedConnection", s.PinnedConnection);
                 w.Prop("pinnedChainHop", s.PinnedChainHop);
                 w.Prop("dnsThroughTunnel", s.DnsThroughTunnel);
+                w.Prop("optimiseChains", s.OptimiseChains);
                 w.Prop("allowRouteFallback", s.AllowRouteFallback);
                 w.Prop("proxyFailover", s.ProxyFailover);
                 w.Prop("killSwitch", s.KillSwitch);
