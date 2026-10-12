@@ -21,8 +21,10 @@ namespace ServerHelp
         {
             var failures = new List<string>();
             var passes = new List<string>();
+            var output = new List<string>();
 
             Console.WriteLine("Server Help self test");
+            output.Add("Server Help self test");
 
             // the engine travels inside the exe, exactly as it does for a user; unpack it first so
             // the configurations can be validated by the real thing
@@ -44,11 +46,24 @@ namespace ServerHelp
             // ---- 4. the route optimiser plans chains sensibly
             CheckOptimizer(failures, passes);
 
-            Console.WriteLine();
-            foreach (string line in passes) Console.WriteLine("  ok    " + line);
-            foreach (string line in failures) Console.WriteLine("  FAIL  " + line);
-            Console.WriteLine();
-            Console.WriteLine(passes.Count + " passed, " + failures.Count + " failed");
+            output.Add("");
+            foreach (string line in passes) output.Add("  ok    " + line);
+            foreach (string line in failures) output.Add("  FAIL  " + line);
+            output.Add("");
+            output.Add(passes.Count + " passed, " + failures.Count + " failed");
+
+            // The app is a window application, so in a headless build its stdout is not attached to
+            // anything. The report is written to a file as well, which is what the build reads.
+            try
+            {
+                AppPaths.EnsureAll();
+                File.WriteAllLines(AppPaths.SelfTestReport, output.ToArray(), new UTF8Encoding(false));
+            }
+            catch { }
+            foreach (string line in output)
+            {
+                Console.WriteLine(line);
+            }
             return failures.Count == 0 ? 0 : 1;
         }
 

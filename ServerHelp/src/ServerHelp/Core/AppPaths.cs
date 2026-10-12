@@ -24,6 +24,8 @@ namespace ServerHelp.Core
         public static string Cache { get { return Path.Combine(Data, "cache"); } }
 
         public static string SettingsFile { get { return Path.Combine(Data, "settings.json"); } }
+        /// <summary>Where the headless self test leaves its report for the build to read.</summary>
+        public static string SelfTestReport { get { return Path.Combine(Data, "selftest.txt"); } }
         public static string WarpAccountFile { get { return Path.Combine(Data, "warp-account.json"); } }
 
         public static string SingBoxExe { get { return Path.Combine(Bin, "sing-box.exe"); } }

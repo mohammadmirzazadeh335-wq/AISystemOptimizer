@@ -130,12 +130,19 @@ jobs:
           if (-not $exe) { $exe = Get-ChildItem -Path 'ServerHelp/src/ServerHelp/bin' -Recurse -Filter 'ServerHelp.exe' | Select-Object -First 1 }
           if (-not $exe) { throw 'ServerHelp.exe was not built' }
           # the engine is embedded in the exe, so the app unpacks it itself
-          $report = & $exe.FullName --selftest 2>&1
+          & $exe.FullName --selftest
           $code = $LASTEXITCODE
-          $report | ForEach-Object { Write-Host $_ }
+          # a window application has no console in the build, so the report is read from its file
+          $reportPath = Join-Path $env:LOCALAPPDATA 'ServerHelp\selftest.txt'
+          if (Test-Path $reportPath) {
+            $report = Get-Content $reportPath
+          } else {
+            $report = @('the self test wrote no report; exit code was ' + $code)
+          }
+          $report | ForEach-Object { Write-Output $_ }
           $report | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
           # every failure becomes an annotation, so it is readable from the run page and the API
-          $report | Where-Object { $_ -match '^\s*(FAIL|.*failed)' } | ForEach-Object { Write-Host "::error::$_" }
+          $report | Where-Object { $_ -match 'FAIL' } | ForEach-Object { Write-Output "::error::$_" }
           if ($code -ne 0) { throw "self test failed with exit code $code" }
 
       - name: Collect artefact
