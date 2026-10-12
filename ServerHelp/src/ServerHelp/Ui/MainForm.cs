@@ -49,7 +49,7 @@ namespace ServerHelp.Ui
         private CheckBox _chkFragment;
         private NumericUpDown _chainCount;
         private NumericUpDown _retestMinutes;
-        private Timer _retestTimer;
+        private System.Windows.Forms.Timer _retestTimer;
         private ComboBox _tunnelCombo;
         private NumericUpDown _heapBox, _endpointBox;
         private TextBox _extraJvmBox;
@@ -1563,7 +1563,7 @@ namespace ServerHelp.Ui
             }
             int minutes = _settings.RetestMinutes;
             if (minutes <= 0) return;
-            _retestTimer = new Timer();
+            _retestTimer = new System.Windows.Forms.Timer();
             _retestTimer.Interval = Math.Max(1, minutes) * 60 * 1000;
             _retestTimer.Tick += delegate
             {
