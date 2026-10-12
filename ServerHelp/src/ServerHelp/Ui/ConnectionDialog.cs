@@ -386,57 +386,6 @@ namespace ServerHelp.Ui
             _secretHint.Text = "";
         }
 
-        private void OnKindChanged()
-        {
-            ConnectionKind kind = CurrentKind;
-            bool isProxy = kind == ConnectionKind.Socks5 || kind == ConnectionKind.Http || kind == ConnectionKind.Mtproto;
-            bool isWireGuard = kind == ConnectionKind.WireGuard;
-            bool isDns = kind == ConnectionKind.Dns;
-            bool isRaw = kind == ConnectionKind.SingBoxOutbound || kind == ConnectionKind.SingBoxConfig;
-            bool isWarp = kind == ConnectionKind.Warp;
-
-            Show(_lblHost, isProxy || isWireGuard);
-            Show(_host, isProxy || isWireGuard);
-            Show(_lblPort, isProxy || kind == ConnectionKind.Http);
-            Show(_port, isProxy || kind == ConnectionKind.Http);
-            Show(_lblUser, kind == ConnectionKind.Socks5 || kind == ConnectionKind.Http);
-            Show(_user, kind == ConnectionKind.Socks5 || kind == ConnectionKind.Http);
-            Show(_lblPassword, kind == ConnectionKind.Socks5 || kind == ConnectionKind.Http);
-            Show(_password, kind == ConnectionKind.Socks5 || kind == ConnectionKind.Http);
-
-            Show(_lblDns, isDns);
-            Show(_dns, isDns);
-
-            Show(_lblSecret, kind == ConnectionKind.Mtproto || isWireGuard);
-            Show(_secret, kind == ConnectionKind.Mtproto || isWireGuard);
-            Show(_lblAddress, isWireGuard);
-            Show(_address, isWireGuard);
-            Show(_lblAddressV6, isWireGuard);
-            Show(_addressV6, isWireGuard);
-            Show(_lblPeerKey, isWireGuard);
-            Show(_peerKey, isWireGuard);
-            Show(_lblPeerHost, isWireGuard);
-            Show(_peerHost, isWireGuard);
-            Show(_lblPeerPort, isWireGuard);
-            Show(_peerPort, isWireGuard);
-            Show(_lblReserved, isWireGuard);
-            Show(_reserved, isWireGuard);
-            Show(_lblMtu, isWireGuard);
-            Show(_mtu, isWireGuard);
-
-            Show(_lblConfig, isRaw);
-            Show(_config, isRaw);
-            Show(_lblSocksPort, kind == ConnectionKind.SingBoxConfig);
-            Show(_socksPort, kind == ConnectionKind.SingBoxConfig);
-
-            Show(_useForGame, !isWarp || true);
-            if (isWarp || isDns || kind == ConnectionKind.Mtproto)
-            {
-                Show(_lblHost, false);
-                Show(_host, false);
-                Show(_lblPort, false);
-                Show(_port, false);
-            }
         }
 
         // ------------------------------------------------------------------ actions
