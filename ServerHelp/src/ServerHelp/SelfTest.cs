@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using ServerHelp.Core;
+using ServerHelp.Mc;
 using ServerHelp.Net;
 using ServerHelp.Tunnel;
 
@@ -87,6 +88,7 @@ namespace ServerHelp
             Guard("the connection list file", failures, delegate { CheckListFile(failures, passes); });
             Guard("the settings model", failures, delegate { CheckSettings(failures, passes); });
             Guard("the quality numbers", failures, delegate { CheckQuality(failures, passes); });
+            Guard("the launch plan", failures, delegate { CheckProfiler(failures, passes); });
             Guard("the tester", failures, delegate { CheckTesterAnswers(failures, passes); });
             Guard("the subscription reader", failures, delegate { CheckSubscription(failures, passes); });
             Guard("the OpenVPN profile", failures, delegate { CheckOvpn(failures, passes); });
@@ -327,6 +329,7 @@ namespace ServerHelp
             wanted.KillSwitch = true;
             wanted.ProxyFailover = false;
             wanted.AllowRouteFallback = false;
+            wanted.ConfirmTuning = false;
             wanted.Servers.Clear();
             // the defaults already carry sample connections; the round trip is about ours
             wanted.Connections.Clear();
@@ -375,6 +378,52 @@ namespace ServerHelp
             }
             Expect(SettingsStore.Parse("{\"pinnedConnection\":null,\"retestMinutes\":9999}").RetestMinutes == 720,
                    "a nonsense retest interval is clamped instead of trusted", failures, passes);
+            Expect(!back.ConfirmTuning && AppSettings.Default().ConfirmTuning,
+                   "the \"ask before tuning\" switch is on by default and survives a save and load",
+                   failures, passes);
+        }
+
+        /// <summary>
+        /// The switches on the optimisation tab have to match the command line the game is started
+        /// with: with "JVM tuning flags" switched off the plan changes the memory and nothing else, and
+        /// the plan the user reads says exactly that.
+        /// </summary>
+        private static void CheckProfiler(List<string> failures, List<string> passes)
+        {
+            var version = new McVersion();
+            version.Id = "1.20.1";
+            version.Type = "release";
+            version.Folder = Path.Combine(Path.GetTempPath(), "serverhelp-selftest-version");
+
+            AppSettings settings = AppSettings.Default();
+            settings.UseAikarFlags = true;
+            settings.OpenGlPipeline = false;
+            GamePlan on = GameProfiler.Build(version, settings, null, "", 17, new List<string>());
+            bool collector = false, ipv4 = false;
+            foreach (string flag in on.Flags)
+            {
+                if (flag.StartsWith("-XX:", StringComparison.Ordinal)) collector = true;
+                if (flag == "-Djava.net.preferIPv4Stack=true") ipv4 = true;
+            }
+            Expect(collector && on.G1 && ipv4,
+                   "the launch plan carries the collector and the IPv4 flag while the switches are on",
+                   failures, passes);
+            Expect(on.Summary().Contains("G1GC"),
+                   "the plan that is shown names the collector the game will be started with", failures, passes);
+
+            settings.UseAikarFlags = false;
+            GamePlan off = GameProfiler.Build(version, settings, null, "", 17, new List<string>());
+            Expect(off.Flags.Count == 0 && !off.G1,
+                   "with the JVM switches off the plan changes the memory and nothing else", failures, passes);
+            Expect(!off.Summary().Contains("G1GC") && off.Summary().Contains(L.T("فقط حافظه", "only the memory")),
+                   "the plan says out loud that only the memory is tuned", failures, passes);
+
+            settings.OpenGlPipeline = true;
+            GamePlan opengl = GameProfiler.Build(version, settings, null, "", 17, new List<string>());
+            bool pipeline = false;
+            foreach (string flag in opengl.Flags) if (flag == "-Dsun.java2d.opengl=true") pipeline = true;
+            Expect(pipeline && opengl.Flags.Count == 1,
+                   "the separate OpenGL switch still works with the tuning flags off", failures, passes);
         }
 
         /// <summary>The numbers a route is judged by, checked without touching the network.</summary>
