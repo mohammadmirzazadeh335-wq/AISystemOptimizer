@@ -195,15 +195,16 @@ namespace ServerHelp.Core
             var list = new List<ConnectionEntry>();
             try
             {
-                Dictionary<string, object> root = Json.ParseObject(json);
-                if (root == null) { error = L.T("فایل JSON خوانده نشد", "the JSON file cannot be read"); return list; }
-                object raw = Json.Get(root, "connections");
-                List<object> array = Json.Arr(raw);
+                string text = (json ?? "").TrimStart();
+                // this app saves an object with a connections key; other tools export a bare array,
+                // and a file the user brought from elsewhere must not be rejected for that alone
+                List<object> array = text.StartsWith("[", StringComparison.Ordinal)
+                    ? Json.Arr(Json.Parse(text))
+                    : Json.Arr(Json.Get(Json.ParseObject(text), "connections"));
                 if (array == null)
                 {
-                    // some tools export a bare array; accept it instead of complaining
-                    array = Json.Arr(Json.Parse(json));
-                    if (array == null) { error = L.T("کلید connections در فایل نیست", "the file has no connections key"); return list; }
+                    error = L.T("کلید connections در فایل نیست", "the file has no connections key");
+                    return list;
                 }
                 foreach (object item in array)
                 {
