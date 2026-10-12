@@ -232,8 +232,27 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $tag = "serverhelp-v1.0.0-${{ github.run_number }}"
-          gh release create $tag 'dist/ServerHelp.exe' 'dist/ServerHelp.exe.sha256' `
-            --target "${{ github.sha }}" `
-            --title "Server Help v1.0.0 (build ${{ github.run_number }})" `
-            --latest=false `
-            --notes "Server Help — Minecraft server helper: diagnoses the connection, builds a low ping WARP tunnel for the game server only, tunes Windows, then launches the selected version straight into the server.`n`nDownload ServerHelp.exe, then right-click → Run as administrator. SHA-256 is published next to the file.`n`nPersian guide: ServerHelp/README.md"
+          $title = "Server Help v1.0.0 (build ${{ github.run_number }})"
+          $notes = "Server Help — Minecraft server helper: diagnoses the connection, builds a low ping WARP tunnel for the game server only, tunes Windows, then launches the selected version straight into the server.`n`nDownload ServerHelp.exe, then right-click → Run as administrator. SHA-256 is published next to the file.`n`nPersian guide: ServerHelp/README.md"
+          # A build costs five minutes and an upload can fail on a bad network day, so publishing is
+          # retried instead of throwing the finished exe away on the first error.
+          $published = $false
+          for ($attempt = 1; $attempt -le 3 -and -not $published; $attempt++) {
+            if ($attempt -gt 1) {
+              Write-Host "publish attempt $attempt of 3"
+              Start-Sleep -Seconds 20
+            }
+            gh release view $tag *> $null
+            if ($LASTEXITCODE -eq 0) {
+              # A previous attempt (or this run) left the release in place: just make sure the files are on it.
+              gh release upload $tag 'dist/ServerHelp.exe' 'dist/ServerHelp.exe.sha256' --clobber
+            } else {
+              gh release create $tag 'dist/ServerHelp.exe' 'dist/ServerHelp.exe.sha256' `
+                --target "${{ github.sha }}" --title $title --latest=false --notes $notes
+            }
+            if ($LASTEXITCODE -eq 0) { $published = $true }
+          }
+          if (-not $published) { throw "the release could not be published after three attempts" }
+          gh release view $tag
+          if ($LASTEXITCODE -eq 0) { Write-Host "release $tag is ready" }
+          else { Write-Warning "the release was published but could not be read back" }
