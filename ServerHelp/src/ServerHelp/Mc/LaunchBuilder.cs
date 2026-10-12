@@ -22,6 +22,8 @@ namespace ServerHelp.Mc
         public int MissingLibraries;
         public int DownloadedLibraries;
 
+        public GamePlan Profile;                 // what we decided for this version (shown in the UI)
+
         public string CommandLine { get { return JavaExe + " " + Arguments; } }
     }
 
@@ -40,6 +42,14 @@ namespace ServerHelp.Mc
         public static LaunchPlan Build(McVersion version, string javawPath, string gameDir, string nickname,
                                        ServerProfile server, AppSettings settings, bool quickPlay,
                                        List<string> extraJvmArgs, out string error)
+        {
+            return Build(version, javawPath, gameDir, nickname, server, settings, quickPlay, extraJvmArgs,
+                         new GamePlan(), out error);
+        }
+
+        public static LaunchPlan Build(McVersion version, string javawPath, string gameDir, string nickname,
+                                       ServerProfile server, AppSettings settings, bool quickPlay,
+                                       List<string> extraJvmArgs, GamePlan precomputed, out string error)
         {
             error = "";
             var plan = new LaunchPlan();
@@ -199,10 +209,36 @@ namespace ServerHelp.Mc
                 jvmArgs.Insert(0, "-Dio.netty.native.workdir=" + nativesDir);
                 jvmArgs.Insert(0, "-Dfile.encoding=UTF-8");
 
-                int heapMb = settings.MaxHeapMb > 0 ? settings.MaxHeapMb : RecommendHeapMb();
-                jvmArgs.Insert(0, "-Xmx" + heapMb + "M");
-                jvmArgs.Insert(1, "-Xms" + Math.Max(512, heapMb / 2) + "M");
-                if (settings.UseAikarFlags) jvmArgs.InsertRange(0, AikarFlags());
+                int heapMb = 2048;
+                int javaMajor = JavaLocator.ReadMajor(javawPath);
+                if (javaMajor <= 0 && version != null) javaMajor = version.RequiredJavaMajor;
+                var libraryNames = new List<string>();
+                if (libraries != null)
+                    foreach (object item in libraries)
+                    {
+                        var lib = Json.Obj(item);
+                        if (lib != null) libraryNames.Add(Json.GetStr(lib, "name", ""));
+                    }
+
+                // ---- one version aware profile decides memory, collector and the loader flags
+                GamePlan profile = precomputed;
+                if (profile == null || profile.Flags.Count == 0 && profile.HeapMb == 0)
+                    profile = GameProfiler.Build(version, settings, server, gameDir, javaMajor, libraryNames);
+                if (!settings.UseAikarFlags)
+                {
+                    // the user asked for the plain defaults: keep the memory, drop the collector flags
+                    profile.Flags.Clear();
+                    profile.Applied.Add(L.T("پرچم‌های JVM خاموش است (تنظیمات → بهینه‌سازی)",
+                                            "JVM flags are switched off (settings -> optimise)"));
+                }
+                List<string> wanted = GameProfiler.Deduplicate(jvmArgs, profile.Flags);
+                if (wanted.Count < profile.Flags.Count)
+                    profile.Applied.Add(L.T("پرچم‌های تکراری کانفیگ نسخه نادیده گرفته شد",
+                                            "flags the version config already sets were skipped"));
+                jvmArgs.InsertRange(0, wanted);
+                jvmArgs.Insert(0, "-Xms" + profile.InitialHeapMb + "M");
+                jvmArgs.Insert(0, "-Xmx" + profile.HeapMb + "M");
+                plan.Profile = profile;
                 // Extra flags from the pipeline (for example the local SOCKS port of a proxy route,
                 // which the game needs when no TUN interface could be created).
                 if (extraJvmArgs != null)

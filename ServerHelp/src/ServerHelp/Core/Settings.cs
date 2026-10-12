@@ -86,6 +86,7 @@ namespace ServerHelp.Core
         public int MaxHeapMb = 0;                // 0 => automatic
         public string ExtraJvmArgs = "";
         public bool QuickPlay = true;             // join the server straight away
+        public bool OpenGlPipeline = false;       // -Dsun.java2d.opengl=true for stubborn Intel drivers
 
         public bool AutoRestoreOnExit = true;
         public bool KeepTunnelAfterGame = false;
@@ -212,6 +213,7 @@ namespace ServerHelp.Core
                 s.TimerResolution = Json.GetBool(d, "timerResolution", s.TimerResolution);
 
                 s.UseAikarFlags = Json.GetBool(d, "useAikarFlags", s.UseAikarFlags);
+                s.OpenGlPipeline = Json.GetBool(d, "openGlPipeline", s.OpenGlPipeline);
                 s.MaxHeapMb = Clamp(Json.GetInt(d, "maxHeapMb", s.MaxHeapMb), 0, 65536);
                 s.ExtraJvmArgs = Json.GetStr(d, "extraJvmArgs", s.ExtraJvmArgs);
                 s.QuickPlay = Json.GetBool(d, "quickPlay", s.QuickPlay);
@@ -302,6 +304,7 @@ namespace ServerHelp.Core
                 w.Prop("addFirewallRules", s.AddFirewallRules);
                 w.Prop("timerResolution", s.TimerResolution);
                 w.Prop("useAikarFlags", s.UseAikarFlags);
+                w.Prop("openGlPipeline", s.OpenGlPipeline);
                 w.Prop("maxHeapMb", s.MaxHeapMb);
                 w.Prop("extraJvmArgs", s.ExtraJvmArgs);
                 w.Prop("quickPlay", s.QuickPlay);

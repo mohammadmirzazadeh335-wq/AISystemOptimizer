@@ -159,6 +159,29 @@ namespace ServerHelp.Mc
             return true;
         }
 
+        /// <summary>Numeric comparison of two version ids ("1.12.2" vs "1.13"): -1, 0 or 1.</summary>
+        public static int CompareVersions(string left, string right)
+        {
+            int a1, a2, b1, b2;
+            bool okLeft = TryParseGameVersion(left, out a1, out a2);
+            bool okRight = TryParseGameVersion(right, out b1, out b2);
+            if (!okLeft || !okRight) return 0;
+            if (a1 != b1) return a1 < b1 ? -1 : 1;
+            if (a2 != b2) return a2 < b2 ? -1 : 1;
+            int a3 = PatchOf(left), b3 = PatchOf(right);
+            if (a3 != b3) return a3 < b3 ? -1 : 1;
+            return 0;
+        }
+
+        private static int PatchOf(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return 0;
+            var match = System.Text.RegularExpressions.Regex.Match(id, @"(?<!\d)\d+\.\d+(?:\.(\d+))?");
+            if (!match.Success || !match.Groups[1].Success) return 0;
+            int value;
+            return int.TryParse(match.Groups[1].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out value) ? value : 0;
+        }
+
         /// <summary>True when the client understands --quickPlayMultiplayer (Minecraft 1.20 and newer).</summary>
         public static bool SupportsQuickPlay(string versionId)
         {

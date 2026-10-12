@@ -422,6 +422,9 @@ namespace ServerHelp.Orchestration
                 return;
             }
             string detail = L.N(plan.Classpath.Split(';').Length) + L.T(" کتابخانه", " libraries");
+            if (plan.Profile != null && plan.Profile.HeapMb > 0)
+                detail += " • " + plan.Profile.Loader + " • " + plan.Profile.HeapMb + " MB" +
+                          (plan.Profile.G1 ? " • G1GC" : " • CMS");
             if (plan.MissingLibraries > 0) detail += " • " + L.N(plan.MissingLibraries) + L.T(" فایل جاافتاده", " missing files");
             foreach (string note in plan.Notes) detail += " • " + note;
             Step("ساخت فرمان اجرا", "Build launch command", plan.MissingLibraries > 0 ? StepState.Warn : StepState.Done,

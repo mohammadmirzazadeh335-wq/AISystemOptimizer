@@ -35,12 +35,13 @@ namespace ServerHelp.Ui
         private ListView _stepList;
         private ListView _serverList;
         private ListView _versionList;
+        private TextBox _planBox;
         private ListView _endpointList;
         private TextBox _logBox;
         private TextBox _versionsDirBox;
         private TextBox _gameDirBox;
         private CheckBox _chkOptimize, _chkPower, _chkTrim, _chkClose, _chkPriority, _chkTuneNetwork, _chkFirewall, _chkTimer;
-        private CheckBox _chkAikar, _chkQuickPlay, _chkHosts, _chkKeepTunnel, _chkAutoRestore, _chkMinimize;
+        private CheckBox _chkAikar, _chkQuickPlay, _chkHosts, _chkKeepTunnel, _chkAutoRestore, _chkMinimize, _chkOpenGl;
         private ComboBox _tunnelCombo;
         private NumericUpDown _heapBox, _endpointBox;
         private TextBox _extraJvmBox;
@@ -358,6 +359,8 @@ namespace ServerHelp.Ui
             _pinCombo = new ComboBox();
             _pinCombo.DropDownStyle = ComboBoxStyle.DropDownList;
             _pinCombo.Width = 300;
+            if (_versionCombo != null) _versionCombo.SelectedIndexChanged += delegate { UpdatePlanPreview(); };
+            if (_versionList != null) _versionList.SelectedIndexChanged += delegate { UpdatePlanPreview(); };
             _pinCombo.SelectedIndexChanged += delegate
             {
                 if (_connectionsBusy) return;
@@ -468,6 +471,20 @@ namespace ServerHelp.Ui
             checkButton.Location = new Point(630, 58);
             checkButton.Click += delegate { CheckServerAsync(); };
             top.Controls.Add(checkButton);
+
+            // what optimisation this version will get; filled as soon as a version is picked
+            _planBox = new TextBox();
+            _planBox.Multiline = true;
+            _planBox.ReadOnly = true;
+            _planBox.ScrollBars = ScrollBars.Vertical;
+            _planBox.BorderStyle = BorderStyle.None;
+            _planBox.BackColor = Theme.Surface;
+            _planBox.ForeColor = Theme.Text;
+            _planBox.Font = UiKit.UiFont(9f, false);
+            _planBox.Location = new Point(470, 92);
+            _planBox.Size = new Size(370, 112);
+            _planBox.TabStop = false;
+            top.Controls.Add(_planBox);
 
             // the three dials: ping, chosen route, tunnel state
             _gaugePing = new SHGauge();
@@ -747,6 +764,10 @@ namespace ServerHelp.Ui
             panel.Controls.Add(_chkPriority);
             panel.Controls.Add(_chkTimer);
             panel.Controls.Add(_chkAikar);
+            _chkOpenGl = Check(L.T("خط لوله OpenGL جاوا (برای درایورهای اینتل)",
+                                   "Java OpenGL pipeline (helps some Intel drivers)"),
+                               _settings.OpenGlPipeline, delegate (bool v) { _settings.OpenGlPipeline = v; });
+            panel.Controls.Add(_chkOpenGl);
             panel.Controls.Add(_chkQuickPlay);
             panel.Controls.Add(_chkHosts);
             panel.Controls.Add(_chkKeepTunnel);
@@ -1723,6 +1744,68 @@ namespace ServerHelp.Ui
                 _versionCombo.SelectedIndex = index;
                 _tabs.SelectedIndex = 0;
             }
+        }
+
+        /// <summary>The version chosen in the combo box (the list just selects it).</summary>
+        private McVersion SelectedVersion()
+        {
+            int index = _versionCombo.SelectedIndex;
+            if (index < 0 || index >= _versions.Count) return null;
+            return _versions[index];
+        }
+
+        /// <summary>
+        /// Shows, before the user presses play, exactly what will be done to this version: the loader
+        /// that was detected, the memory that fits this machine, the collector and the missing files.
+        /// Building the launch command also downloads anything that is missing, so we do that here in
+        /// the background: by the time "optimise and play" is pressed the game is ready to start, which
+        /// is what keeps the whole thing inside a minute.
+        /// </summary>
+        private void UpdatePlanPreview()
+        {
+            McVersion version = SelectedVersion();
+            var target = _planBox;
+            if (target == null) return;
+            if (version == null)
+            {
+                target.Text = L.T("یک نسخه انتخاب کنید تا برنامه بهینه‌سازی همین نسخه را نشان دهد.",
+                                  "pick a version and this panel shows exactly what will be optimised.");
+                return;
+            }
+            target.Text = L.T("در حال محاسبه بهینه‌سازی…", "working out the optimisation…");
+            SetStatus(L.T("بهینه‌سازی نسخه ", "optimising version ") + version.Id + " …");
+            var thread = new Thread(delegate ()
+            {
+                try
+                {
+                    string dir = _gameDir;
+                    if (string.IsNullOrEmpty(dir)) dir = VersionScanner.DetectGameDir(_settings.GameDirOverride);
+                    string javaPath = ResolveJava(version);
+                    var plan = LaunchBuilder.Build(version, javaPath, dir, _settings.Nickname, SelectedServer(),
+                                                   _settings, _settings.QuickPlay, null, out string error);
+                    string text = plan == null
+                        ? L.T("بهینه‌سازی آماده نشد: ", "could not prepare the optimisation: ") + error
+                        : plan.Profile.Summary();
+                    Ui(delegate
+                    {
+                        if (_planBox != null && SelectedVersion() == version) _planBox.Text = text;
+                        if (plan != null)
+                            SetStatus(L.T("بهینه‌سازی آماده است — ", "optimisation ready — ") + version.Id +
+                                      L.T(" با ", " with ") + plan.Profile.HeapMb + " MB");
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn("plan preview: " + ex.Message);
+                    Ui(delegate
+                    {
+                        if (_planBox != null && SelectedVersion() == version)
+                            _planBox.Text = L.T("پیش‌نمایش بهینه‌سازی ممکن نشد: ", "the preview is unavailable: ") + ex.Message;
+                    });
+                }
+            });
+            thread.IsBackground = true;
+            thread.Start();
         }
 
         private void CheckServerAsync()
