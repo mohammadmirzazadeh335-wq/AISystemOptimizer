@@ -57,6 +57,7 @@ namespace ServerHelp.Ui
             FormBorderStyle = FormBorderStyle.Sizable;
             MinimizeBox = false;
             MaximizeBox = false;
+            MinimumSize = new Size(520, 420);   // the fields are hand-placed: below this they collide
 
             Entry = existing == null ? ConnectionEntry.Create("", ConnectionKind.Socks5) : existing.Clone();
             _original = Entry.Clone();
@@ -248,6 +249,22 @@ namespace ServerHelp.Ui
             Theme.Apply(this);
             Theme.StyleButton(_ok, true);
             Theme.StyleButton(_test, false);
+        }
+
+        /// <summary>
+        /// A tall dialog on a short screen would put its buttons under the taskbar. The panel already
+        /// scrolls, so clamping the window to the working area is all it takes.
+        /// </summary>
+        protected override void OnLoad(EventArgs e)
+        {
+            base.OnLoad(e);
+            try
+            {
+                Rectangle area = (Owner != null ? Screen.FromControl(Owner) : Screen.FromControl(this)).WorkingArea;
+                if (Height > area.Height - 30) Height = area.Height - 30;
+                if (Width > area.Width - 30) Width = area.Width - 30;
+            }
+            catch { }
         }
 
         // ------------------------------------------------------------------ fields

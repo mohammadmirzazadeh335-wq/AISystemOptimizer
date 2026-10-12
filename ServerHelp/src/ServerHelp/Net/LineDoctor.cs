@@ -57,7 +57,7 @@ namespace ServerHelp.Net
             tcp.Ok = tcpResult > 0;
             tcp.DelayMs = tcpResult;
             tcp.Detail = tcp.Ok
-                ? L.T("دست می‌رسد", "reachable") + " • " + tcpResult + " ms"
+                ? L.T("دست می‌رسد", "reachable") + " • " + L.N(tcpResult) + " ms"
                 : L.T("جواب نداد — احتمالاً مسیر بین‌المللی بسته است", "no answer - the international route looks blocked");
             probes.Add(tcp);
 
@@ -68,7 +68,7 @@ namespace ServerHelp.Net
             tls.Ok = tlsResult > 0;
             tls.DelayMs = tlsResult;
             tls.Detail = tls.Ok
-                ? L.T("سالم است", "healthy") + " • " + tlsResult + " ms"
+                ? L.T("سالم است", "healthy") + " • " + L.N(tlsResult) + " ms"
                 : tlsError;
             probes.Add(tls);
 
@@ -89,7 +89,7 @@ namespace ServerHelp.Net
             udp.Ok = direct.Count > 0;
             udp.DelayMs = (int)Math.Max(1, (DateTime.UtcNow.Ticks - start) / TimeSpan.TicksPerMillisecond);
             udp.Detail = udp.Ok
-                ? string.Join(", ", direct.ToArray()) + " • " + udp.DelayMs + " ms"
+                ? string.Join(", ", direct.ToArray()) + " • " + L.N(udp.DelayMs) + " ms"
                 : L.T("بدون پاسخ — DNS روی UDP مسدود است", "no answer - DNS over UDP is blocked");
             probes.Add(udp);
 
@@ -104,7 +104,7 @@ namespace ServerHelp.Net
                 game.Ok = result > 0;
                 game.DelayMs = result;
                 game.Detail = game.Ok
-                    ? target + ":" + gamePort + " • " + result + " ms"
+                    ? target + ":" + gamePort + " • " + L.N(result) + " ms"
                     : target + ":" + gamePort + " — " + L.T("بی‌پاسخ (یا کلید TCP ندارد)",
                                                            "no answer (or it does not answer TCP)");
             }

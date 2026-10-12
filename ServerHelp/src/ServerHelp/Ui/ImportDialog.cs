@@ -39,6 +39,8 @@ namespace ServerHelp.Ui
             FormBorderStyle = FormBorderStyle.Sizable;
             MaximizeBox = false;
             MinimizeBox = false;
+            MinimumSize = new Size(560, 420);   // the rows below are fixed heights; the box in the
+                                                // middle is the only part that should shrink
 
             var hint = new Label();
             hint.Dock = DockStyle.Top;
@@ -135,6 +137,19 @@ namespace ServerHelp.Ui
 
             Theme.Apply(this);
             Theme.StyleButton(ok, true);
+        }
+
+        /// <summary>Keeps the dialog inside the screen it opens on.</summary>
+        protected override void OnLoad(EventArgs e)
+        {
+            base.OnLoad(e);
+            try
+            {
+                Rectangle area = (Owner != null ? Screen.FromControl(Owner) : Screen.FromControl(this)).WorkingArea;
+                if (Height > area.Height - 30) Height = area.Height - 30;
+                if (Width > area.Width - 30) Width = area.Width - 30;
+            }
+            catch { }
         }
 
         private void Parse()

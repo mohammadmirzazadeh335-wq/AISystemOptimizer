@@ -289,7 +289,11 @@ namespace ServerHelp.Ui
 
             var buttons = new FlowLayoutPanel();
             buttons.Dock = DockStyle.Top;
-            buttons.Height = 82;
+            // rows of buttons that wrap: the bar has to grow with them, or the last row is simply
+            // cut off in a narrower window (that is how "Load from file" and "Subscription link"
+            // ended up half invisible)
+            buttons.AutoSize = true;
+            buttons.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             buttons.FlowDirection = FlowDirection.LeftToRight;
 
             var add = new Button(); add.Text = L.T("افزودن", "Add"); add.Width = 100;
@@ -342,7 +346,11 @@ namespace ServerHelp.Ui
             // routes properly (jitter, loss, throughput) instead of trusting one number
             var measuring = new FlowLayoutPanel();
             measuring.Dock = DockStyle.Top;
-            measuring.Height = 42;
+            // rows of buttons that wrap: the bar has to grow with them, or the last row is simply
+            // cut off in a narrower window (that is how "Load from file" and "Subscription link"
+            // ended up half invisible)
+            measuring.AutoSize = true;
+            measuring.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             measuring.FlowDirection = FlowDirection.LeftToRight;
 
             var diagnose = new Button();
@@ -380,7 +388,11 @@ namespace ServerHelp.Ui
             // third row: the Telegram side of things, because an MTProxy needs its own tools
             var telegram = new FlowLayoutPanel();
             telegram.Dock = DockStyle.Top;
-            telegram.Height = 42;
+            // rows of buttons that wrap: the bar has to grow with them, or the last row is simply
+            // cut off in a narrower window (that is how "Load from file" and "Subscription link"
+            // ended up half invisible)
+            telegram.AutoSize = true;
+            telegram.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             telegram.FlowDirection = FlowDirection.LeftToRight;
 
             var verify = new Button();
@@ -422,7 +434,11 @@ namespace ServerHelp.Ui
 
             var options = new FlowLayoutPanel();
             options.Dock = DockStyle.Top;
-            options.Height = 96;
+            // rows of buttons that wrap: the bar has to grow with them, or the last row is simply
+            // cut off in a narrower window (that is how "Load from file" and "Subscription link"
+            // ended up half invisible)
+            options.AutoSize = true;
+            options.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             options.FlowDirection = FlowDirection.LeftToRight;
 
             var pinLabel = UiKit.Sub(L.T("مسیر ثابت بازی:", "Pinned game route:"));
@@ -548,7 +564,10 @@ namespace ServerHelp.Ui
 
             _connectionSummary = UiLabel("—");
             _connectionSummary.Dock = DockStyle.Bottom;
-            _connectionSummary.Height = 34;
+            // one line at a wide window, two at a narrow one: give it the room, and a tooltip rather
+            // than a silently cut sentence
+            _connectionSummary.Height = 48;
+            _connectionSummary.AutoEllipsis = true;
             card.Controls.Add(_connectionSummary);
 
             _connectionList = new ListView();
@@ -591,16 +610,24 @@ namespace ServerHelp.Ui
 
             var top = new SHPanel();
             top.Dock = DockStyle.Top;
-            top.Height = 250;
+            top.Height = 350;
             top.Title = L.T("خانه و اجرا", "Home and play");
 
+            // Everything below is hand-placed, so the width it is placed against is worked out here and
+            // the wide controls are anchored to both edges: nothing is ever wider than the panel (the
+            // play button used to run past the right edge and the plan box used to sit on top of the
+            // nickname box and the progress bar).
+            int panelWidth = Math.Max(820, ClientSize.Width - 40);
+            int rightX = 456;                        // the gauges end here
+            int rightW = panelWidth - rightX - 12;   // the plan box and the play button fill this
+
             var lblServer = UiKit.Sub(L.T("سرور:", "Server:"));
-            lblServer.Location = new Point(12, 40);
+            lblServer.Location = new Point(12, 80);
             top.Controls.Add(lblServer);
 
             _serverCombo = new ComboBox();
             _serverCombo.DropDownStyle = ComboBoxStyle.DropDownList;
-            _serverCombo.Location = new Point(12, 60);
+            _serverCombo.Location = new Point(12, 100);
             _serverCombo.Width = 300;
             _serverCombo.SelectedIndexChanged += delegate
             {
@@ -610,12 +637,12 @@ namespace ServerHelp.Ui
             top.Controls.Add(_serverCombo);
 
             var lblVersion = UiKit.Sub(L.T("نسخه ماینکرفت:", "Minecraft version:"));
-            lblVersion.Location = new Point(330, 40);
+            lblVersion.Location = new Point(330, 80);
             top.Controls.Add(lblVersion);
 
             _versionCombo = new ComboBox();
             _versionCombo.DropDownStyle = ComboBoxStyle.DropDownList;
-            _versionCombo.Location = new Point(330, 60);
+            _versionCombo.Location = new Point(330, 100);
             _versionCombo.Width = 280;
             top.Controls.Add(_versionCombo);
 
@@ -623,7 +650,7 @@ namespace ServerHelp.Ui
             checkButton.Text = L.T("بررسی سرور", "Check server");
             checkButton.Height = 30;
             checkButton.Width = 150;
-            checkButton.Location = new Point(630, 58);
+            checkButton.Location = new Point(630, 98);
             checkButton.Click += delegate { CheckServerAsync(); };
             top.Controls.Add(checkButton);
 
@@ -636,14 +663,15 @@ namespace ServerHelp.Ui
             _planBox.BackColor = Theme.Surface;
             _planBox.ForeColor = Theme.Text;
             _planBox.Font = UiKit.UiFont(9f, false);
-            _planBox.Location = new Point(470, 92);
-            _planBox.Size = new Size(370, 112);
+            _planBox.Location = new Point(rightX, 192);
+            _planBox.Size = new Size(rightW, 96);
             _planBox.TabStop = false;
+            _planBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             top.Controls.Add(_planBox);
 
             // the three dials: ping, chosen route, tunnel state
             _gaugePing = new SHGauge();
-            _gaugePing.Location = new Point(12, 100);
+            _gaugePing.Location = new Point(12, 198);
             _gaugePing.Size = new Size(140, 140);
             _gaugePing.Unknown = true;
             _gaugePing.Unit = "ms";
@@ -651,7 +679,7 @@ namespace ServerHelp.Ui
             top.Controls.Add(_gaugePing);
 
             _gaugeRoute = new SHGauge();
-            _gaugeRoute.Location = new Point(158, 100);
+            _gaugeRoute.Location = new Point(158, 198);
             _gaugeRoute.Size = new Size(140, 140);
             _gaugeRoute.Unknown = true;
             _gaugeRoute.Unit = "—";
@@ -660,7 +688,7 @@ namespace ServerHelp.Ui
             top.Controls.Add(_gaugeRoute);
 
             _gaugeTunnel = new SHGauge();
-            _gaugeTunnel.Location = new Point(304, 100);
+            _gaugeTunnel.Location = new Point(304, 198);
             _gaugeTunnel.Size = new Size(140, 140);
             _gaugeTunnel.Unknown = true;
             _gaugeTunnel.Unit = L.T("خاموش", "off");
@@ -668,20 +696,21 @@ namespace ServerHelp.Ui
             top.Controls.Add(_gaugeTunnel);
 
             _runProgress = new SHProgress();
-            _runProgress.Location = new Point(456, 104);
-            _runProgress.Width = 500;
-            _runProgress.Height = 40;
+            _runProgress.Location = new Point(12, 44);
+            _runProgress.Width = panelWidth - 24 - 170;
+            _runProgress.Height = 28;
+            _runProgress.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             _runProgress.Caption = L.T("آماده — دکمه اجرا را بزنید", "ready - press play");
             _runProgress.BarColor = Theme.Accent;
             top.Controls.Add(_runProgress);
 
             var lblNick = UiKit.Sub(L.T("نام بازیکن (آفلاین):", "Player name (offline):"));
-            lblNick.Location = new Point(456, 150);
+            lblNick.Location = new Point(12, 130);
             top.Controls.Add(lblNick);
 
             _nicknameBox = new TextBox();
-            _nicknameBox.Location = new Point(456, 170);
-            _nicknameBox.Width = 300;
+            _nicknameBox.Location = new Point(12, 150);
+            _nicknameBox.Width = 240;
             _nicknameBox.Text = _settings.Nickname;
             _nicknameBox.TextChanged += delegate { _settings.Nickname = _nicknameBox.Text.Trim(); };
             top.Controls.Add(_nicknameBox);
@@ -691,8 +720,9 @@ namespace ServerHelp.Ui
             _playButton.Accent = true;
             _playButton.Font = UiKit.UiFont(11.5f, true);
             _playButton.Height = 46;
-            _playButton.Width = 300;
-            _playButton.Location = new Point(780, 166);
+            _playButton.Width = rightW;
+            _playButton.Location = new Point(rightX, 294);
+            _playButton.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             _playButton.Click += delegate { StartPipeline(); };
             top.Controls.Add(_playButton);
 
@@ -700,16 +730,19 @@ namespace ServerHelp.Ui
             _stopButton.Text = L.T("توقف و بازگردانی", "Stop and restore");
             _stopButton.Height = 30;
             _stopButton.Width = 150;
-            _stopButton.Location = new Point(456, 202);
+            _stopButton.Location = new Point(panelWidth - 12 - 150, 44);
+            _stopButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             _stopButton.Enabled = false;
             _stopButton.Click += delegate { StopEverything(); };
             top.Controls.Add(_stopButton);
 
             _serverInfoLabel = new Label();
             _serverInfoLabel.AutoSize = false;
-            _serverInfoLabel.Width = 920;
-            _serverInfoLabel.Height = 42;
-            _serverInfoLabel.Location = new Point(600, 202);
+            _serverInfoLabel.Width = panelWidth - 276;
+            _serverInfoLabel.Height = 44;
+            _serverInfoLabel.Location = new Point(264, 148);
+            _serverInfoLabel.AutoEllipsis = true;      // a long MOTD line is cut, never spilling over
+            _serverInfoLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             _serverInfoLabel.Text = "—";
             top.Controls.Add(_serverInfoLabel);
 
@@ -786,7 +819,8 @@ namespace ServerHelp.Ui
                                    "Default server: smp3.mcsh.io:11005 — add any other server; its address and port " +
                                    "are wired into the tunnel and hosts automatically."));
             hint.Dock = DockStyle.Bottom;
-            hint.Height = 34;
+            hint.Height = 48;          // the sentence wraps to two lines in a narrow window
+            hint.AutoEllipsis = true;
             card.Controls.Add(hint);
 
             page.Controls.Add(card);
@@ -804,7 +838,11 @@ namespace ServerHelp.Ui
 
             var buttons = new FlowLayoutPanel();
             buttons.Dock = DockStyle.Top;
-            buttons.Height = 44;
+            // rows of buttons that wrap: the bar has to grow with them, or the last row is simply
+            // cut off in a narrower window (that is how "Load from file" and "Subscription link"
+            // ended up half invisible)
+            buttons.AutoSize = true;
+            buttons.AutoSizeMode = AutoSizeMode.GrowAndShrink;
 
             var scan = new Button(); scan.Text = L.T("اسکن endpointهای WARP", "Scan WARP endpoints"); scan.Width = 210;
             scan.Click += delegate { ScanEndpointsAsync(); };
@@ -1032,7 +1070,8 @@ namespace ServerHelp.Ui
             var bottom = UiLabel(L.T("نسخه‌ها از پوشه TLauncher/ماینکرفت خوانده می‌شوند. با دوبار کلیک، نسخه انتخاب می‌شود.",
                                      "Versions are read from the TLauncher/Minecraft folder. Double click a row to select it."));
             bottom.Dock = DockStyle.Bottom;
-            bottom.Height = 30;
+            bottom.Height = 44;        // the sentence wraps to two lines in a narrow window
+            bottom.AutoEllipsis = true;
             card.Controls.Add(bottom);
 
             // the rows have to be laid out before the list fills the rest, or the version row ends up
@@ -2481,7 +2520,6 @@ namespace ServerHelp.Ui
 
             var thread = new Thread(delegate ()
             {
-                var results = new List<string>();
                 var delays = new Dictionary<int, int>();
                 int bestDc = 0, bestDelay = int.MaxValue;
 
@@ -2497,12 +2535,9 @@ namespace ServerHelp.Ui
                         try
                         {
                             MtprotoCheck check = MtprotoClient.Check(entry.Host, entry.Port, entry.Secret, dc, timeout);
-                            lock (results)
+                            lock (delays)
                             {
                                 delays[dc] = check.Connected ? check.DelayMs : -1;
-                                results.Add("DC" + dc + ": " +
-                                            (check.Connected ? (check.DelayMs > 0 ? check.DelayMs + " ms" : L.T("بدون پاسخ", "no answer")) : L.T("وصل نشد", "unreachable")) +
-                                            (check.Verified ? "" : " (" + check.Status + ")"));
                             }
                         }
                         catch { }
@@ -2526,16 +2561,17 @@ namespace ServerHelp.Ui
                 var report = new System.Text.StringBuilder();
                 report.AppendLine(L.T("تأخیر واقعی هر دیتاسنتر تلگرام از این پروکسی:", "real delay to each Telegram DC through this proxy:"));
                 report.AppendLine();
-                for (int dc = 1; dc <= 5; dc++)
+                // the data centre list comes from the client, so a new one cannot be silently ignored
+                foreach (int dc in MtprotoClient.DataCenters)
                 {
                     int value;
                     if (!delays.TryGetValue(dc, out value) || value <= 0) continue;
-                    report.AppendLine("DC" + dc + " → " + value + " ms" + (dc == entry.Dc ? "   ← " + L.T("فعلی", "current") : ""));
+                    report.AppendLine("DC" + dc + " → " + L.N(value) + " ms" + (dc == entry.Dc ? "   ← " + L.T("فعلی", "current") : ""));
                 }
                 if (bestDc > 0)
                 {
                     report.AppendLine();
-                    report.AppendLine(L.T("سریع‌ترین: DC", "fastest: DC") + bestDc + " (" + bestDelay + " ms)");
+                    report.AppendLine(L.T("سریع‌ترین: DC", "fastest: DC") + bestDc + " (" + L.N(bestDelay) + " ms)");
                     if (bestDc != entry.Dc)
                         report.AppendLine(L.T("پیشنهاد: دیتاسنتر این اتصال را به DC", "suggestion: change this entry to DC") + bestDc + L.T(" تغییر دهید", ""));
                 }
@@ -2552,15 +2588,24 @@ namespace ServerHelp.Ui
                     SetStatus(L.T("رتبه‌بندی دیتاسنترها تمام شد", "the data centre ranking is ready"));
                     if (bestDc > 0 && bestDc != entry.Dc)
                     {
+                        string where = entry.Dc > 0
+                            ? L.T("دیتاسنتر این اتصال: DC", "this entry is on DC") + entry.Dc
+                            : L.T("دیتاسنتر این اتصال روی خودکار است", "this entry's data centre is automatic");
+                        string question = L.T("اندازه‌گیری از همین پروکسی: DC", "measured through this proxy: DC") +
+                                          bestDc + " = " + L.N(bestDelay) + " ms" + Environment.NewLine +
+                                          where + Environment.NewLine + Environment.NewLine +
+                                          L.T("دیتاسنتر عوض شود؟ (فقط مسیر تلگرام این اتصال تغییر می‌کند و روی بازی اثری ندارد.)",
+                                              "change it? (this only moves Telegram's route through this entry; the game never uses it.)");
                         DialogResult answer = MessageBox.Show(this,
-                            text + Environment.NewLine + L.T("دیتاسنتر این اتصال به DC", "set this entry to DC") + bestDc + "?",
+                            text + Environment.NewLine + question,
                             L.T("رتبه‌بندی تلگرام", "Telegram ranking"), MessageBoxButtons.YesNo, MessageBoxIcon.Question);
                         if (answer == DialogResult.Yes)
                         {
                             entry.Dc = bestDc;
                             SettingsStore.Save(_settings);
                             RefreshConnections();
-                            SetStatus(L.T("دیتاسنتر ثبت شد: DC", "data centre saved: DC") + bestDc);
+                            SetStatus(L.T("دیتاسنتر ثبت شد: DC", "data centre saved: DC") + bestDc +
+                                      " (" + L.N(bestDelay) + " ms)");
                         }
                     }
                     else
@@ -2852,7 +2897,7 @@ namespace ServerHelp.Ui
                     var status = McPing.Status(ip, profile.Port, 5000, null);
                     if (status != null && status.Ok)
                     {
-                        results.Add(ip + "  " + status.LatencyMs + " ms  " + status.Motd);
+                        results.Add(ip + "  " + L.N(status.LatencyMs) + " ms  " + status.Motd);
                         if (best < 0 || status.LatencyMs < best) best = status.LatencyMs;
                     }
                 }
@@ -2861,7 +2906,7 @@ namespace ServerHelp.Ui
                     var status = McPing.Status(profile.DirectIp, profile.Port, 5000, null);
                     if (status != null && status.Ok)
                     {
-                        results.Add(profile.DirectIp + "  " + status.LatencyMs + " ms  " + status.Motd);
+                        results.Add(profile.DirectIp + "  " + L.N(status.LatencyMs) + " ms  " + status.Motd);
                         if (best < 0 || status.LatencyMs < best) best = status.LatencyMs;
                     }
                 }
@@ -2898,10 +2943,10 @@ namespace ServerHelp.Ui
                         foreach (WarpEndpoint endpoint in best)
                         {
                             var item = new ListViewItem(endpoint.Address);
-                            item.SubItems.Add(endpoint.IcmpRtt >= 0 ? endpoint.IcmpRtt + " ms" : "—");
-                            item.SubItems.Add(endpoint.TcpRtt >= 0 ? endpoint.TcpRtt + " ms" : "—");
+                            item.SubItems.Add(endpoint.IcmpRtt >= 0 ? L.N(endpoint.IcmpRtt) + " ms" : "—");
+                            item.SubItems.Add(endpoint.TcpRtt >= 0 ? L.N(endpoint.TcpRtt) + " ms" : "—");
                             item.SubItems.Add(endpoint.Score.ToString());
-                            item.SubItems.Add(endpoint.TunnelRtt >= 0 ? endpoint.TunnelRtt + " ms" : "—");
+                            item.SubItems.Add(endpoint.TunnelRtt >= 0 ? L.N(endpoint.TunnelRtt) + " ms" : "—");
                             item.SubItems.Add("—");
                             _endpointList.Items.Add(item);
                         }
@@ -2946,8 +2991,8 @@ namespace ServerHelp.Ui
                     {
                         if (index >= _endpointList.Items.Count) return;
                         var item = _endpointList.Items[index];
-                        if (item.SubItems.Count > 4) item.SubItems[4].Text = delay > 0 ? delay + " ms" : "—";
-                        if (item.SubItems.Count > 5) item.SubItems[5].Text = tunnelDelay > 0 ? tunnelDelay + " ms" : "—";
+                        if (item.SubItems.Count > 4) item.SubItems[4].Text = delay > 0 ? L.N(delay) + " ms" : "—";
+                        if (item.SubItems.Count > 5) item.SubItems[5].Text = tunnelDelay > 0 ? L.N(tunnelDelay) + " ms" : "—";
                         if (delay > 0) item.ForeColor = delay < 120 ? Color.FromArgb(24, 120, 50) : Color.FromArgb(180, 110, 0);
                     });
                 }
