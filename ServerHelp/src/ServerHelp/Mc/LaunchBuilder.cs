@@ -209,7 +209,6 @@ namespace ServerHelp.Mc
                 jvmArgs.Insert(0, "-Dio.netty.native.workdir=" + nativesDir);
                 jvmArgs.Insert(0, "-Dfile.encoding=UTF-8");
 
-                int heapMb = 2048;
                 int javaMajor = JavaLocator.ReadMajor(javawPath);
                 if (javaMajor <= 0 && version != null) javaMajor = version.RequiredJavaMajor;
                 var libraryNames = new List<string>();
@@ -226,10 +225,11 @@ namespace ServerHelp.Mc
                     profile = GameProfiler.Build(version, settings, server, gameDir, javaMajor, libraryNames);
                 if (!settings.UseAikarFlags)
                 {
-                    // the user asked for the plain defaults: keep the memory, drop the collector flags
+                    // The profiler already keeps the tuning flags out when this is off, so the preview
+                    // in the UI matches the command line. This is the safety net for a profile that was
+                    // built somewhere else - except for a switch the user ticked himself.
                     profile.Flags.Clear();
-                    profile.Applied.Add(L.T("پرچم‌های JVM خاموش است (تنظیمات → بهینه‌سازی)",
-                                            "JVM flags are switched off (settings -> optimise)"));
+                    if (settings.OpenGlPipeline) profile.Flags.Add("-Dsun.java2d.opengl=true");
                 }
                 List<string> wanted = GameProfiler.Deduplicate(jvmArgs, profile.Flags);
                 if (wanted.Count < profile.Flags.Count)
@@ -250,7 +250,7 @@ namespace ServerHelp.Mc
                 {
                     foreach (string extra in SplitQuoted(settings.ExtraJvmArgs)) jvmArgs.Insert(0, extra);
                 }
-                plan.Notes.Add("RAM: " + heapMb + " MB");
+                plan.Notes.Add(L.T("حافظه: ", "RAM: ") + L.N(profile.HeapMb) + " MB");
 
                 // ---------------------------------------------------------- server entry
                 if (quickPlay && server != null)

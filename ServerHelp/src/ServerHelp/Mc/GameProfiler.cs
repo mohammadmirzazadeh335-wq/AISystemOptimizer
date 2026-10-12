@@ -20,6 +20,7 @@ namespace ServerHelp.Mc
         public int HeapMb;
         public int InitialHeapMb;
         public bool G1;
+        public bool FlagsOn = true;         // false when "JVM tuning flags" is switched off
         public List<string> Flags = new List<string>();       // what we add to the JVM
         public List<string> Applied = new List<string>();     // human readable "why"
         public List<string> Warnings = new List<string>();
@@ -34,7 +35,7 @@ namespace ServerHelp.Mc
             var sb = new System.Text.StringBuilder();
             sb.AppendLine(L.T("نسخه: ", "version: ") + VersionId + " • " + Loader);
             sb.AppendLine(L.T("حافظه: ", "memory: ") + HeapMb + " MB (" + L.T("شروع ", "initial ") + InitialHeapMb + " MB)" +
-                          " • " + (G1 ? "G1GC" : "CMS"));
+                          (FlagsOn ? " • " + (G1 ? "G1GC" : "CMS") : ""));
             if (JavaMajor > 0) sb.AppendLine(L.T("جاوا: ", "java: ") + JavaMajor);
             sb.AppendLine(L.T("کتابخانه: ", "libraries: ") + LibrariesPresent + L.T(" آماده", " ready") +
                           (LibrariesMissing > 0 ? L.T(" • ", " • ") + LibrariesMissing + L.T(" جاافتاده (خودکار دانلود می‌شود)",
@@ -81,6 +82,10 @@ namespace ServerHelp.Mc
             plan.Loader = DetectLoader(version, libraryNames);
             bool modded = IsModded(plan.Loader);
             if (modded) plan.Applied.Add(L.T("مود/لودر شناسایی شد: ", "mod loader detected: ") + plan.Loader);
+            // "JVM tuning flags" (settings -> optimisation): with it off the game only gets the memory,
+            // so the plan the user reads is exactly what the launcher will really do.
+            bool flagsOn = settings == null || settings.UseAikarFlags;
+            plan.FlagsOn = flagsOn;
 
             // ---- memory -----------------------------------------------------------------
             long ramMb = Math.Max(1024, LaunchBuilder.TotalPhysicalMemoryBytes() / (1024 * 1024));
@@ -109,8 +114,8 @@ namespace ServerHelp.Mc
             // Aikar style G1 everywhere there is a modern Java; old clients on Java 8 keep CMS,
             // which is what they were tuned for and what gives the lowest pause on tiny heaps.
             bool legacy = javaMajor > 0 && javaMajor <= 8 && VersionResolver.CompareVersions(plan.VersionId, "1.12.2") <= 0;
-            plan.G1 = !legacy;
-            if (legacy)
+            plan.G1 = flagsOn && !legacy;
+            if (flagsOn && legacy)
             {
                 plan.Applied.Add(L.T("نسخه قدیمی روی Java 8: جمع‌کننده CMS (پایدارتر برای ۱.۱۲ و قدیمی‌تر)",
                                      "old version on Java 8: CMS collector (steadier for 1.12 and older)"));
@@ -120,14 +125,14 @@ namespace ServerHelp.Mc
                 plan.Flags.Add("-XX:MaxGCPauseMillis=50");
                 plan.Flags.Add("-XX:+UseStringDeduplication");
             }
-            else
+            else if (flagsOn)
             {
                 plan.Applied.Add(L.T("پرچم‌های Aikar برای G1GC (کمترین لگ در بازی)", "Aikar style G1GC flags (the least in game stutter)"));
                 plan.Flags.AddRange(LaunchBuilder.AikarFlags());
             }
 
             // ---- Java version specific --------------------------------------------------
-            if (javaMajor >= 18)
+            if (flagsOn && javaMajor >= 18)
             {
                 plan.Flags.Add("-Dstdout.encoding=UTF-8");
                 plan.Flags.Add("-Dstderr.encoding=UTF-8");
@@ -139,7 +144,7 @@ namespace ServerHelp.Mc
                                       "this version runs on Java 8, but Java 11+ feels smoother."));
 
             // ---- loader specific --------------------------------------------------------
-            if (plan.Loader == "forge" || plan.Loader == "neoforge")
+            if (flagsOn && (plan.Loader == "forge" || plan.Loader == "neoforge"))
             {
                 plan.Flags.Add("-Dfml.earlyprogresswindow=false");
                 plan.Applied.Add(L.T("پنجره پیشرفت اولیه Forge خاموش شد (شروع سریع‌تر)",
@@ -161,7 +166,7 @@ namespace ServerHelp.Mc
                 serverIsIpv4 = !System.Net.IPAddress.TryParse(target, out parsed) ||
                                parsed.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork;
             }
-            if (serverIsIpv4)
+            if (flagsOn && serverIsIpv4)
             {
                 plan.Flags.Add("-Djava.net.preferIPv4Stack=true");
                 plan.Applied.Add(L.T("IPv4 ترجیح داده می‌شود (از قطعی‌های IPv6 جلوگیری می‌کند)",
@@ -181,6 +186,9 @@ namespace ServerHelp.Mc
             if (ramMb < 6000 && plan.HeapMb >= 3072)
                 plan.Warnings.Add(L.T("رم سیستم کم است؛ اگر ویندوز کند شد حافظه بازی را کمتر کنید.",
                                       "the system RAM is small; lower the game memory if Windows starts swapping."));
+            if (!flagsOn)
+                plan.Applied.Add(L.T("پرچم‌های JVM خاموش است (تنظیمات → بهینه‌سازی)؛ فقط حافظه تنظیم می‌شود",
+                                     "JVM flags are off (settings -> optimisation); only the memory is tuned"));
             return plan;
         }
 

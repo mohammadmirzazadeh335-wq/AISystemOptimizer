@@ -81,6 +81,9 @@ namespace ServerHelp.Core
         public bool TuneNetwork = true;
         public bool AddFirewallRules = true;
         public bool TimerResolution = true;
+        /// <summary>Shows the "here is exactly what will change on this machine" confirmation before
+        /// the launch path touches anything. Off only because the user switched it off themselves.</summary>
+        public bool ConfirmTuning = true;
 
         public bool UseAikarFlags = true;
         public int MaxHeapMb = 0;                // 0 => automatic
@@ -236,6 +239,7 @@ namespace ServerHelp.Core
             s.TuneNetwork = Json.GetBool(d, "tuneNetwork", s.TuneNetwork);
             s.AddFirewallRules = Json.GetBool(d, "addFirewallRules", s.AddFirewallRules);
             s.TimerResolution = Json.GetBool(d, "timerResolution", s.TimerResolution);
+            s.ConfirmTuning = Json.GetBool(d, "confirmTuning", s.ConfirmTuning);
 
             s.UseAikarFlags = Json.GetBool(d, "useAikarFlags", s.UseAikarFlags);
             s.OpenGlPipeline = Json.GetBool(d, "openGlPipeline", s.OpenGlPipeline);
@@ -338,6 +342,7 @@ namespace ServerHelp.Core
             w.Prop("tuneNetwork", s.TuneNetwork);
             w.Prop("addFirewallRules", s.AddFirewallRules);
             w.Prop("timerResolution", s.TimerResolution);
+            w.Prop("confirmTuning", s.ConfirmTuning);
             w.Prop("useAikarFlags", s.UseAikarFlags);
             w.Prop("openGlPipeline", s.OpenGlPipeline);
             w.Prop("maxHeapMb", s.MaxHeapMb);

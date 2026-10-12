@@ -160,6 +160,22 @@ namespace ServerHelp.Core
             return label;
         }
 
+        /// <summary>
+        /// A caption above a group of switches. Fifteen checkboxes in one column all look the same, so
+        /// the optimisation tab is cut into "what happens to Windows", "what happens to the game",
+        /// "what happens to the connection" and "how the app behaves".
+        /// </summary>
+        public static Label Section(string text)
+        {
+            var label = new Label();
+            label.Text = text;
+            label.Font = UiFont(10f, true);
+            label.ForeColor = Color.FromArgb(0x14, 0x5A, 0x8C);
+            label.AutoSize = true;
+            label.Margin = new Padding(0, 14, 0, 4);
+            return label;
+        }
+
         public static Panel Card()
         {
             var panel = new Panel();

@@ -45,6 +45,8 @@ namespace ServerHelp.Ui
         private TextBox _gameDirBox;
         private CheckBox _chkOptimize, _chkPower, _chkTrim, _chkClose, _chkPriority, _chkTuneNetwork, _chkFirewall, _chkTimer;
         private CheckBox _chkAikar, _chkQuickPlay, _chkHosts, _chkKeepTunnel, _chkAutoRestore, _chkMinimize, _chkOpenGl;
+        private CheckBox _chkTuningAsk;
+        private bool _optimizerBusy;               // only one "tune the system now" at a time
         private CheckBox _chkDnsInTunnel;
         private CheckBox _chkFragment;
         private NumericUpDown _chainCount;
@@ -920,6 +922,8 @@ namespace ServerHelp.Ui
             _chkKeepTunnel = Check(L.T("نگه‌داشتن تونل بعد از بستن بازی", "Keep the tunnel after the game closes"), _settings.KeepTunnelAfterGame, delegate (bool v) { _settings.KeepTunnelAfterGame = v; });
             _chkAutoRestore = Check(L.T("بازگردانی تنظیمات هنگام خروج", "Restore settings on exit"), _settings.AutoRestoreOnExit, delegate (bool v) { _settings.AutoRestoreOnExit = v; });
             _chkMinimize = Check(L.T("کوچک‌کردن پنجره هنگام بازی", "Minimise the window while playing"), _settings.MinimizeWhilePlaying, delegate (bool v) { _settings.MinimizeWhilePlaying = v; });
+            _chkTuningAsk = Check(L.T("قبل از تغییرات سیستم اجازه بگیر (توصیه‌شده)", "Ask before changing system settings (recommended)"),
+                                  _settings.ConfirmTuning, delegate (bool v) { _settings.ConfirmTuning = v; });
 
             var heapLabel = UiKit.Sub(L.T("حداکثر حافظه بازی (مگابایت، ۰ = خودکار)", "Max game memory (MB, 0 = automatic)"));
             _heapBox = new NumericUpDown();
@@ -966,6 +970,23 @@ namespace ServerHelp.Ui
                 SetStatus(L.T("تنظیمات سیستم بازگردانی شد", "system settings restored"));
             };
 
+            _chkOpenGl = Check(L.T("خط لوله OpenGL جاوا (برای درایورهای اینتل)",
+                                   "Java OpenGL pipeline (helps some Intel drivers)"),
+                               _settings.OpenGlPipeline, delegate (bool v) { _settings.OpenGlPipeline = v; });
+
+            // One column of fifteen switches all looks the same, so the tab is cut into four captions:
+            // what happens to Windows, to the game, to the connection, and to the window.
+            runNow.Margin = new Padding(3, 18, 3, 3);
+            restore.Margin = runNow.Margin;
+            var secSystem = UiKit.Section(L.T("سیستم و ویندوز", "Windows and the system"));
+            var secGame = UiKit.Section(L.T("بازی و جاوا", "The game and Java"));
+            var secNet = UiKit.Section(L.T("شبکه و تونل", "Network and the tunnel"));
+            var secApp = UiKit.Section(L.T("رفتار برنامه", "How the app behaves"));
+            var restoreHint = UiKit.Sub(L.T("هر تغییر بالا با «بازگردانی همه تغییرات» یا هنگام بستن برنامه (اگر روشن باشد) برمی‌گردد.",
+                                            "Every change above is undone by \u201crestore everything\u201d or when the app closes, if that switch is on."));
+            restoreHint.MaximumSize = new Size(760, 0);      // wraps instead of running off the card
+
+            panel.Controls.Add(secSystem);
             panel.Controls.Add(_chkOptimize);
             panel.Controls.Add(_chkPower);
             panel.Controls.Add(_chkTuneNetwork);
@@ -974,26 +995,32 @@ namespace ServerHelp.Ui
             panel.Controls.Add(_chkClose);
             panel.Controls.Add(_chkPriority);
             panel.Controls.Add(_chkTimer);
+
+            panel.Controls.Add(secGame);
             panel.Controls.Add(_chkAikar);
-            _chkOpenGl = Check(L.T("خط لوله OpenGL جاوا (برای درایورهای اینتل)",
-                                   "Java OpenGL pipeline (helps some Intel drivers)"),
-                               _settings.OpenGlPipeline, delegate (bool v) { _settings.OpenGlPipeline = v; });
             panel.Controls.Add(_chkOpenGl);
+            panel.Controls.Add(heapLabel);
+            panel.Controls.Add(_heapBox);
+            panel.Controls.Add(extraLabel);
+            panel.Controls.Add(_extraJvmBox);
             panel.Controls.Add(_chkQuickPlay);
+
+            panel.Controls.Add(secNet);
+            panel.Controls.Add(modeLabel);
+            panel.Controls.Add(_tunnelCombo);
+            panel.Controls.Add(epLabel);
+            panel.Controls.Add(_endpointBox);
             panel.Controls.Add(_chkHosts);
+
+            panel.Controls.Add(secApp);
+            panel.Controls.Add(_chkTuningAsk);
             panel.Controls.Add(_chkKeepTunnel);
             panel.Controls.Add(_chkAutoRestore);
             panel.Controls.Add(_chkMinimize);
-            panel.Controls.Add(modeLabel);
-            panel.Controls.Add(_tunnelCombo);
-            panel.Controls.Add(heapLabel);
-            panel.Controls.Add(_heapBox);
-            panel.Controls.Add(epLabel);
-            panel.Controls.Add(_endpointBox);
-            panel.Controls.Add(extraLabel);
-            panel.Controls.Add(_extraJvmBox);
+
             panel.Controls.Add(runNow);
             panel.Controls.Add(restore);
+            panel.Controls.Add(restoreHint);
 
             card.Controls.Add(panel);
             page.Controls.Add(card);
@@ -3004,18 +3031,64 @@ namespace ServerHelp.Ui
             thread.Start();
         }
 
+        /// <summary>
+        /// The list of system changes the launch path is about to make, in the user's language and built
+        /// from the same switches the optimisation tab shows. Only what is really going to run is
+        /// listed, so the confirmation never promises more than the app does.
+        /// </summary>
+        private string TuningSummary()
+        {
+            var lines = new List<string>();
+            if (_settings.HighPerformancePowerPlan) lines.Add(L.T("طرح انرژی حداکثر کارایی", "high performance power plan"));
+            if (_settings.TuneNetwork) lines.Add(L.T("کاهش throttle شبکه و پاک‌کردن کش DNS", "network throttling lowered, DNS cache flushed"));
+            if (_settings.AddFirewallRules) lines.Add(L.T("دو قاعده فایروال (بازی و تونل)", "two firewall rules (the game and the tunnel)"));
+            if (_settings.TrimMemory) lines.Add(L.T("آزادسازی حافظه برنامه‌های بی‌کار", "idle applications' memory released"));
+            if (_settings.CloseBackgroundApps) lines.Add(L.T("بستن برنامه‌های سنگین پس‌زمینه", "heavy background apps closed"));
+            if (_settings.TimerResolution) lines.Add(L.T("دقت تایمر سیستم روی ۱ میلی‌ثانیه", "system timer resolution set to 1 ms"));
+            if (_settings.UseAikarFlags) lines.Add(L.T("پرچم‌های بهینه‌سازی JVM (فقط داخل بازی)", "JVM tuning flags (inside the game only)"));
+            if (_settings.OpenGlPipeline) lines.Add(L.T("خط لوله OpenGL جاوا", "Java OpenGL pipeline"));
+            if (_settings.SetJavaPriority) lines.Add(L.T("اولویت پردازش بازی", "game process priority raised"));
+            if (_settings.UseHostsFile) lines.Add(L.T("تثبیت آدرس سرور در فایل hosts", "server address pinned in the hosts file"));
+            if (lines.Count == 0)
+                return L.T("موردی روشن نیست؛ فقط بازی اجرا می‌شود.", "nothing is switched on; only the game will start.");
+            return "• " + string.Join(Environment.NewLine + "• ", lines.ToArray());
+        }
+
         private void RunOptimizerNow()
         {
+            if (_optimizerBusy)
+            {
+                SetStatus(L.T("بهینه‌سازی همین حالا در جریان است", "an optimisation is already running"));
+                return;
+            }
+            _optimizerBusy = true;
             SetStatus(L.T("بهینه‌سازی سیستم…", "tuning the system…"));
             var thread = new Thread(delegate ()
             {
-                _pipeline.Optimizer.TunnelExePath = Shell.FileExists(AppPaths.SingBoxExe) ? AppPaths.SingBoxExe : "";
-                _pipeline.Optimizer.JavaExePath = _javaPath;
-                _pipeline.Optimizer.Run(_settings, delegate (OptimizationStep step)
+                try
                 {
-                    Ui(delegate { AddStepRow("★ " + step.Title, step.StateText, step.Detail, step.State); });
-                });
-                Ui(delegate { SetStatus(L.T("بهینه‌سازی انجام شد", "optimisation done")); });
+                    _pipeline.Optimizer.TunnelExePath = Shell.FileExists(AppPaths.SingBoxExe) ? AppPaths.SingBoxExe : "";
+                    _pipeline.Optimizer.JavaExePath = _javaPath;
+                    _pipeline.Optimizer.Run(_settings, delegate (OptimizationStep step)
+                    {
+                        Ui(delegate { AddStepRow("★ " + step.Title, step.StateText, step.Detail, step.State); });
+                    });
+                    Ui(delegate
+                    {
+                        _optimizerBusy = false;
+                        SetStatus(L.T("بهینه‌سازی انجام شد", "optimisation done"));
+                    });
+                }
+                catch (Exception ex)
+                {
+                    // Before this, a failure left the status line saying "tuning…" for ever.
+                    Log.Warn("optimise now failed: " + ex.Message);
+                    Ui(delegate
+                    {
+                        _optimizerBusy = false;
+                        SetStatus(L.T("بهینه‌سازی خطا داد: ", "optimisation failed: ") + ex.Message);
+                    });
+                }
             });
             thread.IsBackground = true;
             thread.Start();
@@ -3079,6 +3152,24 @@ namespace ServerHelp.Ui
                 MessageBox.Show(L.T("این نسخه فایل json ندارد و قابل اجرا نیست.", "This version has no json file and cannot be launched."),
                     "Server Help", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
+            }
+
+            // "Ask before optimising" is a promise, so the launch path really does stop and ask once,
+            // with the plain list of changes it is about to make on this machine.
+            if (_settings.OptimizeSystem && _settings.ConfirmTuning)
+            {
+                var answer = MessageBox.Show(this,
+                    L.T("پیش از اجرا این تغییرات روی سیستم اعمال می‌شود (همه برگشت‌پذیر):",
+                        "Before the game starts these changes are applied (all reversible):") +
+                    Environment.NewLine + Environment.NewLine + TuningSummary() + Environment.NewLine + Environment.NewLine +
+                    L.T("ادامه بدهم؟ (این پرسش را در تب «بهینه‌سازی» می‌توانید خاموش کنید)",
+                        "Continue? (you can switch this question off in the Optimisation tab)"),
+                    L.T("بهینه‌سازی سیستم", "System optimisation"), MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (answer != DialogResult.Yes)
+                {
+                    SetStatus(L.T("اجرا لغو شد؛ هیچ تغییری اعمال نشد", "launch cancelled; nothing was changed"));
+                    return;
+                }
             }
 
             _stepList.Items.Clear();

@@ -55,6 +55,7 @@ namespace ServerHelp.Sys
         private readonly List<OptimizationStep> _steps = new List<OptimizationStep>();
         private readonly List<string> _firewallRulesAdded = new List<string>();
         private string _previousPowerPlan = "";
+        private string _createdPowerPlan = "";
         private bool _timerRaised;
 
         public List<OptimizationStep> Steps { get { return _steps; } }
@@ -78,7 +79,11 @@ namespace ServerHelp.Sys
             if (settings.AddFirewallRules) ApplyFirewall(onStep);
             if (settings.TrimMemory) TrimMemory(onStep);
             if (settings.CloseBackgroundApps) CloseBackgroundApps(onStep);
-            RaiseTimerResolution(onStep);
+            // The checkbox on the optimisation tab decides this one too - it used to be raised whatever
+            // the user had chosen, which made the tab lie about what it was doing.
+            if (settings.TimerResolution) RaiseTimerResolution(onStep);
+            else Add(onStep, "دقت تایمر سیستم", "System timer resolution", StepState.Skip,
+                     L.T("در تنظیمات خاموش است", "disabled in settings"), 0);
         }
 
         /// <summary>Puts back everything this run changed.</summary>
@@ -91,6 +96,16 @@ namespace ServerHelp.Sys
                     string error;
                     if (PowerPlan.Set(_previousPowerPlan, out error) && report != null)
                         report(L.T("طرح انرژی قبلی بازگردانده شد.", "previous power plan restored."));
+                }
+                if (!string.IsNullOrEmpty(_createdPowerPlan))
+                {
+                    // We added the Ultimate plan ourselves, so restoring the old plan is not enough:
+                    // the entry we put in the user's power options has to go as well.
+                    if (!string.Equals(PowerPlan.ActiveScheme(), _createdPowerPlan, StringComparison.OrdinalIgnoreCase) &&
+                        PowerPlan.Delete(_createdPowerPlan) && report != null)
+                        report(L.T("طرح انرژی نهایی که این برنامه ساخته بود حذف شد.",
+                                   "the Ultimate plan this app created was removed."));
+                    _createdPowerPlan = "";
                 }
                 if (_timerRaised)
                 {
@@ -115,7 +130,9 @@ namespace ServerHelp.Sys
         {
             var watch = Stopwatch.StartNew();
             _previousPowerPlan = PowerPlan.ActiveScheme();
-            string ultimate = PowerPlan.EnsureUltimate();
+            bool created;
+            string ultimate = PowerPlan.EnsureUltimate(out created);
+            if (created) _createdPowerPlan = ultimate;
             string target = string.IsNullOrEmpty(ultimate) ? PowerPlan.HighPerformance : ultimate;
             string error;
             bool ok = PowerPlan.Set(target, out error);

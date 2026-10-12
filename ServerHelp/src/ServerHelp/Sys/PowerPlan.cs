@@ -57,20 +57,47 @@ namespace ServerHelp.Sys
             return false;
         }
 
-        /// <summary>Adds the Ultimate Performance plan when it is missing, then returns its GUID.</summary>
-        public static string EnsureUltimate()
+        /// <summary>Adds the Ultimate Performance plan when it is missing, then returns its GUID.
+        /// <paramref name="created"/> says whether this call was the one that added it, so Restore can
+        /// take it away again and leave the machine's power options exactly as they were.</summary>
+        public static string EnsureUltimate(out bool created)
         {
             const string ultimate = "e9a42b02-d5df-448d-aa00-03f14749eb61";
+            created = false;
             try
             {
                 var list = Shell.Run("powercfg", "/list", 15000);
                 if (list.StdOut.IndexOf(ultimate, StringComparison.OrdinalIgnoreCase) >= 0) return ultimate;
                 Shell.Run("powercfg", "-duplicatescheme " + ultimate, 15000);
                 var again = Shell.Run("powercfg", "/list", 15000);
-                if (again.StdOut.IndexOf(ultimate, StringComparison.OrdinalIgnoreCase) >= 0) return ultimate;
+                if (again.StdOut.IndexOf(ultimate, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    created = true;
+                    Log.Info("ultimate performance plan created");
+                    return ultimate;
+                }
             }
             catch (Exception ex) { Log.Debug("ultimate plan unavailable: " + ex.Message); }
             return "";
+        }
+
+        public static string EnsureUltimate()
+        {
+            bool ignored;
+            return EnsureUltimate(out ignored);
+        }
+
+        /// <summary>Deletes a power plan (used to take back the Ultimate plan this app created).</summary>
+        public static bool Delete(string guid)
+        {
+            if (string.IsNullOrEmpty(guid)) return false;
+            try
+            {
+                var result = Shell.Run("powercfg", "-delete " + guid, 15000);
+                if (!result.Ok) Log.Warn("could not delete power plan " + guid + ": " + result.All);
+                return result.Ok;
+            }
+            catch (Exception ex) { Log.Warn("power plan delete failed: " + ex.Message); return false; }
         }
 
         public static List<string> List()
