@@ -5,6 +5,7 @@ using System.Text;
 using ServerHelp.Core;
 using ServerHelp.Mc;
 using ServerHelp.Net;
+using ServerHelp.Orchestration;
 using ServerHelp.Tunnel;
 
 namespace ServerHelp
@@ -90,6 +91,7 @@ namespace ServerHelp
             Guard("the quality numbers", failures, delegate { CheckQuality(failures, passes); });
             Guard("the launch plan", failures, delegate { CheckProfiler(failures, passes); });
             Guard("the launcher folder", failures, delegate { CheckVersions(failures, passes); });
+            Guard("the launch report", failures, delegate { CheckReport(failures, passes); });
             Guard("the tester", failures, delegate { CheckTesterAnswers(failures, passes); });
             Guard("the subscription reader", failures, delegate { CheckSubscription(failures, passes); });
             Guard("the OpenVPN profile", failures, delegate { CheckOvpn(failures, passes); });
@@ -486,6 +488,30 @@ namespace ServerHelp
             catch { }
             Expect(VersionScanner.GuessNickname(labelsOnly) == "",
                    "launch profile labels are never mistaken for the player's name", failures, passes);
+        }
+
+        /// <summary>
+        /// The report of a run is what the user reads afterwards, so it must describe one run and not
+        /// a mixture of the last few.
+        /// </summary>
+        private static void CheckReport(List<string> failures, List<string> passes)
+        {
+            var report = new LaunchReport();
+            report.Warnings.Add("a stale warning");
+            report.Candidates.Add("a stale candidate");
+            report.Error = "a stale error";
+            report.Strategy = "warp";
+            report.TunnelPing = 123;
+            report.GamePid = 4242;
+            report.LeakGuardArmed = true;
+            report.LeakGuardTripped = true;
+            report.LeakGuardNote = "a stale note";
+            report.Reset();
+            Expect(report.Warnings.Count == 0 && report.Candidates.Count == 0 && report.Error.Length == 0 &&
+                   report.Strategy.Length == 0 && report.TunnelPing == -1 && report.GamePid == -1 &&
+                   !report.LeakGuardArmed && !report.LeakGuardTripped && report.LeakGuardNote.Length == 0 &&
+                   report.WithinBudget,
+                   "a finished run's report is wiped clean before the next run starts", failures, passes);
         }
 
         /// <summary>The numbers a route is judged by, checked without touching the network.</summary>

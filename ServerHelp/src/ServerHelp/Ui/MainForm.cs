@@ -1323,8 +1323,11 @@ namespace ServerHelp.Ui
                     if (answer == DialogResult.No) { _closing = false; e.Cancel = true; return; }
                     _pipeline.Game.Kill();
                 }
-                bool keep = _settings.KeepTunnelAfterGame;
-                _pipeline.Shutdown(keep);
+                // The tunnel is always taken down when the window closes, whatever the "keep the
+                // tunnel" switch says: that switch is about the gap between two game sessions while
+                // the app is still open. Leaving a sing-box process and its interface behind after
+                // the app is gone is exactly the kind of leftover this app promises not to leave.
+                _pipeline.Shutdown(false);
                 if (_worker != null) _worker.Interrupt();
             }
             catch (Exception ex) { Log.Warn("closing: " + ex.Message); }
@@ -3263,7 +3266,8 @@ namespace ServerHelp.Ui
                     (report.EndpointUsed.Length > 0 ? "  •  " + report.EndpointUsed : "") +
                     (report.TunnelPing > 0 ? "  •  " + L.N(report.TunnelPing) + " ms" : "") +
                     (report.ProxyOnlyMode ? L.T("  •  بازی با پروکسی محلی (بدون TUN)", "  •  game uses the local proxy (no TUN)") : "") +
-                    (report.LeakGuardArmed ? L.T("  •  kill-switch فعال", "  •  kill switch armed") : "");
+                    (report.LeakGuardArmed ? L.T("  •  kill-switch فعال", "  •  kill switch armed") : "") +
+                    (string.IsNullOrEmpty(report.LeakGuardNote) ? "" : "  —  " + report.LeakGuardNote);
             }
             foreach (string line in report.Candidates) AppendLog("[route] " + line);
             foreach (string warning in report.Warnings) AppendLog("[warning] " + warning);
@@ -3276,6 +3280,19 @@ namespace ServerHelp.Ui
         {
             AppendLog(L.T("بازی بسته شد (کد ", "game closed (code ") + code + ")");
             SetStatus(L.T("بازی بسته شد", "the game exited"));
+            if (_pipeline.Report.LeakGuardTripped)
+            {
+                // the kill switch closed the game on purpose: say so, or it looks like a crash
+                AppendLog(L.T("kill-switch: مسیر تونل قطع شد و بازی بسته شد",
+                              "kill switch: the tunnel died and the game was closed"));
+                MessageBox.Show(this,
+                    L.T("مسیر تونل قطع شد و برای جلوگیری از لو رفتن IP، بازی بسته شد. آدرس سرور تا برنگشتن" +
+                        " تونل مسدود می‌ماند و با «توقف و بازگردانی» همه‌چیز به حالت قبل برمی‌گردد.",
+                        "The tunnel died, so the game was closed to keep your address from leaking. The server" +
+                        " address stays blocked until the tunnel is back, and \"stop and restore\" puts" +
+                        " everything back."),
+                    L.T("kill-switch", "kill switch"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
             if (_settings.AutoRestoreOnExit && !_settings.KeepTunnelAfterGame)
             {
                 _pipeline.Shutdown(false);

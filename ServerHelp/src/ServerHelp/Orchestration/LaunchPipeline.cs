@@ -91,6 +91,43 @@ namespace ServerHelp.Orchestration
         public List<string> Candidates = new List<string>();
         public bool LeakGuardArmed;
         public string LeakGuardNote = "";
+        /// <summary>True when the leak guard closed the game because the route died.</summary>
+        public bool LeakGuardTripped;
+
+        /// <summary>
+        /// Every run starts from a clean sheet. The report object lives as long as the pipeline does,
+        /// so without this a warning, an error or a "kill switch armed" line from the previous run
+        /// would still be sitting in the report of this one.
+        /// </summary>
+        public void Reset()
+        {
+            Strategy = "";
+            TunnelUp = false;
+            HostsApplied = false;
+            DnsThroughTunnel = false;
+            DnsDetail = "";
+            ChosenIp = "";
+            ResolvedIps.Clear();
+            DirectPing = -1;
+            TunnelPing = -1;
+            EndpointUsed = "";
+            Verdict = LoginVerdict.Unknown;
+            VerdictMessage = "";
+            ElapsedMs = 0;
+            WithinBudget = true;
+            Error = "";
+            Warnings.Clear();
+            GamePid = -1;
+            ConnectionUsed = "";
+            ConnectionKind = "";
+            ConnectionDelayMs = -1;
+            ProxyOnlyMode = false;
+            ProxyPort = 0;
+            Candidates.Clear();
+            LeakGuardArmed = false;
+            LeakGuardNote = "";
+            LeakGuardTripped = false;
+        }
     }
 
     /// <summary>
@@ -146,6 +183,7 @@ namespace ServerHelp.Orchestration
             KillSwitch = settings.KillSwitch;
             _cancel = false;
             _blackholes.Clear();
+            Report.Reset();
             try
             {
                 RunCore(settings, server, version, gameDir, javaPath);
@@ -1222,9 +1260,13 @@ namespace ServerHelp.Orchestration
                     if (!dead) continue;
 
                     Log.Warn("leak guard: the route died while the game is running");
-                    Report.Warnings.Add(L.T("مسیر تونل قطع شد؛ برای جلوگیری از لو رفتن IP، بازی بسته می‌شود.",
-                                            "the tunnel died; the game is being closed to avoid leaking your address."));
+                    // The report belongs to the run that already finished and the window may be
+                    // reading its warning list right now, so the guard speaks through the status
+                    // line (which is marshalled to the UI thread) and through its own flag.
+                    Report.LeakGuardTripped = true;
                     Report.LeakGuardNote = L.T("فعال شد: مسیر قطع شد و بازی بسته شد", "triggered: the route died and the game was closed");
+                    Notify(L.T("مسیر تونل قطع شد؛ برای جلوگیری از لو رفتن IP، بازی بسته شد",
+                               "the tunnel died; the game was closed so your address could not leak"));
                     foreach (string ip in ips)
                     {
                         string error;
@@ -1278,7 +1320,9 @@ namespace ServerHelp.Orchestration
 
         // ------------------------------------------------------------------ teardown
 
-        /// <summary>Removes every trace of this session, optionally leaving the tunnel up.</summary>
+        /// <summary>Removes every trace of this session. <paramref name="keepTunnel"/> keeps the
+        /// engine process alive for a quick relaunch; the window passes false when it closes, so no
+        /// process is ever left behind.</summary>
         public void Shutdown(bool keepTunnel)
         {
             _leakStopped = true;
