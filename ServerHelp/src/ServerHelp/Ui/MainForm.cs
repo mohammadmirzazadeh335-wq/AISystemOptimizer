@@ -1614,9 +1614,8 @@ namespace ServerHelp.Ui
                 string systemAnswer = "";
                 try { systemAnswer = string.Join(", ", NetUtil.ResolveSimple(host).ToArray()); }
                 catch { }
-                DnsAnswer answer = ProxyDns.ResolveThrough("127.0.0.1", _pipeline.Report.SocksPort > 0
-                                                               ? _pipeline.Report.SocksPort : 22345,
-                                                           resolver, host, timeout, "", "");
+                int socksPort = _pipeline.Report.ProxyPort > 0 ? _pipeline.Report.ProxyPort : _pipeline.SocksPort;
+                DnsAnswer answer = ProxyDns.ResolveThrough("127.0.0.1", socksPort, resolver, host, timeout, "", "");
                 string text = ProxyDns.Compare(host, systemAnswer, answer);
                 Ui(delegate
                 {
