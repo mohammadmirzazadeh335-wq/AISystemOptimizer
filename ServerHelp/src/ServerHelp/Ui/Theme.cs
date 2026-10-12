@@ -74,7 +74,7 @@ namespace ServerHelp.Ui
         /// <summary>
         /// The screen's scaling factor, read once. Control.Scale stretches the bounds and the padding of
         /// everything we build, but it knows nothing about the numbers the custom painting below uses -
-        /// so those go through S() and the two agree.
+        /// so those go through Theme.S() and the two agree.
         /// </summary>
         public static readonly float Dpi = ScaleFactor();
 
@@ -392,15 +392,15 @@ namespace ServerHelp.Ui
             // the band the title sits in is Padding.Top, which Control.Scale has already stretched:
             // the stripe and the text are centred in it rather than pinned to 96 dpi coordinates
             int band = Padding.Top;
-            int stripeH = S(22);
-            int titleH = S(28);
+            int stripeH = Theme.S(22);
+            int titleH = Theme.S(28);
 
             if (ShowStripe && _title.Length > 0)
             {
-                int stripeX = RightToLeft == RightToLeft.Yes ? Width - S(5) : S(1);
-                int stripeY = band > stripeH ? (band - stripeH) / 2 : S(8);
+                int stripeX = RightToLeft == RightToLeft.Yes ? Width - Theme.S(5) : Theme.S(1);
+                int stripeY = band > stripeH ? (band - stripeH) / 2 : Theme.S(8);
                 using (var brush = new SolidBrush(StripeColor))
-                    g.FillRectangle(brush, new Rectangle(stripeX, stripeY, S(4), stripeH));
+                    g.FillRectangle(brush, new Rectangle(stripeX, stripeY, Theme.S(4), stripeH));
             }
 
             if (_title.Length > 0)
@@ -408,9 +408,9 @@ namespace ServerHelp.Ui
                 TextFormatFlags flags = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine |
                                         TextFormatFlags.EndEllipsis | TextFormatFlags.Left;
                 if (RightToLeft == RightToLeft.Yes) flags |= TextFormatFlags.RightToLeft | TextFormatFlags.Right;
-                int titleY = band > titleH ? (band - titleH) / 2 : S(6);
+                int titleY = band > titleH ? (band - titleH) / 2 : Theme.S(6);
                 using (var font = Theme.Font(11.5f, true))
-                    TextRenderer.DrawText(g, _title, font, new Rectangle(S(14), titleY, Math.Max(S(40), Width - S(24)), titleH),
+                    TextRenderer.DrawText(g, _title, font, new Rectangle(Theme.S(14), titleY, Math.Max(Theme.S(40), Width - Theme.S(24)), titleH),
                                           Theme.Text, flags);
             }
         }
@@ -447,39 +447,39 @@ namespace ServerHelp.Ui
 
             // a soft wave so the header does not look like a flat rectangle
             using (var glow = new SolidBrush(Color.FromArgb(28, 255, 255, 255)))
-                g.FillEllipse(glow, bounds.Width - S(260), -S(90), S(380), S(220));
+                g.FillEllipse(glow, bounds.Width - Theme.S(260), -Theme.S(90), Theme.S(380), Theme.S(220));
             using (var glow = new SolidBrush(Color.FromArgb(22, 255, 255, 255)))
-                g.FillEllipse(glow, -S(80), S(30), S(240), S(140));
+                g.FillEllipse(glow, -Theme.S(80), Theme.S(30), Theme.S(240), Theme.S(140));
 
             // logo dot: on the reading side of the header
-            int logoX = Mirrored ? bounds.Width - S(48) : S(16);
+            int logoX = Mirrored ? bounds.Width - Theme.S(48) : Theme.S(16);
             using (var logo = new SolidBrush(Color.FromArgb(255, 255, 255)))
-                g.FillEllipse(logo, logoX, S(18), S(32), S(32));
+                g.FillEllipse(logo, logoX, Theme.S(18), Theme.S(32), Theme.S(32));
             using (var pen = new Pen(Theme.HeaderTop, 3.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
             {
-                g.DrawLine(pen, logoX + S(8), S(41), logoX + S(14), S(30));
-                g.DrawLine(pen, logoX + S(14), S(30), logoX + S(19), S(39));
-                g.DrawLine(pen, logoX + S(19), S(39), logoX + S(28), S(24));
+                g.DrawLine(pen, logoX + Theme.S(8), Theme.S(41), logoX + Theme.S(14), Theme.S(30));
+                g.DrawLine(pen, logoX + Theme.S(14), Theme.S(30), logoX + Theme.S(19), Theme.S(39));
+                g.DrawLine(pen, logoX + Theme.S(19), Theme.S(39), logoX + Theme.S(28), Theme.S(24));
             }
 
             TextFormatFlags titleFlags = TextFormatFlags.VerticalCenter | TextFormatFlags.Left;
             TextFormatFlags subtitleFlags = TextFormatFlags.VerticalCenter | TextFormatFlags.Left;
-            int textLeft = S(60);
-            int pillsWidth = Measure(1) + (Measure(1) > 0 && Measure(2) > 0 ? 8 : 0) + Measure(2) + S(24);
+            int textLeft = Theme.S(60);
+            int pillsWidth = Measure(1) + (Measure(1) > 0 && Measure(2) > 0 ? 8 : 0) + Measure(2) + Theme.S(24);
             if (Mirrored)
             {
                 titleFlags = TextFormatFlags.VerticalCenter | TextFormatFlags.Right | TextFormatFlags.RightToLeft;
                 subtitleFlags = titleFlags;
-                textLeft = S(20);
+                textLeft = Theme.S(20);
             }
 
-            int textWidth = Math.Max(S(160), Width - textLeft - (Mirrored ? S(70) : pillsWidth));
+            int textWidth = Math.Max(Theme.S(160), Width - textLeft - (Mirrored ? Theme.S(70) : pillsWidth));
             using (var font = Theme.Font(15f, true))
-                TextRenderer.DrawText(g, Title, font, new Rectangle(textLeft, S(12), textWidth, S(26)), Color.White, titleFlags);
+                TextRenderer.DrawText(g, Title, font, new Rectangle(textLeft, Theme.S(12), textWidth, Theme.S(26)), Color.White, titleFlags);
             if (Subtitle.Length > 0)
             {
                 using (var font = Theme.Font(8.75f, false))
-                    TextRenderer.DrawText(g, Subtitle, font, new Rectangle(textLeft, S(36), Math.Max(S(120), textWidth), S(20)),
+                    TextRenderer.DrawText(g, Subtitle, font, new Rectangle(textLeft, Theme.S(36), Math.Max(Theme.S(120), textWidth), Theme.S(20)),
                                           Color.FromArgb(210, 255, 255, 255), subtitleFlags);
             }
 
@@ -496,8 +496,8 @@ namespace ServerHelp.Ui
                 int width = size.Width + 34;
                 int offset = slot == 1 ? 0 : Measure(1) + 8;
                 int x = Mirrored ? 16 + offset : Width - 16 - width - offset;
-                int top = Math.Max(S(10), (Height - S(30)) / 2);
-                var bounds = new Rectangle(x, top, width, S(30));
+                int top = Math.Max(Theme.S(10), (Height - Theme.S(30)) / 2);
+                var bounds = new Rectangle(x, top, width, Theme.S(30));
                 Theme.FillRounded(g, bounds, 15, Color.FromArgb(46, 255, 255, 255));
                 int dotX = Mirrored ? bounds.Right - 20 : bounds.X + 12;
                 using (var dot = new SolidBrush(color))
@@ -559,12 +559,12 @@ namespace ServerHelp.Ui
             // the ring leaves room for the caption and the note underneath it: they used to be drawn
             // past the bottom of the control, so the dials were anonymous and the "great / fine / high"
             // line never appeared at all
-            int captionH = Caption.Length > 0 ? S(20) : 0;
-            int noteH = Note.Length > 0 ? S(18) : 0;
-            int size = Math.Min(Width - S(16), Height - S(16) - captionH - noteH);
-            if (size < S(56)) size = Math.Max(S(40), Math.Min(Width - S(8), Height - S(8)));
+            int captionH = Caption.Length > 0 ? Theme.S(20) : 0;
+            int noteH = Note.Length > 0 ? Theme.S(18) : 0;
+            int size = Math.Min(Width - Theme.S(16), Height - Theme.S(16) - captionH - noteH);
+            if (size < Theme.S(56)) size = Math.Max(Theme.S(40), Math.Min(Width - Theme.S(8), Height - Theme.S(8)));
             int left = (Width - size) / 2;
-            int top = S(4);
+            int top = Theme.S(4);
             var ring = new Rectangle(left, top, size, size);
             float thickness = Math.Max(8f, size * 0.11f);
 
@@ -596,7 +596,7 @@ namespace ServerHelp.Ui
             using (var font = Theme.Font(8.5f, false))
                 TextRenderer.DrawText(g, Unit, font, new Rectangle(ring.Left, ring.Top + (int)(ring.Height * 0.58f), ring.Width, 18),
                                       Theme.SubText, TextFormatFlags.HorizontalCenter);
-            int textY = Height - captionH - noteH - S(2);
+            int textY = Height - captionH - noteH - Theme.S(2);
             if (Caption.Length > 0)
             {
                 using (var font = Theme.Font(9f, true))
