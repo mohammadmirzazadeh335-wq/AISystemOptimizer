@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Text;
 
 namespace ServerHelp.Core
@@ -46,7 +47,9 @@ namespace ServerHelp.Core
                 string line = rawLine.Trim();
                 if (line.Length == 0)
                 {
-                    if (buffer.Count > 0) Flush(buffer, entries, problems);
+                    // inside an .ovpn profile a blank line does not end the block: certificates and
+                    // option groups are separated by them
+                    if (buffer.Count > 0 && !IsOvpnStart(buffer[0])) Flush(buffer, entries, problems);
                     continue;
                 }
                 if (line.StartsWith("#") || line.StartsWith("//")) continue;
@@ -54,6 +57,7 @@ namespace ServerHelp.Core
                 bool startsJson = line.StartsWith("{");
                 bool startsIni = line.Equals("[Interface]", StringComparison.OrdinalIgnoreCase);
                 bool startsEntry = LooksLikeNewEntry(line);
+                bool startsOvpn = IsOvpnStart(line);
 
                 if (buffer.Count == 0)
                 {
@@ -64,6 +68,11 @@ namespace ServerHelp.Core
                         if (startsJson && depth <= 0) Flush(buffer, entries, problems);
                         continue;
                     }
+                    if (startsOvpn)
+                    {
+                        buffer.Add(line);
+                        continue;
+                    }
                     ConnectionEntry single = ParseLine(line, out string error);
                     if (single != null) entries.Add(single);
                     else if (error.Length > 0) problems.Add(Trim(line, 40) + " — " + error);
@@ -72,6 +81,21 @@ namespace ServerHelp.Core
 
                 // we are inside a multi line block
                 bool inJson = buffer[0].StartsWith("{");
+                bool inOvpn = IsOvpnStart(buffer[0]);
+                if (inOvpn)
+                {
+                    // the profile runs until a share link or another entry starts
+                    if (startsEntry)
+                    {
+                        Flush(buffer, entries, problems);
+                        ConnectionEntry next = ParseLine(line, out string nextError);
+                        if (next != null) entries.Add(next);
+                        else if (nextError.Length > 0) problems.Add(Trim(line, 40) + " — " + nextError);
+                        continue;
+                    }
+                    buffer.Add(line);
+                    continue;
+                }
                 if (startsEntry && !inJson && !startsIni)
                 {
                     Flush(buffer, entries, problems);           // the ini ended, a new entry began
@@ -93,6 +117,25 @@ namespace ServerHelp.Core
             if (entries.Count == 0 && problems.Count == 0)
                 problems.Add(L.T("چیزی برای افزودن پیدا نشد", "nothing could be imported"));
             return entries;
+        }
+
+        /// <summary>True when this line starts (or continues) an OpenVPN profile.</summary>
+        private static bool IsOvpnStart(string line)
+        {
+            if (string.IsNullOrEmpty(line)) return false;
+            string text = line.Trim();
+            if (text.Equals("client", StringComparison.OrdinalIgnoreCase) ||
+                text.Equals("tls-client", StringComparison.OrdinalIgnoreCase) ||
+                text.Equals("persist-key", StringComparison.OrdinalIgnoreCase) ||
+                text.Equals("nobind", StringComparison.OrdinalIgnoreCase)) return true;
+            if (text.StartsWith("remote ", StringComparison.OrdinalIgnoreCase)) return true;
+            if (text.StartsWith("proto ", StringComparison.OrdinalIgnoreCase)) return true;
+            if (text.StartsWith("dev tun", StringComparison.OrdinalIgnoreCase) ||
+                text.StartsWith("dev tap", StringComparison.OrdinalIgnoreCase)) return true;
+            if (text.StartsWith("<ca>", StringComparison.OrdinalIgnoreCase) ||
+                text.StartsWith("<tls-auth>", StringComparison.OrdinalIgnoreCase) ||
+                text.StartsWith("<tls-crypt>", StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
         }
 
         /// <summary>Crosses the line out as "a new entry starts here" (share link, URI, host:port).</summary>
@@ -212,6 +255,8 @@ namespace ServerHelp.Core
             try
             {
                 if (text.StartsWith("{")) return FromJson(text, out error);
+                // a whole .ovpn file (TunnelBear and most providers hand them out) arrives multi line
+                if (OvpnProfile.LooksLike(text)) return FromOvpn(text, error == null ? "" : "", out error);
                 if (text.StartsWith("[") && text.IndexOf("[Interface]", StringComparison.OrdinalIgnoreCase) >= 0)
                     return FromWireGuardIni(text, out error);
 
@@ -245,6 +290,37 @@ namespace ServerHelp.Core
                 error = L.T("خوانده نشد: ", "could not be read: ") + ex.Message + "  [" + Trim(text, 60) + "]";
                 return null;
             }
+        }
+
+        /// <summary>Turns an .ovpn profile into an entry the tunnel can actually speak.</summary>
+        public static ConnectionEntry FromOvpn(string text, string sourceName, out string error)
+        {
+            error = "";
+            OvpnProfile profile = OvpnProfile.Parse(text, sourceName);
+            if (!profile.Ok)
+            {
+                error = L.T("فایل .ovpn خوانده نشد: ", "the .ovpn profile cannot be read: ") +
+                        string.Join(" ", profile.Warnings.ToArray());
+                return null;
+            }
+            var entry = ConnectionEntry.Create(NameFromSource(sourceName, profile), ConnectionKind.OpenVpn);
+            entry.Config = text;
+            entry.Host = profile.Host;
+            entry.Port = profile.Port;
+            entry.NeedsCredentials = profile.NeedsCredentials;
+            entry.Notes = profile.Summary() + (profile.Warnings.Count > 0
+                ? "  •  " + string.Join(" ", profile.Warnings.ToArray()) : "");
+            return entry;
+        }
+
+        private static string NameFromSource(string sourceName, OvpnProfile profile)
+        {
+            string name = sourceName == null ? "" : Path.GetFileName(sourceName);
+            if (name.Length == 0) name = profile.Host;
+            int dot = name.LastIndexOf('.');
+            if (dot > 0) name = name.Substring(0, dot);
+            if (name.Length == 0) name = "OpenVPN";
+            return name + " (OpenVPN)";
         }
 
         // ------------------------------------------------------------------ plain lines

@@ -21,7 +21,9 @@ namespace ServerHelp.Core
         /// <summary>One sing-box outbound object pasted as JSON (vless/vmess/trojan/ss/…).</summary>
         SingBoxOutbound = 6,
         /// <summary>A complete sing-box config, run exactly as pasted.</summary>
-        SingBoxConfig = 7
+        SingBoxConfig = 7,
+        /// <summary>An OpenVPN profile (.ovpn, like the ones TunnelBear hands out), spoken by sing-box.</summary>
+        OpenVpn = 8
     }
 
     /// <summary>One way to reach the game server: a tunnel, a proxy, a resolver or a raw config.</summary>
@@ -58,6 +60,9 @@ namespace ServerHelp.Core
         public string Config = "";           // JSON of an outbound object or of a whole config
         public int LocalSocksPort;           // where a full config listens locally
 
+        /// <summary>True when the stored .ovpn asks for a username and password.</summary>
+        public bool NeedsCredentials;
+
         public int Dc = 2;                   // Telegram data centre for MTProto proxies (1..5)
         public string Notes = "";
 
@@ -92,6 +97,14 @@ namespace ServerHelp.Core
                         return L.T("خودکار: اسکن + حساب WARP", "automatic: scan + WARP account");
                     case ConnectionKind.Dns:
                         return string.IsNullOrEmpty(DnsUrl) ? L.T("تعیین نشده", "not set") : DnsUrl;
+                    case ConnectionKind.OpenVpn:
+                        {
+                            OvpnProfile profile = OvpnProfile.Parse(Config, "");
+                            string where = profile.Ok
+                                ? profile.Host + ":" + profile.Port.ToString(CultureInfo.InvariantCulture) + " " + profile.Network.ToUpperInvariant()
+                                : L.T("فایل .ovpn وارد نشده", "no .ovpn loaded yet");
+                            return where + (NeedsCredentials && User.Length == 0 ? L.T(" • حساب لازم است", " • account needed") : "");
+                        }
                     case ConnectionKind.SingBoxOutbound:
                     case ConnectionKind.SingBoxConfig:
                         {
@@ -166,6 +179,17 @@ namespace ServerHelp.Core
                 case ConnectionKind.SingBoxOutbound:
                 case ConnectionKind.SingBoxConfig:
                     if (string.IsNullOrEmpty(Config)) missing.Add(L.T("کانفیگ JSON", "JSON config"));
+                    break;
+                case ConnectionKind.OpenVpn:
+                    {
+                        OvpnProfile profile = OvpnProfile.Parse(Config, "");
+                        if (string.IsNullOrEmpty(Config)) missing.Add(L.T("متن فایل .ovpn", "the .ovpn profile"));
+                        else if (!profile.Ok) missing.Add(L.T("خط remote در فایل .ovpn", "a remote line in the .ovpn"));
+                        if (profile.Ok && profile.CaCert.Length == 0)
+                            missing.Add(L.T("گواهی CA داخل فایل (بدون آن اتصال رد می‌شود)", "the CA certificate inside the file (without it the server is rejected)"));
+                        if (NeedsCredentials && User.Length == 0)
+                            missing.Add(L.T("نام کاربری و رمز حساب", "the account username and password"));
+                    }
                     break;
                 case ConnectionKind.Mtproto:
                     if (string.IsNullOrEmpty(Host)) missing.Add(L.T("آدرس", "address"));
@@ -255,6 +279,12 @@ namespace ServerHelp.Core
                 e.Notes = L.T("فقط برای تلگرام؛ بازی از این پروکسی عبور نمی‌کند.",
                               "Telegram only; the game cannot be carried by it.");
             }
+            else if (kind == ConnectionKind.OpenVpn)
+            {
+                e.Port = 1194;
+                e.Notes = L.T("فایل .ovpn (مثلاً TunnelBear) را بچسبانید یا از فایل بخوانید؛ برنامه فقط ترافیک بازی را از آن می‌برد.",
+                              "paste or load an .ovpn profile (TunnelBear for example); only the game traffic goes through it.");
+            }
             else if (kind == ConnectionKind.WireGuard)
             {
                 e.Port = 2408;
@@ -287,6 +317,7 @@ namespace ServerHelp.Core
             w.Prop("user", User);
             w.Prop("password", Password);
             w.Prop("secret", Secret);
+            w.Prop("needsCredentials", NeedsCredentials);
             w.Prop("dc", Dc);
             w.Prop("address", Address);
             w.Prop("addressV6", AddressV6);
@@ -314,7 +345,7 @@ namespace ServerHelp.Core
             if (string.IsNullOrEmpty(e.Id)) e.Id = NewId();
             e.Name = Json.GetStr(d, "name", "");
             int kind = Json.GetInt(d, "kind", (int)ConnectionKind.Socks5);
-            if (kind < 0 || kind > (int)ConnectionKind.SingBoxConfig) kind = (int)ConnectionKind.Socks5;
+            if (kind < 0 || kind > (int)ConnectionKind.OpenVpn) kind = (int)ConnectionKind.Socks5;
             e.Kind = (ConnectionKind)kind;
             e.Enabled = Json.GetBool(d, "enabled", true);
             e.UseForGame = Json.GetBool(d, "useForGame", true);
@@ -323,6 +354,7 @@ namespace ServerHelp.Core
             e.User = Json.GetStr(d, "user", "");
             e.Password = Json.GetStr(d, "password", "");
             e.Secret = Json.GetStr(d, "secret", "");
+            e.NeedsCredentials = Json.GetBool(d, "needsCredentials", false);
             e.Dc = Json.GetInt(d, "dc", 2);
             e.Address = Json.GetStr(d, "address", "");
             e.AddressV6 = Json.GetStr(d, "addressV6", "");
@@ -391,7 +423,8 @@ namespace ServerHelp.Core
             new ConnectionKindInfo { Kind = ConnectionKind.Mtproto, En = "Telegram MTProto", Fa = "پروکسی MTProto تلگرام", CanCarryGame = false, En2 = "Telegram only", Fa2 = "فقط تلگرام", DelayNote = "tg" },
             new ConnectionKindInfo { Kind = ConnectionKind.WireGuard, En = "WireGuard config", Fa = "کانفیگ WireGuard", CanCarryGame = true, IsRouted = true, En2 = "the game", Fa2 = "بازی" },
             new ConnectionKindInfo { Kind = ConnectionKind.SingBoxOutbound, En = "Manual outbound JSON", Fa = "کانفیگ دستی (outbound)", CanCarryGame = true, IsRouted = true, En2 = "the game", Fa2 = "بازی" },
-            new ConnectionKindInfo { Kind = ConnectionKind.SingBoxConfig, En = "Full sing-box config", Fa = "کانفیگ کامل sing-box", CanCarryGame = true, IsRouted = true, En2 = "the game", Fa2 = "بازی" }
+            new ConnectionKindInfo { Kind = ConnectionKind.SingBoxConfig, En = "Full sing-box config", Fa = "کانفیگ کامل sing-box", CanCarryGame = true, IsRouted = true, En2 = "the game", Fa2 = "بازی" },
+            new ConnectionKindInfo { Kind = ConnectionKind.OpenVpn, En = "OpenVPN profile", Fa = "کانفیگ OpenVPN (سرویس‌هایی مثل TunnelBear)", CanCarryGame = true, IsRouted = true, En2 = "the game", Fa2 = "بازی" }
         };
 
         public static ConnectionKindInfo Of(ConnectionKind kind)

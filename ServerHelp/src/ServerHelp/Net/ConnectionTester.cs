@@ -72,6 +72,12 @@ namespace ServerHelp.Net
         /// <summary>WireGuard endpoint object built from the fields of a manual entry.</summary>
         public static Dictionary<string, object> BuildEndpoint(ConnectionEntry entry, string tag)
         {
+            if (entry.Kind == ConnectionKind.OpenVpn)
+            {
+                var profile = OvpnProfile.Parse(entry.Config, "");
+                if (!profile.Ok) throw new Exception(L.T("فایل .ovpn خط remote ندارد", "the .ovpn profile has no remote line"));
+                return profile.ToEndpoint(tag, entry.User, entry.Password);
+            }
             if (entry.Kind != ConnectionKind.WireGuard)
                 throw new Exception(L.T("این نوع کانفیگ WireGuard نیست", "this entry is not a WireGuard config"));
 
@@ -341,7 +347,8 @@ namespace ServerHelp.Net
             string tag = ConnectionRoute.TagFor(entry);
             try
             {
-                if (entry.Kind == ConnectionKind.WireGuard) plan.ExtraEndpoints.Add(ConnectionRoute.BuildEndpoint(entry, tag));
+                if (entry.Kind == ConnectionKind.WireGuard || entry.Kind == ConnectionKind.OpenVpn)
+                    plan.ExtraEndpoints.Add(ConnectionRoute.BuildEndpoint(entry, tag));
                 else plan.ExtraOutbounds.Add(ConnectionRoute.BuildOutbound(entry, tag));
             }
             catch (Exception ex)

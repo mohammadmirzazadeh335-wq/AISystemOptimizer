@@ -39,6 +39,17 @@ namespace ServerHelp.Tunnel
         public string UrlTestInterval = "3m";
         public int UrlTestTolerance = 30;
 
+        /// <summary>Resolve names through the chosen route instead of the (possibly blocked) local DNS.</summary>
+        public bool DnsThroughRoute = true;
+        /// <summary>Resolver the route talks to when the route is a proxy (TCP/53, sent inside the tunnel).</summary>
+        public string DnsAddress = "1.1.1.1";
+        /// <summary>When set, the pushed resolvers of that OpenVPN endpoint are used instead.</summary>
+        public string DnsOpenVpnTag = "";
+        /// <summary>Server names the game needs; they are always sent to the tunnel resolver.</summary>
+        public List<string> GameDomains = new List<string>();
+        /// <summary>"ipv4_only" keeps a broken IPv6 from adding seconds to every lookup.</summary>
+        public string DnsStrategy = "ipv4_only";
+
         public string LogPath = AppPaths.SingBoxLog;
         public string LogLevel = "warn";
 
@@ -46,6 +57,8 @@ namespace ServerHelp.Tunnel
         public string ResolvedTag = "";
 
         public string GroupTag { get { return "warp-auto"; } }
+        public string LocalDnsTag { get { return "local-dns"; } }
+        public string TunnelDnsTag { get { return "tunnel-dns"; } }
     }
 
     /// <summary>
@@ -155,6 +168,7 @@ namespace ServerHelp.Tunnel
             {
                 foreach (object endpoint in plan.ExtraEndpoints)
                 {
+                    EnsureLocalResolver(endpoint, plan);
                     w.ValueRaw(Json.Serialize(endpoint));
                     string tag = TagOf(endpoint);
                     if (!string.IsNullOrEmpty(tag)) routeMembers.Add(tag);
@@ -169,6 +183,7 @@ namespace ServerHelp.Tunnel
             {
                 foreach (object outbound in plan.ExtraOutbounds)
                 {
+                    EnsureLocalResolver(outbound, plan);
                     w.ValueRaw(Json.Serialize(outbound));
                     string tag = TagOf(outbound);
                     if (!string.IsNullOrEmpty(tag)) routeMembers.Add(tag);
@@ -230,6 +245,71 @@ namespace ServerHelp.Tunnel
                 w.EndObject();
             }
 
+            // ---- dns: the reason the game cannot be reached on a filtered line is very often the
+            // resolver, so name lookups are pushed through the same route the game uses. A resolver
+            // the user added by hand only fixes the hosts file; this fixes the protocol itself.
+            if (plan.DnsThroughRoute)
+            {
+                w.Name("dns").StartObject();
+                w.Name("servers").StartArray();
+
+                w.StartObject();
+                w.Prop("type", "local");
+                w.Prop("tag", plan.LocalDnsTag);
+                w.EndObject();
+
+                bool tunnelledDns = routeTag != "direct";
+                if (tunnelledDns && !string.IsNullOrEmpty(plan.DnsOpenVpnTag))
+                {
+                    // an OpenVPN server pushes its own resolvers; using them is both faster and
+                    // closer to the exit, which is exactly what a low ping route wants
+                    w.StartObject();
+                    w.Prop("type", "openvpn");
+                    w.Prop("tag", plan.TunnelDnsTag);
+                    w.Prop("endpoint", plan.DnsOpenVpnTag);
+                    w.Prop("accept_default_resolvers", true);
+                    w.Prop("accept_search_domain", false);
+                    w.EndObject();
+                }
+                else if (tunnelledDns)
+                {
+                    w.StartObject();
+                    w.Prop("type", "tcp");
+                    w.Prop("tag", plan.TunnelDnsTag);
+                    w.Prop("server", plan.DnsAddress);
+                    w.Prop("server_port", 53);
+                    w.Prop("detour", routeTag);
+                    w.Name("domain_resolver").Value(plan.LocalDnsTag);
+                    w.EndObject();
+                }
+                w.EndArray();
+
+                if (tunnelledDns)
+                {
+                    var rules = new List<string>();
+                    foreach (string domain in plan.GameDomains)
+                        if (!string.IsNullOrEmpty(domain) && !IsIpLiteral(domain)) rules.Add(domain);
+                    if (rules.Count > 0)
+                    {
+                        w.Name("rules").StartArray();
+                        w.StartObject();
+                        w.Name("domain").StartArray();
+                        foreach (string domain in rules) w.Value(domain);
+                        w.EndArray();
+                        w.Prop("server", plan.TunnelDnsTag);
+                        w.EndObject();
+                        w.EndArray();
+                    }
+                    w.Prop("final", plan.TunnelDnsTag);
+                }
+                else
+                {
+                    w.Prop("final", plan.LocalDnsTag);
+                }
+                if (!string.IsNullOrEmpty(plan.DnsStrategy)) w.Prop("strategy", plan.DnsStrategy);
+                w.EndObject();
+            }
+
             // ---- route
             w.Name("route").StartObject();
             w.Prop("auto_detect_interface", true);
@@ -275,6 +355,49 @@ namespace ServerHelp.Tunnel
             return w.ToString();
         }
 
+        /// <summary>
+        /// An outbound whose server is a domain needs a resolver of its own, otherwise it would ask
+        /// the tunnel DNS for its own address: a circle. The local resolver breaks the circle.
+        /// </summary>
+        private static void EnsureLocalResolver(object value, TunnelPlan plan)
+        {
+            if (!plan.DnsThroughRoute) return;
+            var obj = Json.Obj(value);
+            if (obj == null || obj.Count == 0) return;
+            string type = Json.GetStr(obj, "type", "");
+            if (type == "direct" || type == "block" || type == "dns" || type == "selector" || type == "urltest") return;
+            if (Json.Get(obj, "domain_resolver") != null) return;
+
+            string server = Json.GetStr(obj, "server", "");
+            if (server.Length > 0)
+            {
+                if (!IsIpLiteral(server)) obj["domain_resolver"] = plan.LocalDnsTag;
+                return;
+            }
+
+            // endpoints keep the far end inside peers[]
+            var peers = Json.Arr(Json.Get(obj, "peers"));
+            if (peers == null) return;
+            foreach (object item in peers)
+            {
+                var peer = Json.Obj(item);
+                if (peer == null) continue;
+                string address = Json.GetStr(peer, "address", "");
+                if (address.Length > 0 && !IsIpLiteral(address))
+                {
+                    obj["domain_resolver"] = plan.LocalDnsTag;
+                    return;
+                }
+            }
+        }
+
+        private static bool IsIpLiteral(string text)
+        {
+            System.Net.IPAddress parsed;
+            return System.Net.IPAddress.TryParse(text, out parsed);
+        }
+
+        /// <summary>The part of a tag that has to be unique: two "warp" entries must not share one.</summary>
         private static string TagOf(object outbound)
         {
             var d = Json.Obj(outbound);

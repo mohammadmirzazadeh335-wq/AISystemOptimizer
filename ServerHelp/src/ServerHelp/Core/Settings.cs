@@ -102,6 +102,10 @@ namespace ServerHelp.Core
         public List<ConnectionEntry> Connections = new List<ConnectionEntry>();
         /// <summary>Name (or id) of the connection to use; empty means "pick the best one".</summary>
         public string PinnedConnection = "";
+        /// <summary>Second hop of a pinned relay chain (empty = a single hop).</summary>
+        public string PinnedChainHop = "";
+        /// <summary>Send name lookups through the chosen route instead of the local DNS.</summary>
+        public bool DnsThroughTunnel = true;
         /// <summary>When the chosen route fails, keep going with the automatic one.</summary>
         public bool AllowRouteFallback = true;
         /// <summary>Group every working proxy so sing-box itself fails over to the fastest one.</summary>
@@ -227,6 +231,8 @@ namespace ServerHelp.Core
                 s.LoginProbe = Json.GetBool(d, "loginProbe", s.LoginProbe);
 
                 s.PinnedConnection = Json.GetStr(d, "pinnedConnection", s.PinnedConnection);
+                s.PinnedChainHop = Json.GetStr(d, "pinnedChainHop", s.PinnedChainHop);
+                s.DnsThroughTunnel = Json.GetBool(d, "dnsThroughTunnel", s.DnsThroughTunnel);
                 s.AllowRouteFallback = Json.GetBool(d, "allowRouteFallback", s.AllowRouteFallback);
                 s.ProxyFailover = Json.GetBool(d, "proxyFailover", s.ProxyFailover);
                 s.KillSwitch = Json.GetBool(d, "killSwitch", s.KillSwitch);
@@ -316,6 +322,8 @@ namespace ServerHelp.Core
                 w.Prop("connectTimeoutMs", s.ConnectTimeoutMs);
                 w.Prop("loginProbe", s.LoginProbe);
                 w.Prop("pinnedConnection", s.PinnedConnection);
+                w.Prop("pinnedChainHop", s.PinnedChainHop);
+                w.Prop("dnsThroughTunnel", s.DnsThroughTunnel);
                 w.Prop("allowRouteFallback", s.AllowRouteFallback);
                 w.Prop("proxyFailover", s.ProxyFailover);
                 w.Prop("killSwitch", s.KillSwitch);

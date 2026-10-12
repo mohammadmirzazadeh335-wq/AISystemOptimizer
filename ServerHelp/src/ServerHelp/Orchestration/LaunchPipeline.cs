@@ -64,6 +64,9 @@ namespace ServerHelp.Orchestration
         public string Strategy = "";          // direct | warp | proxy | dns | none
         public bool TunnelUp;
         public bool HostsApplied;
+        /// <summary>True when the name was resolved inside the tunnel, not by the local resolver.</summary>
+        public bool DnsThroughTunnel;
+        public string DnsDetail = "";
         public string ChosenIp = "";
         public List<string> ResolvedIps = new List<string>();
         public int DirectPing = -1;
@@ -340,7 +343,45 @@ namespace ServerHelp.Orchestration
             // ---------------------------------------------------------- 6. name resolution fix
             if (settings.UseHostsFile && settings.Tunnel != TunnelMode.Off && !_cancel)
             {
-                // A DNS server the user entered is used first: a poisoned system resolver is one of
+                // 6a. the tunnel resolver: the query travels inside the same route the game uses,
+                // so a blocked or poisoned local resolver cannot stop the join. This is the step that
+                // makes "DNS on the VPN" real.
+                if (settings.DnsThroughTunnel && Report.TunnelUp && !string.IsNullOrEmpty(server.Host))
+                {
+                    watch.Restart();
+                    string systemAnswer = "";
+                    try
+                    {
+                        var systemIps = NetUtil.ResolveSimple(server.Host);
+                        systemAnswer = string.Join(", ", systemIps.ToArray());
+                    }
+                    catch { }
+
+                    DnsAnswer throughTunnel = ProxyDns.ResolveThrough("127.0.0.1", SocksPort, DnsServerForTunnel(settings),
+                                                                      server.Host, Math.Min(6000, settings.ConnectTimeoutMs),
+                                                                      "", "");
+                    Report.Candidates.Add(L.T("DNS از داخل تونل", "DNS through the tunnel") + " → " + throughTunnel.Summary);
+                    if (throughTunnel.Ok)
+                    {
+                        string comparison = ProxyDns.Compare(server.Host, systemAnswer, throughTunnel);
+                        Report.DnsThroughTunnel = true;
+                        Report.DnsDetail = comparison;
+                        foreach (string ip in throughTunnel.Addresses) AddUnique(Report.ResolvedIps, ip);
+                        if (string.IsNullOrEmpty(bestIp)) bestIp = throughTunnel.First;
+                        bool poisoned = systemAnswer.Length > 0 && comparison.IndexOf(L.T("هشدار", "warning"), StringComparison.Ordinal) >= 0;
+                        if (poisoned) Report.Warnings.Add(L.T("DNS محلی دست‌کاری شده است؛ آدرس درست از داخل تونل گرفته شد.",
+                                                              "the local DNS is tampered with; the correct address was taken from the tunnel."));
+                        Step(L.T("DNS از داخل تونل", "DNS through the tunnel"), L.T("DNS از داخل تونل", "DNS through the tunnel"),
+                            StepState.Done, comparison, (int)watch.ElapsedMilliseconds);
+                    }
+                    else
+                    {
+                        Step(L.T("DNS از داخل تونل", "DNS through the tunnel"), L.T("DNS از داخل تونل", "DNS through the tunnel"),
+                            StepState.Warn, throughTunnel.Server + " → " + throughTunnel.Error, (int)watch.ElapsedMilliseconds);
+                    }
+                }
+
+                // A DNS server the user entered is used next: a poisoned system resolver is one of
                 // the reasons the game cannot reach the server at all.
                 if (_dnsEntry != null)
                 {
@@ -681,6 +722,33 @@ namespace ServerHelp.Orchestration
             return list;
         }
 
+        /// <summary>The resolver the tunnel talks to: the DNS entry the user added, or a public one.</summary>
+        private static string DnsServerForTunnel(AppSettings settings)
+        {
+            foreach (ConnectionEntry entry in settings.Connections)
+            {
+                if (!entry.Enabled || !entry.Info.IsResolver) continue;
+                var spec = ResolverSpec.Parse(entry.DnsUrl);
+                if (spec == null) continue;
+                if (spec.Scheme == "udp" || spec.Scheme == "tcp") return spec.Host;
+            }
+            return "1.1.1.1";
+        }
+
+        /// <summary>The exit hop of a pinned relay chain, when the user pinned one.</summary>
+        private static ConnectionEntry FindChainHop(AppSettings settings, ConnectionEntry first)
+        {
+            if (settings == null || first == null) return null;
+            string name = settings.PinnedChainHop == null ? "" : settings.PinnedChainHop.Trim();
+            if (name.Length == 0) return null;
+            foreach (ConnectionEntry entry in settings.Connections)
+            {
+                if (entry == first || !entry.Enabled) continue;
+                if (Matches(entry, name)) return entry.CanCarryGame && entry.Missing().Length == 0 ? entry : null;
+            }
+            return null;
+        }
+
         private static bool Matches(ConnectionEntry entry, string name)
         {
             return string.Equals(entry.Name, name, StringComparison.OrdinalIgnoreCase) ||
@@ -890,14 +958,45 @@ namespace ServerHelp.Orchestration
             plan.ClashSecret = ClashSecret;
             plan.LogPath = AppPaths.SingBoxLog;
 
+            // Name lookups go through the same route as the game: on a filtered line the local
+            // resolver is the first thing that fails, and a resolver inside the tunnel is not.
+            plan.DnsThroughRoute = settings.DnsThroughTunnel && settings.Tunnel != TunnelMode.Off;
+            if (!string.IsNullOrEmpty(server.Host)) plan.GameDomains.Add(server.Host);
+
             string primaryTag;
+            string chainTag = "";
             try
             {
                 primaryTag = ConnectionRoute.TagFor(entry);
-                if (entry.Kind == ConnectionKind.WireGuard)
+                if (entry.Kind == ConnectionKind.WireGuard || entry.Kind == ConnectionKind.OpenVpn)
                     plan.ExtraEndpoints.Add(ConnectionRoute.BuildEndpoint(entry, primaryTag));
                 else
                     plan.ExtraOutbounds.Add(ConnectionRoute.BuildOutbound(entry, primaryTag));
+                if (entry.Kind == ConnectionKind.OpenVpn) plan.DnsOpenVpnTag = primaryTag;
+
+                // a pinned relay chain: hop 1 carries, hop 2 exits
+                ConnectionEntry hop2 = FindChainHop(settings, entry);
+                if (hop2 != null)
+                {
+                    chainTag = ConnectionRoute.TagFor(hop2);
+                    Dictionary<string, object> exit;
+                    if (hop2.Kind == ConnectionKind.WireGuard || hop2.Kind == ConnectionKind.OpenVpn)
+                    {
+                        exit = ConnectionRoute.BuildEndpoint(hop2, chainTag);
+                        plan.ExtraEndpoints.Add(exit);
+                    }
+                    else
+                    {
+                        exit = ConnectionRoute.BuildOutbound(hop2, chainTag);
+                        plan.ExtraOutbounds.Add(exit);
+                    }
+                    exit["detour"] = primaryTag;
+                    if (hop2.Kind == ConnectionKind.OpenVpn && plan.DnsOpenVpnTag.Length == 0)
+                        plan.DnsOpenVpnTag = chainTag;
+                    Report.ConnectionUsed = entry.Name + " → " + hop2.Name;
+                    Step(L.T("زنجیره رله", "Relay chain"), L.T("زنجیره رله", "Relay chain"), StepState.Done,
+                        entry.Name + " → " + hop2.Name, (int)watch.ElapsedMilliseconds);
+                }
             }
             catch (Exception ex)
             {
@@ -906,6 +1005,7 @@ namespace ServerHelp.Orchestration
                 return false;
             }
             plan.MemberTags.Add(primaryTag);
+            if (chainTag.Length > 0) { plan.MemberTags.Remove(primaryTag); plan.RouteTag = chainTag; }
 
             // Every other working proxy joins as a failover member: sing-box itself then keeps the
             // fastest one and switches when one dies.

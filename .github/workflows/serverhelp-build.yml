@@ -119,6 +119,20 @@ jobs:
       - name: Build
         run: dotnet build ServerHelp/src/ServerHelp/ServerHelp.csproj -c Release -p:Platform=x64 --no-restore -v minimal
 
+      - name: Self test the generated tunnel configurations
+        shell: pwsh
+        # The app writes every configuration it can produce (plain proxy, two hop relay, OpenVPN
+        # with the pushed resolvers, DNS only mode) and lets the bundled engine validate them.
+        # A schema mistake must break the build here, not on a user's machine mid game.
+        run: |
+          $exe = Get-ChildItem -Path 'ServerHelp/src/ServerHelp/bin' -Recurse -Filter 'ServerHelp.exe' |
+                 Where-Object { $_.FullName -match 'Release' } | Select-Object -First 1
+          if (-not $exe) { $exe = Get-ChildItem -Path 'ServerHelp/src/ServerHelp/bin' -Recurse -Filter 'ServerHelp.exe' | Select-Object -First 1 }
+          if (-not $exe) { throw 'ServerHelp.exe was not built' }
+          # the engine is embedded in the exe, so the app unpacks it itself
+          & $exe.FullName --selftest
+          if ($LASTEXITCODE -ne 0) { throw "self test failed with exit code $LASTEXITCODE" }
+
       - name: Collect artefact
         shell: pwsh
         run: |

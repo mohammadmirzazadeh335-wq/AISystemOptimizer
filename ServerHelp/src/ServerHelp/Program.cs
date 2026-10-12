@@ -17,6 +17,14 @@ namespace ServerHelp.Core
         [STAThread]
         private static void Main(string[] args)
         {
+            // Headless check for CI: writes every configuration the app can make and asks the
+            // bundled engine to validate it. No window, no mutex, no settings are touched.
+            if (args != null && args.Length > 0 && args[0] == "--selftest")
+            {
+                Environment.ExitCode = SelfTest.Run(args);
+                return;
+            }
+
             bool createdNew;
             using (var mutex = new System.Threading.Mutex(true, "ServerHelp_SingleInstance_9F1C", out createdNew))
             {
