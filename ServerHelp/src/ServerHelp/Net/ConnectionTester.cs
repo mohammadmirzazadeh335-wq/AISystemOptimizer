@@ -438,18 +438,7 @@ namespace ServerHelp.Net
             try { parsed = Json.ParseObject(entry.Config); }
             catch (Exception ex) { return ConnectionTestResult.Fail(L.T("JSON نامعتبر", "invalid JSON"), ex.Message, true); }
 
-            bool hasTun = false;
-            var inbounds = Json.Arr(Json.Get(parsed, "inbounds"));
-            if (inbounds != null)
-            {
-                foreach (object item in inbounds)
-                {
-                    var inbound = Json.Obj(item);
-                    if (inbound != null && Json.GetStr(inbound, "type", "") == "tun") hasTun = true;
-                }
-            }
-
-            if (hasTun)
+            if (HasTunInbound(entry.Config))
             {
                 // Starting it would create a TUN interface, which is exactly what a *test* must not
                 // do, so only the configuration itself is verified here.
@@ -548,6 +537,28 @@ namespace ServerHelp.Net
 
         // ------------------------------------------------------------------ helpers
 
+        /// <summary>
+        /// True when a pasted full config would create a TUN interface. Neither a test nor a quick
+        /// fetch may start one: that is a change to the machine, and the user did not ask for it.
+        /// </summary>
+        public static bool HasTunInbound(string configJson)
+        {
+            try
+            {
+                var parsed = Json.ParseObject(configJson);
+                var inbounds = Json.Arr(Json.Get(parsed, "inbounds"));
+                if (inbounds == null) return false;
+                foreach (object item in inbounds)
+                {
+                    var inbound = Json.Obj(item);
+                    if (inbound != null && Json.GetStr(inbound, "type", "") == "tun") return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>Rewrites the local socks port of a full config so it can run beside the live session.</summary>
         public static string RewriteSocksPort(string configJson, int port)
         {
             try

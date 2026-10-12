@@ -26,6 +26,16 @@ namespace ServerHelp.Net
 
         public static FetchResult Fetch(string url, int timeoutMs, ConnectionEntry via)
         {
+            return Fetch(url, timeoutMs, via, null);
+        }
+
+        /// <summary>
+        /// Same fetch, but the caller already brought a path up (a proxy socket, or the local port of
+        /// a tunnel it started for this one download). That is how a link can be fetched through a
+        /// WireGuard or .ovpn connection without starting it twice.
+        /// </summary>
+        public static FetchResult Fetch(string url, int timeoutMs, ConnectionEntry via, IConnector connector)
+        {
             var result = new FetchResult();
             if (string.IsNullOrEmpty(url)) { result.Error = L.T("آدرس اشتراک خالی است", "the subscription address is empty"); return result; }
             if (!url.StartsWith("http", StringComparison.OrdinalIgnoreCase)) url = "https://" + url;
@@ -37,7 +47,8 @@ namespace ServerHelp.Net
             long start = DateTime.UtcNow.Ticks;
             try
             {
-                string body = via == null ? FetchDirect(uri, timeoutMs) : FetchThrough(via, uri, timeoutMs);
+                string body = connector != null ? FetchThrough(connector, uri, timeoutMs)
+                            : via == null ? FetchDirect(uri, timeoutMs) : FetchThrough(via, uri, timeoutMs);
                 result.Text = body;
                 result.Bytes = body.Length;
                 result.Ok = body.Trim().Length > 0;
@@ -84,11 +95,17 @@ namespace ServerHelp.Net
             else if (entry.Kind == ConnectionKind.SingBoxConfig && entry.LocalSocksPort > 0)
                 connector = new Socks5Client("127.0.0.1", entry.LocalSocksPort, timeoutMs);
             else
-                // a tunnel-backed kind has to be brought up first; the caller does that
-                throw new Exception(L.T("این نوع اتصال هنوز آماده نیست؛ یک پروکسی SOCKS5/HTTP انتخاب کنید " +
+                // a tunnel-backed kind has to be brought up first; the caller does that and passes
+                // the connector in, so this is only reached when it could not be started
+                throw new Exception(L.T("این نوع اتصال بالا نیامد؛ یک پروکسی SOCKS5/HTTP انتخاب کنید " +
                                         "یا مستقیم امتحان کنید.",
-                                        "this kind is not up yet; pick a SOCKS5/HTTP proxy or try direct."));
+                                        "this kind could not be brought up; pick a SOCKS5/HTTP proxy or try direct."));
+            return FetchThrough(connector, uri, timeoutMs);
+        }
 
+        /// <summary>A plain GET over a path that is already established.</summary>
+        private static string FetchThrough(IConnector connector, Uri uri, int timeoutMs)
+        {
             string current = uri.ToString();
             for (int hop = 0; hop < 4; hop++)
             {

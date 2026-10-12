@@ -296,6 +296,14 @@ namespace ServerHelp
 
             List<ConnectionEntry> empty = Subscription.Parse("", out problems);
             Expect(empty.Count == 0, "an empty subscription adds nothing instead of throwing", failures, passes);
+
+            // fetching is where a user's typo lands: it has to come back as a message, not a crash
+            Subscription.FetchResult noUrl = Subscription.Fetch("", 500, null);
+            Expect(noUrl != null && !noUrl.Ok && noUrl.Error.Length > 0,
+                   "an empty subscription address is reported instead of fetched", failures, passes);
+            Subscription.FetchResult badUrl = Subscription.Fetch("this is not an address", 500, null);
+            Expect(badUrl != null && !badUrl.Ok && badUrl.Error.Length > 0,
+                   "an address that cannot be parsed is reported instead of fetched", failures, passes);
         }
 
         /// <summary>
@@ -440,6 +448,19 @@ namespace ServerHelp
             Expect(deferred != null && !deferred.Ok && deferred.Deferred,
                    "a route that is only brought up at launch says so instead of pretending to fail",
                    failures, passes);
+
+            // the helpers a measurement leans on: which configs may be started at all, and how a
+            // full config is moved to a free port without breaking its outbound
+            Expect(ConnectionTester.HasTunInbound("{\"inbounds\":[{\"type\":\"tun\",\"tag\":\"t\"}]}"),
+                   "a config with a TUN inbound is recognised", failures, passes);
+            Expect(!ConnectionTester.HasTunInbound("{\"inbounds\":[{\"type\":\"socks\",\"listen_port\":1080}]}"),
+                   "a config without a TUN inbound is not accused of one", failures, passes);
+            Expect(!ConnectionTester.HasTunInbound("not json"), "an unreadable config is not a TUN config",
+                   failures, passes);
+            string moved = ConnectionTester.RewriteSocksPort(
+                "{\"inbounds\":[{\"type\":\"socks\",\"listen_port\":1080}],\"outbounds\":[{\"type\":\"direct\"}]}", 22470);
+            Expect(moved.Contains("22470") && moved.Contains("\"direct\"") && !moved.Contains("1080"),
+                   "a full config is moved to a free port with its outbound intact", failures, passes);
 
             var fullConfig = ConnectionEntry.Create("full config", ConnectionKind.SingBoxConfig);
             fullConfig.Config = "{\"log\":{\"level\":\"warn\"}}";

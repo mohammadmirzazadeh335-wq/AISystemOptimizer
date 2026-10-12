@@ -1863,28 +1863,10 @@ namespace ServerHelp.Ui
 
             // everything else runs by bringing the route up in a throwaway engine, which is exactly
             // what the launch will do, so the numbers are the numbers the game will see
-            int socksPort = ProbeTunnel.NextPort();
-            var plan = new TunnelPlan();
-            plan.IncludeTun = false;
-            plan.SocksPort = socksPort;
-            plan.ClashController = "";
-            plan.LogPath = "";
-            plan.BuildUrlTest = false;
-            plan.DnsThroughRoute = false;
-            string tag = ConnectionRoute.TagFor(entry);
-            if (entry.Kind == ConnectionKind.WireGuard || entry.Kind == ConnectionKind.OpenVpn)
-                plan.ExtraEndpoints.Add(ConnectionRoute.BuildEndpoint(entry, tag));
-            else if (entry.Kind == ConnectionKind.SingBoxConfig)
-                throw new Exception(L.T("برای کانفیگ کامل، از دکمه تست خودش استفاده کنید",
-                                        "for a full config use its own test button"));
-            else
-                plan.ExtraOutbounds.Add(ConnectionRoute.BuildOutbound(entry, tag));
-            plan.RouteTag = tag;
-
-            string error;
-            string json = SingBoxConfig.Build(plan);
             ProbeTunnel probe;
-            if (!ProbeTunnel.TryStart(json, socksPort, Math.Max(4000, timeout * 2), out probe, out error))
+            string error;
+            int socksPort = StartProbeFor(entry, timeout, out probe, out error);
+            if (socksPort <= 0)
             {
                 var failed = new QualityResult();
                 failed.Detail = error;
@@ -1902,6 +1884,96 @@ namespace ServerHelp.Ui
             {
                 probe.Stop();
             }
+        }
+
+        /// <summary>
+        /// Brings one connection up in a throwaway engine on a free local port - no TUN, no route
+        /// changes, nothing else on the machine is touched - and returns that port. Every measurement
+        /// uses it, and so does fetching a subscription through a connection that needs its own engine.
+        /// </summary>
+        private static int StartProbeFor(ConnectionEntry entry, int timeout, out ProbeTunnel probe, out string error)
+        {
+            probe = null;
+            error = "";
+            try
+            {
+                if (entry.Kind == ConnectionKind.SingBoxConfig)
+                    return StartFullConfigProbe(entry, timeout, out probe, out error);
+
+                int socksPort = ProbeTunnel.NextPort();
+                var plan = new TunnelPlan();
+                plan.IncludeTun = false;
+                plan.SocksPort = socksPort;
+                plan.ClashController = "";               // no extra listener while probing
+                plan.LogPath = "";
+                plan.BuildUrlTest = false;
+                plan.DnsThroughRoute = false;
+                string tag = ConnectionRoute.TagFor(entry);
+                if (entry.Kind == ConnectionKind.WireGuard || entry.Kind == ConnectionKind.OpenVpn)
+                    plan.ExtraEndpoints.Add(ConnectionRoute.BuildEndpoint(entry, tag));
+                else
+                    plan.ExtraOutbounds.Add(ConnectionRoute.BuildOutbound(entry, tag));
+                plan.RouteTag = tag;
+
+                string json = SingBoxConfig.Build(plan);
+                ProbeTunnel started;
+                if (!ProbeTunnel.TryStart(json, socksPort, Math.Max(4000, timeout * 2), out started, out error))
+                {
+                    probe = null;
+                    return 0;
+                }
+                probe = started;
+                return socksPort;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                probe = null;
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// A full config runs exactly as the user pasted it, on a free port of our own. A config that
+        /// would create a TUN interface is refused: that is a change to the machine, and this is a
+        /// measurement, not a launch.
+        /// </summary>
+        private static int StartFullConfigProbe(ConnectionEntry entry, int timeout, out ProbeTunnel probe, out string error)
+        {
+            probe = null;
+            error = "";
+            if (ConnectionTester.HasTunInbound(entry.Config))
+            {
+                error = L.T("این کانفیگ اینترفیس TUN می‌سازد، پس برای اندازه‌گیری بالا نمی‌آید.",
+                            "this config creates a TUN interface, so it is not started for a measurement.");
+                return 0;
+            }
+            int declared;
+            try
+            {
+                declared = ConnectionParser.FindSocksPort(Json.ParseObject(entry.Config));
+            }
+            catch (Exception ex)
+            {
+                error = L.T("کانفیگ JSON خوانده نشد: ", "the JSON config could not be read: ") + ex.Message;
+                return 0;
+            }
+            if (declared <= 0)
+            {
+                error = L.T("این کانفیگ inbound لوکال (socks/mixed) ندارد، پس مسیری برای اندازه‌گیری نیست.",
+                            "this config has no local socks/mixed inbound, so there is no path to measure.");
+                return 0;
+            }
+            int free = ProbeTunnel.NextPort();
+            string rewritten = ConnectionTester.RewriteSocksPort(entry.Config, free);
+            ProbeTunnel started;
+            if (!ProbeTunnel.TryStart(rewritten, free, Math.Max(4000, timeout * 2), out started, out error))
+            {
+                probe = null;
+                return 0;
+            }
+            probe = started;
+            return free;
         }
 
         /// <summary>How much data this route can actually carry - a path that cannot download is no path.</summary>
@@ -1955,83 +2027,134 @@ namespace ServerHelp.Ui
         private void ImportSubscription()
         {
             var choices = new List<string>();
+            var usable = new List<ConnectionEntry>();
             choices.Add(L.T("مستقیم", "Direct"));
             foreach (ConnectionEntry entry in _settings.Connections)
-                if (entry.Enabled) choices.Add(entry.Name);
+            {
+                if (!entry.Enabled) continue;
+                if (!CanFetchThrough(entry)) continue;   // a DNS server or a TG proxy cannot download
+                choices.Add(entry.Name);
+                usable.Add(entry);
+            }
 
             using (var dialog = new SubscriptionDialog(choices))
             {
                 if (dialog.ShowDialog(this) != DialogResult.OK) return;
                 string url = dialog.Url;
-                ConnectionEntry via = null;
-                if (dialog.ViaIndex > 0)
-                {
-                    int wanted = dialog.ViaIndex - 1;
-                    int seen = 0;
-                    foreach (ConnectionEntry entry in _settings.Connections)
-                    {
-                        if (!entry.Enabled) continue;
-                        if (seen == wanted) { via = entry; break; }
-                        seen++;
-                    }
-                }
+                ConnectionEntry via = dialog.ViaIndex > 0 && dialog.ViaIndex <= usable.Count
+                    ? usable[dialog.ViaIndex - 1] : null;
                 int timeout = Math.Max(4000, _settings.ConnectionTestTimeoutMs * 2);
                 SetStatus(L.T("دریافت اشتراک…", "fetching the subscription…"));
 
                 var thread = new Thread(delegate ()
                 {
-                    Subscription.FetchResult fetched = Subscription.Fetch(url, timeout, via);
-                    if (!fetched.Ok)
+                    IConnector connector = null;
+                    ProbeTunnel probe = null;
+                    string startError = "";
+                    if (via != null && via.Kind != ConnectionKind.Socks5 && via.Kind != ConnectionKind.Http &&
+                        !(via.Kind == ConnectionKind.SingBoxConfig && via.LocalSocksPort > 0))
                     {
+                        // a WireGuard, an .ovpn or a pasted config cannot fetch on its own: start it
+                        // for this one download on a free local port, and stop it right after
+                        int port = StartProbeFor(via, timeout, out probe, out startError);
+                        if (port > 0) connector = new Socks5Client("127.0.0.1", port, timeout);
+                    }
+                    if (via != null && connector == null && startError.Length > 0)
+                    {
+                        string reason = startError;
                         Ui(delegate
                         {
-                            SetStatus(L.T("اشتراک خوانده نشد: ", "the subscription could not be fetched: ") + fetched.Error);
+                            SetStatus(L.T("اشتراک خوانده نشد: ", "the subscription could not be fetched: ") + reason);
                             MessageBox.Show(this,
-                                L.T("اشتراک خوانده نشد: ", "the subscription could not be fetched: ") + fetched.Error +
-                                Environment.NewLine + Environment.NewLine +
-                                L.T("اگر لینک اشتراک فیلتر است، آن را از طریق یکی از اتصال‌های سالم بگیرید.",
-                                    "if the link itself is filtered, fetch it through one of the working connections."),
+                                L.T("این اتصال برای گرفتن لینک بالا نیامد: ",
+                                    "this connection could not be started for the fetch: ") + reason,
                                 "Server Help", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         });
                         return;
                     }
-
-                    List<string> problems;
-                    List<ConnectionEntry> entries = Subscription.Parse(fetched.Text, out problems);
-                    Ui(delegate
+                    try
                     {
-                        int added = 0;
-                        foreach (ConnectionEntry entry in entries)
+                        Subscription.FetchResult fetched = Subscription.Fetch(url, timeout, via, connector);
+                        if (!fetched.Ok)
                         {
-                            // importing the same subscription twice must not produce look-alike names:
-                            // the second import gets "node-2 2", not another "node-2"
-                            string wanted = entry.Name.Length > 0 ? entry.Name : entry.Info.Title;
-                            string name = wanted;
-                            int suffix = 2;
-                            while (_settings.FindConnection(name) != null) name = wanted + " " + suffix++;
-                            entry.Name = name;
-                            entry.Id = ConnectionEntry.NewId();
-                            _settings.Connections.Add(entry);
-                            added++;
+                            Ui(delegate
+                            {
+                                SetStatus(L.T("اشتراک خوانده نشد: ", "the subscription could not be fetched: ") + fetched.Error);
+                                MessageBox.Show(this,
+                                    L.T("اشتراک خوانده نشد: ", "the subscription could not be fetched: ") + fetched.Error +
+                                    Environment.NewLine + Environment.NewLine +
+                                    L.T("اگر لینک اشتراک فیلتر است، آن را از طریق یکی از اتصال‌های سالم بگیرید.",
+                                        "if the link itself is filtered, fetch it through one of the working connections."),
+                                    "Server Help", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            });
+                            return;
                         }
-                        SettingsStore.Save(_settings);
-                        RefreshConnections();
-                        AppendLog("[subscription] " + fetched.Via + " • " + fetched.Bytes + " bytes • " +
-                                  added + " connection(s)");
-                        foreach (string problem in problems) AppendLog("[subscription] skipped: " + problem);
-                        SetStatus(L.T("از اشتراک افزوده شد: ", "added from the subscription: ") + L.N(added) +
-                                  L.T(" اتصال", " connection(s)"));
-                        if (added == 0)
-                            MessageBox.Show(this,
-                                L.T("در این اشتراک چیزی که برنامه بشناسد نبود. اگر لینک اشتراک به‌جای متن، " +
-                                    "یک صفحه وب بود، از خود سرویس‌دهنده لینک خام (base64) را بگیرید.",
-                                    "nothing in this subscription could be recognised. If the link returned a web " +
-                                    "page instead of text, ask the provider for the raw (base64) link."),
-                                "Server Help", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    });
+
+                        List<string> problems;
+                        List<ConnectionEntry> entries = Subscription.Parse(fetched.Text, out problems);
+                        Ui(delegate
+                        {
+                            int added = 0;
+                            foreach (ConnectionEntry entry in entries)
+                            {
+                                // importing the same subscription twice must not produce look-alike names:
+                                // the second import gets "node-2 2", not another "node-2"
+                                string wanted = entry.Name.Length > 0 ? entry.Name : entry.Info.Title;
+                                string name = wanted;
+                                int suffix = 2;
+                                while (_settings.FindConnection(name) != null) name = wanted + " " + suffix++;
+                                entry.Name = name;
+                                entry.Id = ConnectionEntry.NewId();
+                                _settings.Connections.Add(entry);
+                                added++;
+                            }
+                            SettingsStore.Save(_settings);
+                            RefreshConnections();
+                            AppendLog("[subscription] " + fetched.Via + " • " + fetched.Bytes + " bytes • " +
+                                      added + " connection(s)");
+                            foreach (string problem in problems) AppendLog("[subscription] skipped: " + problem);
+                            SetStatus(L.T("از اشتراک افزوده شد: ", "added from the subscription: ") + L.N(added) +
+                                      L.T(" اتصال", " connection(s)"));
+                            if (added == 0)
+                                MessageBox.Show(this,
+                                    L.T("در این اشتراک چیزی که برنامه بشناسد نبود. اگر لینک اشتراک به‌جای متن، " +
+                                        "یک صفحه وب بود، از خود سرویس‌دهنده لینک خام (base64) را بگیرید.",
+                                        "nothing in this subscription could be recognised. If the link returned a web " +
+                                        "page instead of text, ask the provider for the raw (base64) link."),
+                                    "Server Help", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        });
+    
+                    }
+                    finally
+                    {
+                        if (probe != null) probe.Stop();
+                    }
                 });
                 thread.IsBackground = true;
                 thread.Start();
+            }
+        }
+
+        /// <summary>
+        /// Which connections can download a web page for us: a SOCKS5 or HTTP proxy, anything the app
+        /// can bring up in a throwaway engine (WireGuard, .ovpn, a pasted outbound, a full config), or
+        /// a full config that only needs its own local port. A DNS server and a Telegram proxy cannot
+        /// fetch anything, so they are not offered - an option that cannot work is worse than no option.
+        /// </summary>
+        private static bool CanFetchThrough(ConnectionEntry entry)
+        {
+            if (entry == null) return false;
+            switch (entry.Kind)
+            {
+                case ConnectionKind.Socks5:
+                case ConnectionKind.Http:
+                case ConnectionKind.WireGuard:
+                case ConnectionKind.OpenVpn:
+                case ConnectionKind.SingBoxOutbound:
+                case ConnectionKind.SingBoxConfig:
+                    return true;
+                default:
+                    return false;      // DNS, MTProto and WARP
             }
         }
 
