@@ -26,7 +26,7 @@ namespace ServerHelp.Ui
         private ComboBox _versionCombo;
         private ComboBox _serverCombo;
         private TextBox _nicknameBox;
-        private Button _playButton;
+        private SHButton _playButton;
         private Button _stopButton;
         private Label _statusLabel;
         private Label _bannerLabel;

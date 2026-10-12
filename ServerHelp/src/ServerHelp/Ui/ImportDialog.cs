@@ -81,6 +81,8 @@ namespace ServerHelp.Ui
             ok.DialogResult = DialogResult.OK;
             ok.Click += delegate { Parse(); };
             buttons.Controls.Add(ok);
+            Theme.Apply(this);
+            Theme.StyleButton(ok, true);
 
             var cancel = new Button();
             cancel.Text = L.T("انصراف", "Cancel");

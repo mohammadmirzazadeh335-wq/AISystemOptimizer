@@ -356,7 +356,7 @@ namespace ServerHelp.Core
         public JsonWriter PropName(string name)
         {
             Pre();
-            _sb.Append(Escape(name)).Append(':');
+            _sb.Append(Json.Escape(name)).Append(':');
             return this;
         }
 
