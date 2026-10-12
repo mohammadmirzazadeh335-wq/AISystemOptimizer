@@ -43,6 +43,11 @@ def main():
             if node.type == "ERROR" or node.is_missing:
                 snippet = source[node.start_byte:node.end_byte][:70].decode("utf-8", "replace")
                 found.append((node.start_point[0] + 1, node.type, snippet.replace("\n", " ")))
+            # the grammar tolerates a newline inside a plain string, but C# does not
+            elif node.type == "string_literal" and b"\n" in source[node.start_byte:node.end_byte]:
+                snippet = source[node.start_byte:node.end_byte].split(b"\n")[0][:70]
+                found.append((node.start_point[0] + 1, "newline in a string",
+                              snippet.decode("utf-8", "replace")))
             for child in node.children:
                 walk(child)
 

@@ -280,10 +280,8 @@ namespace ServerHelp
         /// <summary>A subscription is a base64 list of share links; both shapes must import.</summary>
         private static void CheckSubscription(List<string> failures, List<string> passes)
         {
-            string links = "vless://11111111-1111-1111-1111-111111111111@203.0.113.8:443?type=tcp&security=tls&sni=example.org#node-1
-" +
-                           "trojan://password@203.0.113.9:443#node-2
-";
+            string links = "vless://11111111-1111-1111-1111-111111111111@203.0.113.8:443?type=tcp&security=tls&sni=example.org#node-1" + "\n" +
+                           "trojan://password@203.0.113.9:443#node-2" + "\n";
             string encoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(links));
 
             List<string> problems;
