@@ -413,15 +413,20 @@ namespace ServerHelp.Ui
                 int width = size.Width + 34;
                 int offset = slot == 1 ? 0 : Measure(1) + 8;
                 int x = Mirrored ? 16 + offset : Width - 16 - width - offset;
-                var bounds = new Rectangle(x, Mirrored ? LoginPillTop : 19, width, 30);
+                int top = Math.Max(10, (Height - 30) / 2);
+                var bounds = new Rectangle(x, top, width, 30);
                 Theme.FillRounded(g, bounds, 15, Color.FromArgb(46, 255, 255, 255));
                 int dotX = Mirrored ? bounds.Right - 20 : bounds.X + 12;
                 using (var dot = new SolidBrush(color))
                     g.FillEllipse(dot, dotX, bounds.Y + 11, 8, 8);
-                TextRenderer.DrawText(g, text, font,
-                                      new Rectangle(Mirrored ? bounds.X + 10 : bounds.X + 26, bounds.Y,
-                                                    width - 30, bounds.Height),
-                                      Color.White, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+                // the dot sits on the reading side, so the text hugs the other edge of the pill
+                var textBounds = Mirrored
+                    ? new Rectangle(bounds.X + 10, bounds.Y, width - 40, bounds.Height)
+                    : new Rectangle(bounds.X + 26, bounds.Y, width - 30, bounds.Height);
+                var pillFlags = Mirrored
+                    ? TextFormatFlags.Right | TextFormatFlags.RightToLeft | TextFormatFlags.VerticalCenter
+                    : TextFormatFlags.Left | TextFormatFlags.VerticalCenter;
+                TextRenderer.DrawText(g, text, font, textBounds, Color.White, pillFlags);
             }
         }
 

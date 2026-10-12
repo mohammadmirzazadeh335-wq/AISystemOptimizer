@@ -195,7 +195,9 @@ namespace ServerHelp.Core
                         break;
                     case "tls-auth":
                         profile.TlsAuthKind = "tls_auth";
-                        if (value.Length > 0) profile.ClientKey = profile.ClientKey;   // key file, cannot read it
+                        // the key file itself is picked up further down when it sits next to the profile;
+                        // a file name must never be stored as if it were the key
+
                         if (words.Length > 2) profile.KeyDirection = DirectionOf(words[2]);
                         break;
                     case "tls-crypt":
