@@ -422,7 +422,8 @@ namespace ServerHelp.Ui
             _connectionList.Columns.Add(L.T("نام", "Name"), 170);
             _connectionList.Columns.Add(L.T("نوع", "Kind"), 150);
             _connectionList.Columns.Add(L.T("مقصد", "Target"), 230);
-            _connectionList.Columns.Add(L.T("تأخیر", "Delay"), 80);
+            _connectionList.Columns.Add(L.T("تأخیر", "Delay"), 90);
+            _connectionList.Columns.Add(L.T("چه چیزی از آن رد می‌شود", "Carries"), 120);
             _connectionList.Columns.Add(L.T("وضعیت", "Status"), 240);
             _connectionList.Columns.Add(L.T("آخرین تست", "Last test"), 110);
             _connectionList.Columns.Add(L.T("فعال", "On"), 60);
@@ -1196,7 +1197,12 @@ namespace ServerHelp.Ui
                 var item = new ListViewItem(entry.Name);
                 item.SubItems.Add(entry.Info.Title);
                 item.SubItems.Add(entry.Target);
-                item.SubItems.Add(entry.LastDelayMs > 0 ? entry.LastDelayMs + " ms" : "—");
+                // a Telegram or DNS number is not a game ping, and the table has to say so
+                string note = entry.Info.DelayNote;
+                item.SubItems.Add(entry.LastDelayMs > 0
+                    ? entry.LastDelayMs + " ms" + (note.Length > 0 ? "  (" + note + ")" : "")
+                    : "—");
+                item.SubItems.Add(entry.Info.Carries);
                 item.SubItems.Add(string.IsNullOrEmpty(entry.LastStatus) ? L.T("تست نشده", "not tested") : entry.StatusText);
                 item.SubItems.Add(string.IsNullOrEmpty(entry.LastTestUtc) ? "—" : entry.LastTestUtc);
                 item.SubItems.Add(entry.Enabled ? L.T("بله", "yes") : L.T("خیر", "no"));

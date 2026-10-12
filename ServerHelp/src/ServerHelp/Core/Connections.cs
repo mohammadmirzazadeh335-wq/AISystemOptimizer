@@ -365,19 +365,33 @@ namespace ServerHelp.Core
         public bool IsRouted = false;
         /// <summary>True when the kind only helps name resolution.</summary>
         public bool IsResolver = false;
+        /// <summary>Plain words about what this kind of connection can actually carry.</summary>
+        public string Fa2 = "";
+        public string En2 = "";
+        /// <summary>A short marker for the delay column when the number is not a game ping.</summary>
+        public string DelayNote = "";
+
+        public string Carries
+        {
+            get
+            {
+                if (En2.Length > 0) return L.T(Fa2, En2);
+                return CanCarryGame ? L.T("بازی", "the game") : L.T("—", "—");
+            }
+        }
 
         public string Title { get { return L.T(Fa, En); } }
 
         private static readonly ConnectionKindInfo[] All = new ConnectionKindInfo[]
         {
-            new ConnectionKindInfo { Kind = ConnectionKind.Warp, En = "Cloudflare WARP", Fa = "تونل WARP کلادفلر", CanCarryGame = true, IsRouted = true },
-            new ConnectionKindInfo { Kind = ConnectionKind.Dns, En = "DNS server", Fa = "سرور DNS", CanCarryGame = false, IsResolver = true },
-            new ConnectionKindInfo { Kind = ConnectionKind.Socks5, En = "SOCKS5 proxy", Fa = "پروکسی SOCKS5", CanCarryGame = true, IsRouted = true },
-            new ConnectionKindInfo { Kind = ConnectionKind.Http, En = "HTTP proxy", Fa = "پروکسی HTTP", CanCarryGame = true, IsRouted = true },
-            new ConnectionKindInfo { Kind = ConnectionKind.Mtproto, En = "Telegram MTProto", Fa = "پروکسی MTProto تلگرام", CanCarryGame = false },
-            new ConnectionKindInfo { Kind = ConnectionKind.WireGuard, En = "WireGuard config", Fa = "کانفیگ WireGuard", CanCarryGame = true, IsRouted = true },
-            new ConnectionKindInfo { Kind = ConnectionKind.SingBoxOutbound, En = "Manual outbound JSON", Fa = "کانفیگ دستی (outbound)", CanCarryGame = true, IsRouted = true },
-            new ConnectionKindInfo { Kind = ConnectionKind.SingBoxConfig, En = "Full sing-box config", Fa = "کانفیگ کامل sing-box", CanCarryGame = true, IsRouted = true }
+            new ConnectionKindInfo { Kind = ConnectionKind.Warp, En = "Cloudflare WARP", Fa = "تونل WARP کلادفلر", CanCarryGame = true, IsRouted = true, En2 = "the game", Fa2 = "بازی" },
+            new ConnectionKindInfo { Kind = ConnectionKind.Dns, En = "DNS server", Fa = "سرور DNS", CanCarryGame = false, IsResolver = true, En2 = "names only", Fa2 = "فقط نام‌ها", DelayNote = "dns" },
+            new ConnectionKindInfo { Kind = ConnectionKind.Socks5, En = "SOCKS5 proxy", Fa = "پروکسی SOCKS5", CanCarryGame = true, IsRouted = true, En2 = "the game", Fa2 = "بازی" },
+            new ConnectionKindInfo { Kind = ConnectionKind.Http, En = "HTTP proxy", Fa = "پروکسی HTTP", CanCarryGame = true, IsRouted = true, En2 = "the game", Fa2 = "بازی" },
+            new ConnectionKindInfo { Kind = ConnectionKind.Mtproto, En = "Telegram MTProto", Fa = "پروکسی MTProto تلگرام", CanCarryGame = false, En2 = "Telegram only", Fa2 = "فقط تلگرام", DelayNote = "tg" },
+            new ConnectionKindInfo { Kind = ConnectionKind.WireGuard, En = "WireGuard config", Fa = "کانفیگ WireGuard", CanCarryGame = true, IsRouted = true, En2 = "the game", Fa2 = "بازی" },
+            new ConnectionKindInfo { Kind = ConnectionKind.SingBoxOutbound, En = "Manual outbound JSON", Fa = "کانفیگ دستی (outbound)", CanCarryGame = true, IsRouted = true, En2 = "the game", Fa2 = "بازی" },
+            new ConnectionKindInfo { Kind = ConnectionKind.SingBoxConfig, En = "Full sing-box config", Fa = "کانفیگ کامل sing-box", CanCarryGame = true, IsRouted = true, En2 = "the game", Fa2 = "بازی" }
         };
 
         public static ConnectionKindInfo Of(ConnectionKind kind)
