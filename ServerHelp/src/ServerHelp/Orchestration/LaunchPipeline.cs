@@ -167,6 +167,11 @@ namespace ServerHelp.Orchestration
         private ConnectionEntry _dnsEntry;
         private readonly List<string> _routedIps = new List<string>();
 
+        // The Connections tab stays editable while a run is in flight, so a run works on the list as
+        // it was when Play was pressed: an edit, a rename or a removal can then never break a launch
+        // halfway through, and it applies cleanly to the next one.
+        private List<ConnectionEntry> _connections = new List<ConnectionEntry>();
+
         public void Cancel() { _cancel = true; }
         public bool Cancelled { get { return _cancel; } }
 
@@ -175,7 +180,12 @@ namespace ServerHelp.Orchestration
 
         // ------------------------------------------------------------------ main
 
-        public void Run(AppSettings settings, ServerProfile server, McVersion version, string gameDir, string javaPath)
+        /// <param name="connections">
+        /// The Connections list as it was when the user pressed Play, copied by the caller on the UI
+        /// thread. When it is null the list is copied here instead.
+        /// </param>
+        public void Run(AppSettings settings, ServerProfile server, McVersion version, string gameDir, string javaPath,
+                        List<ConnectionEntry> connections = null)
         {
             var watch = Stopwatch.StartNew();
             KeepTunnel = settings.KeepTunnelAfterGame;
@@ -184,6 +194,10 @@ namespace ServerHelp.Orchestration
             _cancel = false;
             _blackholes.Clear();
             Report.Reset();
+            _connections = connections ?? (settings.Connections == null
+                ? new List<ConnectionEntry>()
+                : new List<ConnectionEntry>(settings.Connections));
+            Log.Info("run started with " + _connections.Count + " connection(s) from the Connections tab");
             try
             {
                 RunCore(settings, server, version, gameDir, javaPath);
@@ -406,7 +420,7 @@ namespace ServerHelp.Orchestration
                     }
                     catch { }
 
-                    DnsAnswer throughTunnel = ProxyDns.ResolveThrough("127.0.0.1", SocksPort, DnsServerForTunnel(settings),
+                    DnsAnswer throughTunnel = ProxyDns.ResolveThrough("127.0.0.1", SocksPort, DnsServerForTunnel(_connections),
                                                                       server.Host, Math.Min(6000, settings.ConnectTimeoutMs),
                                                                       "", "");
                     Report.Candidates.Add(L.T("DNS از داخل تونل", "DNS through the tunnel") + " → " + throughTunnel.Summary);
@@ -756,7 +770,7 @@ namespace ServerHelp.Orchestration
         {
             var list = new List<ConnectionEntry>();
             pinnedName = settings.PinnedConnection == null ? "" : settings.PinnedConnection.Trim();
-            foreach (ConnectionEntry entry in settings.Connections)
+            foreach (ConnectionEntry entry in _connections)
             {
                 if (!entry.Enabled) continue;
                 if (pinnedName.Length == 0)
@@ -772,9 +786,9 @@ namespace ServerHelp.Orchestration
         }
 
         /// <summary>The resolver the tunnel talks to: the DNS entry the user added, or a public one.</summary>
-        private static string DnsServerForTunnel(AppSettings settings)
+        private static string DnsServerForTunnel(List<ConnectionEntry> connections)
         {
-            foreach (ConnectionEntry entry in settings.Connections)
+            foreach (ConnectionEntry entry in connections)
             {
                 if (!entry.Enabled || !entry.Info.IsResolver) continue;
                 var spec = ResolverSpec.Parse(entry.DnsUrl);
@@ -785,12 +799,13 @@ namespace ServerHelp.Orchestration
         }
 
         /// <summary>The exit hop of a pinned relay chain, when the user pinned one.</summary>
-        private static ConnectionEntry FindChainHop(AppSettings settings, ConnectionEntry first)
+        private static ConnectionEntry FindChainHop(AppSettings settings, List<ConnectionEntry> connections,
+                                                    ConnectionEntry first)
         {
-            if (settings == null || first == null) return null;
+            if (settings == null || first == null || connections == null) return null;
             string name = settings.PinnedChainHop == null ? "" : settings.PinnedChainHop.Trim();
             if (name.Length == 0) return null;
-            foreach (ConnectionEntry entry in settings.Connections)
+            foreach (ConnectionEntry entry in connections)
             {
                 if (entry == first || !entry.Enabled) continue;
                 if (Matches(entry, name)) return entry.CanCarryGame && entry.Missing().Length == 0 ? entry : null;
@@ -1041,7 +1056,7 @@ namespace ServerHelp.Orchestration
                 if (entry.Kind == ConnectionKind.OpenVpn) plan.DnsOpenVpnTag = primaryTag;
 
                 // a pinned relay chain: hop 1 carries, hop 2 exits
-                ConnectionEntry hop2 = FindChainHop(settings, entry);
+                ConnectionEntry hop2 = FindChainHop(settings, _connections, entry);
                 if (hop2 != null)
                 {
                     chainTag = ConnectionRoute.TagFor(hop2);
@@ -1081,7 +1096,7 @@ namespace ServerHelp.Orchestration
                 foreach (string line in Report.Candidates)
                 {
                     if (added >= 4) break;
-                    foreach (ConnectionEntry other in settings.Connections)
+                    foreach (ConnectionEntry other in _connections)
                     {
                         if (added >= 4) break;
                         if (other == entry || !other.Enabled || !other.CanCarryGame) continue;

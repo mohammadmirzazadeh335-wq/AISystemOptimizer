@@ -1569,20 +1569,32 @@ namespace ServerHelp.Ui
             }
             finally { _connectionsBusy = false; }
 
-            if (_connectionSummary != null)
+            UpdateConnectionSummary();
+        }
+
+        /// <summary>
+        /// The one line under the table: how many entries there are and what the next launch does
+        /// with them. While a launch is in flight it also says that the running one took its own copy
+        /// of the list when Play was pressed, so an edit made now belongs to the next run.
+        /// </summary>
+        private void UpdateConnectionSummary()
+        {
+            if (_connectionSummary == null) return;
+            int on = 0, working = 0;
+            foreach (ConnectionEntry entry in _settings.Connections)
             {
-                int on = 0, working = 0;
-                foreach (ConnectionEntry entry in _settings.Connections)
-                {
-                    if (entry.Enabled) on++;
-                    if (entry.LastDelayMs > 0) working++;
-                }
-                _connectionSummary.Text = L.T("اتصال‌ها: ", "connections: ") + L.N(_settings.Connections.Count) +
-                                          L.T(" • روشن: ", " • on: ") + L.N(on) +
-                                          L.T(" • تست‌شده با تأخیر: ", " • measured: ") + L.N(working) +
-                                          L.T("    |  مسیر انتخابی: ", "    |  chosen route: ") +
-                                          ChosenRouteText();
+                if (entry.Enabled) on++;
+                if (entry.LastDelayMs > 0) working++;
             }
+            string running = _worker != null && _worker.IsAlive
+                ? L.T("    |  اجرای در حال انجام با فهرست لحظه‌ی فشردن Play کار می‌کند؛ تغییرها برای اجرای بعدی است",
+                      "    |  the running launch uses the list as it was when Play was pressed; edits apply to the next run")
+                : "";
+            _connectionSummary.Text = L.T("اتصال‌ها: ", "connections: ") + L.N(_settings.Connections.Count) +
+                                      L.T(" • روشن: ", " • on: ") + L.N(on) +
+                                      L.T(" • تست‌شده با تأخیر: ", " • measured: ") + L.N(working) +
+                                      L.T("    |  مسیر انتخابی: ", "    |  chosen route: ") +
+                                      ChosenRouteText() + running;
         }
 
         /// <summary>
@@ -3217,8 +3229,14 @@ namespace ServerHelp.Ui
             _stepRows.Clear();
             _playButton.Enabled = false;
             _stopButton.Enabled = true;
+            UpdateConnectionSummary();     // the line now says the run took its own copy of the list
             _runWatch = Stopwatch.StartNew();
             SetStatus(L.T("شروع شد…", "starting…"));
+
+            // The Connections tab can be edited while a launch is in flight, so the run gets its own
+            // copy of the list, taken here on this thread: from now on nothing the user changes can
+            // move the ground under a launch that is already going.
+            var runConnections = new List<ConnectionEntry>(_settings.Connections);
 
             _worker = new Thread(delegate ()
             {
@@ -3237,7 +3255,7 @@ namespace ServerHelp.Ui
                         "Server Help", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
-                _pipeline.Run(_settings, profile, version, _gameDir, javaPath);
+                _pipeline.Run(_settings, profile, version, _gameDir, javaPath, runConnections);
             });
             _worker.IsBackground = true;
             _worker.Start();
@@ -3273,6 +3291,7 @@ namespace ServerHelp.Ui
             _playButton.Enabled = true;
             _stopButton.Enabled = true;
             _runWatch.Stop();
+            UpdateConnectionSummary();
             string mode = report.TunnelUp ? L.T("تونل WARP", "WARP tunnel")
                         : report.Strategy == "dns" ? L.T("اصلاح DNS", "DNS fix")
                         : L.T("اتصال مستقیم", "direct");
