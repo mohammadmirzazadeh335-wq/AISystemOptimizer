@@ -159,6 +159,7 @@ jobs:
         run: |
           $tag = "serverhelp-v1.0.0-${{ github.run_number }}"
           gh release create $tag 'dist/ServerHelp.exe' 'dist/ServerHelp.exe.sha256' `
+            --target "${{ github.sha }}" `
             --title "Server Help v1.0.0 (build ${{ github.run_number }})" `
             --latest=false `
             --notes "Server Help — Minecraft server helper: diagnoses the connection, builds a low ping WARP tunnel for the game server only, tunes Windows, then launches the selected version straight into the server.`n`nDownload ServerHelp.exe, then right-click → Run as administrator. SHA-256 is published next to the file.`n`nPersian guide: ServerHelp/README.md"
