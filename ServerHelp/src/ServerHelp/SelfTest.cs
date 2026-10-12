@@ -208,7 +208,7 @@ namespace ServerHelp
 
             // fragmentation only lands on an outbound that actually speaks TLS
             var vless = ConnectionEntry.Create("v", ConnectionKind.SingBoxOutbound);
-            vless.Config = "{"type":"vless","server":"example.org","server_port":443,"uuid":"00000000-0000-0000-0000-000000000000","tls":{"enabled":true,"server_name":"example.org"}}";
+            vless.Config = "{\"type\":\"vless\",\"server\":\"example.org\",\"server_port\":443,\"uuid\":\"00000000-0000-0000-0000-000000000000\",\"tls\":{\"enabled\":true,\"server_name\":\"example.org\"}}";
             vless.FragmentTls = true;
             Dictionary<string, object> tlsOutbound = ConnectionRoute.BuildOutbound(vless, "t2");
             var tls = Json.Obj(Json.Get(tlsOutbound, "tls"));
@@ -251,11 +251,7 @@ namespace ServerHelp
             var dns = ConnectionEntry.Create("resolver", ConnectionKind.Dns);
             dns.DnsUrl = "tls://1.1.1.1:853";
             var ovpn = ConnectionEntry.Create("bear", ConnectionKind.OpenVpn);
-            ovpn.Config = "client
-dev tun
-proto udp
-remote 198.51.100.9 443
-";
+            ovpn.Config = "client\ndev tun\nproto udp\nremote 198.51.100.9 443\n";
             list.Add(socks);
             list.Add(dns);
             list.Add(ovpn);
@@ -270,16 +266,13 @@ remote 198.51.100.9 443
             Expect(kindsOk, "the kinds survive the list file", failures, passes);
 
             // a bare array is what other tools export
-            string bare = "[{"name":"x","kind":2,"host":"203.0.113.6","port":1080}]";
+            string bare = "[{\"name\":\"x\",\"kind\":2,\"host\":\"203.0.113.6\",\"port\":1080}]";
             List<ConnectionEntry> fromArray = ConnectionParser.ParseListFile(bare, out error);
             Expect(fromArray.Count == 1 && fromArray[0].Host == "203.0.113.6",
                    "a bare JSON array of connections is accepted", failures, passes);
 
             // and the import blob: every line becomes one entry, bad lines are reported not thrown
-            var blob = ConnectionParser.ParseBlob("203.0.113.7:1080
-
-garbage line here
-", out List<string> problems);
+            var blob = ConnectionParser.ParseBlob("203.0.113.7:1080\n\ngarbage line here\n", out List<string> problems);
             Expect(blob.Count == 1 && problems.Count >= 1,
                    "a mixed paste imports what it can and reports the rest", failures, passes);
         }
