@@ -50,6 +50,7 @@ namespace ServerHelp.Ui
         private CheckBox _chkFallback, _chkFailover, _chkKillSwitch;
         private NumericUpDown _connTimeoutBox;
         private Label _connectionSummary;
+        private bool _connectionsBusy;
 
         private List<McVersion> _versions = new List<McVersion>();
         private List<WarpEndpoint> _lastScan = new List<WarpEndpoint>();
@@ -230,6 +231,7 @@ namespace ServerHelp.Ui
             _pinCombo.Width = 300;
             _pinCombo.SelectedIndexChanged += delegate
             {
+                if (_connectionsBusy) return;
                 if (_pinCombo.SelectedIndex < 0) return;
                 PinConnection(_pinCombo.SelectedIndex == 0 ? "" : _pinCombo.Items[_pinCombo.SelectedIndex].ToString());
             };
@@ -1003,24 +1005,26 @@ namespace ServerHelp.Ui
                 _connectionList.Items.Add(item);
             }
 
-            if (_pinCombo != null)
+            _connectionsBusy = true;
+            try
             {
-                _pinCombo.Items.Clear();
-                _pinCombo.Items.Add(L.T("خودکار (سریع‌ترین)", "Automatic (fastest)"));
-                foreach (ConnectionEntry entry in _settings.Connections)
-                {
-                    if (!entry.Enabled) continue;
-                    if (!entry.UseForGame && !entry.Info.IsResolver) continue;
-                    _pinCombo.Items.Add(entry.Name);
-                }
-                int index = 0;
-                if (!string.IsNullOrEmpty(_settings.PinnedConnection))
-                {
-                    for (int i = 1; i < _pinCombo.Items.Count; i++)
-                        if (string.Equals(_pinCombo.Items[i].ToString(), _settings.PinnedConnection, StringComparison.OrdinalIgnoreCase)) index = i;
-                }
-                _pinCombo.SelectedIndex = index;
+                    _pinCombo.Items.Clear();
+                    _pinCombo.Items.Add(L.T("خودکار (سریع‌ترین)", "Automatic (fastest)"));
+                    foreach (ConnectionEntry entry in _settings.Connections)
+                    {
+                        if (!entry.Enabled) continue;
+                        if (!entry.UseForGame && !entry.Info.IsResolver) continue;
+                        _pinCombo.Items.Add(entry.Name);
+                    }
+                    int index = 0;
+                    if (!string.IsNullOrEmpty(_settings.PinnedConnection))
+                    {
+                        for (int i = 1; i < _pinCombo.Items.Count; i++)
+                            if (string.Equals(_pinCombo.Items[i].ToString(), _settings.PinnedConnection, StringComparison.OrdinalIgnoreCase)) index = i;
+                    }
+                    _pinCombo.SelectedIndex = index;
             }
+            finally { _connectionsBusy = false; }
 
             if (_connectionSummary != null)
             {
