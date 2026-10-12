@@ -29,6 +29,7 @@ namespace ServerHelp.Ui
         private TextBox _host, _user, _password, _secret, _dns, _address, _addressV6, _peerKey, _peerHost, _reserved, _config, _notes;
         private Button _ovpnBrowse;
         private Label _ovpnHint;
+        private CheckBox _fragment;
         private NumericUpDown _port, _peerPort, _mtu, _socksPort;
         private NumericUpDown _dc;
         private Label _lblDc, _secretHint;
@@ -158,6 +159,16 @@ namespace ServerHelp.Ui
 
             _socksPort = NumberField(panel, L.T("پورت SOCKS محلی کانفیگ کامل", "Local SOCKS port of a full config"),
                                 ref y, Entry.LocalSocksPort, 0, 65535, out _lblSocksPort);
+
+            _fragment = new CheckBox();
+            _fragment.Text = L.T("تکه‌تکه‌کردن TLS برای این اتصال (کمک به خطی که SNI را می‌بندد)",
+                                 "Fragment TLS for this connection (helps where SNI is blocked)");
+            _fragment.AutoSize = true;
+            _fragment.Checked = Entry.FragmentTls;
+            _fragment.Left = 12;
+            _fragment.Top = y;
+            panel.Controls.Add(_fragment);
+            y += 30;
 
             _notes = TextField(panel, L.T("یادداشت", "Notes"), ref y, Entry.Notes, 420, out _lblNotes);
 
@@ -376,12 +387,34 @@ namespace ServerHelp.Ui
             }
             if (_ovpnBrowse != null) Show(_ovpnBrowse, isOvpn);
 
+            bool tlsCapable = kind == ConnectionKind.SingBoxOutbound || isOvpn;
+            if (_fragment != null)
+            {
+                Show(_fragment, tlsCapable);
+                if (!tlsCapable) _fragment.Checked = false;
+            }
+
             // only the kinds that can really carry a game may join the automatic route
             _useForGame.Enabled = ConnectionKindInfo.Of(kind).CanCarryGame;
             if (!_useForGame.Enabled) _useForGame.Checked = false;
 
             UpdateSecretHint();
             if (kind == ConnectionKind.OpenVpn && _config != null) _config.TextChanged += delegate { UpdateSecretHint(); };
+            if (_config != null) _config.TextChanged += delegate
+            {
+                if (_fragment == null || !_fragment.Visible) return;
+                if (CurrentKind == ConnectionKind.SingBoxOutbound)
+                {
+                    var parsed = Json.ParseObject(_config.Text);
+                    bool hasTls = parsed != null && Json.Get(parsed, "tls") != null;
+                    _fragment.Enabled = hasTls;
+                    if (!hasTls) _fragment.Checked = false;
+                }
+                else
+                {
+                    _fragment.Enabled = true;
+                }
+            };
         }
 
         /// <summary>Live explanation of what the pasted secret means - the main MTProto debug aid.</summary>
@@ -533,6 +566,7 @@ namespace ServerHelp.Ui
             Entry.Mtu = (int)_mtu.Value;
             Entry.Config = _config.Text.Trim();
             Entry.LocalSocksPort = (int)_socksPort.Value;
+            Entry.FragmentTls = _fragment != null && _fragment.Checked;
             Entry.Notes = _notes.Text.Trim();
             Entry.Dc = (int)_dc.Value;
             CollectOvpnFlags(Entry);

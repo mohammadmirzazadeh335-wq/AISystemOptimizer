@@ -35,7 +35,36 @@ namespace ServerHelp.Net
     public static class ConnectionRoute
     {
         /// <summary>Outbound (or endpoint) object for entries that are used in front of the game.</summary>
+        /// <summary>Set from the settings: fragment the handshake even when the entry says nothing.</summary>
+        public static bool FragmentTlsByDefault;
+
         public static Dictionary<string, object> BuildOutbound(ConnectionEntry entry, string tag)
+        {
+            Dictionary<string, object> outbound = BuildOutboundRaw(entry, tag);
+            ApplyTlsFragment(outbound, entry.FragmentTls || FragmentTlsByDefault);
+            return outbound;
+        }
+
+        /// <summary>
+        /// Splits the TLS ClientHello into pieces. On lines where the filter reads the SNI from the
+        /// first packet, this is what makes a proxy work without any other change. sing-box supports
+        /// it on every outbound that has a tls object.
+        /// </summary>
+        public static void ApplyTlsFragment(Dictionary<string, object> outbound, bool fragment)
+        {
+            if (!fragment || outbound == null) return;
+            var tls = Json.Obj(Json.Get(outbound, "tls"));
+            if (tls == null)
+            {
+                // drop it on the clean config: nothing else is needed when it never becomes a tunnel
+                return;
+            }
+            tls["fragment"] = true;
+            tls["fragment_fallback_delay"] = "500ms";
+            tls["record_fragment"] = true;
+        }
+
+        private static Dictionary<string, object> BuildOutboundRaw(ConnectionEntry entry, string tag)
         {
             switch (entry.Kind)
             {

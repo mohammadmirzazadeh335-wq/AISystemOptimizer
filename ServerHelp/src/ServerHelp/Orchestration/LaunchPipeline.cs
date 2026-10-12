@@ -960,6 +960,7 @@ namespace ServerHelp.Orchestration
 
             // Name lookups go through the same route as the game: on a filtered line the local
             // resolver is the first thing that fails, and a resolver inside the tunnel is not.
+            ConnectionRoute.FragmentTlsByDefault = settings.FragmentTls;
             plan.DnsThroughRoute = settings.DnsThroughTunnel && settings.Tunnel != TunnelMode.Off;
             if (!string.IsNullOrEmpty(server.Host)) plan.GameDomains.Add(server.Host);
 

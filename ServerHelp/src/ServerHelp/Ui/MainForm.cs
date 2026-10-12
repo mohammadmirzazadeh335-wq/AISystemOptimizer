@@ -38,6 +38,7 @@ namespace ServerHelp.Ui
         private TextBox _planBox;
         private string _planBuildingFor = "";      // keeps one preparation per version in flight
         private bool _routeBusy;                   // one route hunt at a time
+        private bool _stabilityBusy;               // one stability run at a time
         private ListView _endpointList;
         private TextBox _logBox;
         private TextBox _versionsDirBox;
@@ -45,7 +46,10 @@ namespace ServerHelp.Ui
         private CheckBox _chkOptimize, _chkPower, _chkTrim, _chkClose, _chkPriority, _chkTuneNetwork, _chkFirewall, _chkTimer;
         private CheckBox _chkAikar, _chkQuickPlay, _chkHosts, _chkKeepTunnel, _chkAutoRestore, _chkMinimize, _chkOpenGl;
         private CheckBox _chkDnsInTunnel;
+        private CheckBox _chkFragment;
         private NumericUpDown _chainCount;
+        private NumericUpDown _retestMinutes;
+        private Timer _retestTimer;
         private ComboBox _tunnelCombo;
         private NumericUpDown _heapBox, _endpointBox;
         private TextBox _extraJvmBox;
@@ -176,6 +180,8 @@ namespace ServerHelp.Ui
             Theme.Apply(this);
             UpdateHeaderPills();
             UpdatePlanPreview();
+            ConnectionRoute.FragmentTlsByDefault = _settings.FragmentTls;
+            RestartRetestTimer();
         }
 
         /// <summary>Keeps the chips in the header honest about the current state.</summary>
@@ -319,7 +325,46 @@ namespace ServerHelp.Ui
             buttons.Controls.Add(importFile);
             card.Controls.Add(buttons);
 
-            // second row: the Telegram side of things, because an MTProxy needs its own tools
+            // second row: what a filtered line needs - find out what is broken, then measure the
+            // routes properly (jitter, loss, throughput) instead of trusting one number
+            var measuring = new FlowLayoutPanel();
+            measuring.Dock = DockStyle.Top;
+            measuring.Height = 42;
+            measuring.FlowDirection = FlowDirection.LeftToRight;
+
+            var diagnose = new Button();
+            diagnose.Text = L.T("تشخیص خط (اینترنت ملی)", "Diagnose the line (national internet)");
+            diagnose.Width = 260;
+            diagnose.Click += delegate { DiagnoseLine(); };
+            measuring.Controls.Add(diagnose);
+
+            var stability = new Button();
+            stability.Text = L.T("تست پایداری انتخاب‌شده", "Stability test (selected)");
+            stability.Width = 210;
+            stability.Click += delegate { StabilityTest(false); };
+            measuring.Controls.Add(stability);
+
+            var stabilityAll = new Button();
+            stabilityAll.Text = L.T("پایداری همه", "Stability for all");
+            stabilityAll.Width = 150;
+            stabilityAll.Click += delegate { StabilityTest(true); };
+            measuring.Controls.Add(stabilityAll);
+
+            var speed = new Button();
+            speed.Text = L.T("تست سرعت انتخاب‌شده", "Speed test (selected)");
+            speed.Width = 190;
+            speed.Click += delegate { SpeedTestSelected(); };
+            measuring.Controls.Add(speed);
+
+            var subscription = new Button();
+            subscription.Text = L.T("اشتراک از لینک", "Subscription link");
+            subscription.Width = 160;
+            subscription.Click += delegate { ImportSubscription(); };
+            measuring.Controls.Add(subscription);
+
+            card.Controls.Add(measuring);
+
+            // third row: the Telegram side of things, because an MTProxy needs its own tools
             var telegram = new FlowLayoutPanel();
             telegram.Dock = DockStyle.Top;
             telegram.Height = 42;
@@ -406,6 +451,40 @@ namespace ServerHelp.Ui
             chainLabel.Height = 30;
             options.Controls.Add(chainLabel);
 
+            _chkFragment = new CheckBox();
+            _chkFragment.Text = L.T("تکه‌تکه‌کردن TLS (برای خطی که SNI را می‌بندد)",
+                                    "Fragment TLS (for lines that block on SNI)");
+            _chkFragment.AutoSize = true;
+            _chkFragment.Checked = _settings.FragmentTls;
+            _chkFragment.CheckedChanged += delegate
+            {
+                _settings.FragmentTls = _chkFragment.Checked;
+                ConnectionRoute.FragmentTlsByDefault = _chkFragment.Checked;
+                SettingsStore.Save(_settings);
+                SetStatus(_chkFragment.Checked
+                    ? L.T("هندشیک TLS مسیرها تکه‌تکه می‌شود", "route TLS handshakes will be fragmented")
+                    : L.T("هندشیک TLS عادی است", "route TLS handshakes are normal"));
+            };
+            options.Controls.Add(_chkFragment);
+
+            var retestLabel = UiKit.Sub(L.T("تست دوره‌ای (دقیقه):", "retest every (min):"));
+            retestLabel.Width = 140;
+            retestLabel.Height = 30;
+            options.Controls.Add(retestLabel);
+
+            _retestMinutes = new NumericUpDown();
+            _retestMinutes.Minimum = 0;
+            _retestMinutes.Maximum = 720;
+            _retestMinutes.Value = Math.Max(0, Math.Min(720, _settings.RetestMinutes));
+            _retestMinutes.Width = 60;
+            _retestMinutes.ValueChanged += delegate
+            {
+                _settings.RetestMinutes = (int)_retestMinutes.Value;
+                SettingsStore.Save(_settings);
+                RestartRetestTimer();
+            };
+            options.Controls.Add(_retestMinutes);
+
             _chainCount = new NumericUpDown();
             _chainCount.Minimum = 0;
             _chainCount.Maximum = 12;
@@ -472,6 +551,7 @@ namespace ServerHelp.Ui
             _connectionList.Columns.Add(L.T("مقصد", "Target"), 230);
             _connectionList.Columns.Add(L.T("تأخیر", "Delay"), 90);
             _connectionList.Columns.Add(L.T("چه چیزی از آن رد می‌شود", "Carries"), 120);
+            _connectionList.Columns.Add(L.T("کیفیت (پایداری)", "Quality (stability)"), 190);
             _connectionList.Columns.Add(L.T("وضعیت", "Status"), 240);
             _connectionList.Columns.Add(L.T("آخرین تست", "Last test"), 110);
             _connectionList.Columns.Add(L.T("فعال", "On"), 60);
@@ -1252,6 +1332,7 @@ namespace ServerHelp.Ui
                     ? entry.LastDelayMs + " ms" + (note.Length > 0 ? "  (" + note + ")" : "")
                     : "—");
                 item.SubItems.Add(entry.Info.Carries);
+                item.SubItems.Add(entry.QualityText().Length > 0 ? entry.QualityText() : "—");
                 item.SubItems.Add(string.IsNullOrEmpty(entry.LastStatus) ? L.T("تست نشده", "not tested") : entry.StatusText);
                 item.SubItems.Add(string.IsNullOrEmpty(entry.LastTestUtc) ? "—" : entry.LastTestUtc);
                 item.SubItems.Add(entry.Enabled ? L.T("بله", "yes") : L.T("خیر", "no"));
@@ -1467,6 +1548,420 @@ namespace ServerHelp.Ui
         }
 
         /// <summary>Runs the real MTProto handshake + req_pq on the selected proxy and reports it.</summary>
+        /// <summary>
+        /// Keeps the measured delays honest: with a timer set, the connections are re-measured in the
+        /// background every few minutes, so a route that died during the evening is noticed before the
+        /// game is launched through it. It never touches the game while it runs.
+        /// </summary>
+        private void RestartRetestTimer()
+        {
+            if (_retestTimer != null)
+            {
+                _retestTimer.Stop();
+                _retestTimer.Dispose();
+                _retestTimer = null;
+            }
+            int minutes = _settings.RetestMinutes;
+            if (minutes <= 0) return;
+            _retestTimer = new Timer();
+            _retestTimer.Interval = Math.Max(1, minutes) * 60 * 1000;
+            _retestTimer.Tick += delegate
+            {
+                if (_worker != null && _worker.IsAlive) return;          // a launch is running
+                if (_pipeline.GameRunning) return;                      // the game is playing
+                if (_connectionsBusy || _stabilityBusy) return;         // a manual test is running
+                AppendLog("[retest] measuring " + _settings.Connections.Count + " connection(s)");
+                TestConnections(true);
+            };
+            _retestTimer.Start();
+        }
+
+        /// <summary>
+        /// Diagnoses the line: is the international route open, is TLS filtered, is the resolver
+        /// lying, does the game server answer at all. Every check reports the real number it saw and
+        /// the verdict comes with the fix that belongs to it.
+        /// </summary>
+        private void DiagnoseLine()
+        {
+            var profile = SelectedServer();
+            if (profile == null)
+            {
+                SetStatus(L.T("اول یک سرور انتخاب کنید", "select a server first"));
+                return;
+            }
+            string host = profile.Host;
+            string ip = profile.DirectIp;
+            int port = profile.Port;
+            int timeout = Math.Max(2500, _settings.ConnectionTestTimeoutMs);
+
+            SetStatus(L.T("تشخیص خط…", "diagnosing the line…"));
+            var thread = new Thread(delegate ()
+            {
+                var probes = LineDoctor.Probe(host, ip, port, timeout);
+                string advice;
+                LineVerdict verdict = LineDoctor.Verdict(probes, out advice);
+                string text = LineDoctor.Report(probes, verdict, advice);
+                Ui(delegate
+                {
+                    AppendLog("[line] " + LineDoctor.VerdictTitle(verdict));
+                    foreach (LineProbe probe in probes)
+                        AppendLog("[line] " + (probe.Ok ? "ok " : "no ") + probe.Name + " — " + probe.Detail);
+                    SetStatus(L.T("تشخیص خط: ", "line diagnosis: ") + LineDoctor.VerdictTitle(verdict));
+                    // the advice is a suggestion, never applied behind the user's back
+                    DialogResult answer = MessageBox.Show(this,
+                        text + Environment.NewLine +
+                        L.T("آیا پیشنهاد بالا اعمال شود؟ (فقط تنظیمات همین برنامه تغییر می‌کند)",
+                            "Apply the advice above? (only this program's own settings change)"),
+                        L.T("تشخیص خط", "Line diagnosis"), MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+                    if (answer == DialogResult.Yes) ApplyLineAdvice(verdict);
+                });
+            });
+            thread.IsBackground = true;
+            thread.Start();
+        }
+
+        /// <summary>Applies only what this app owns: its own switches, never a Windows setting.</summary>
+        private void ApplyLineAdvice(LineVerdict verdict)
+        {
+            switch (verdict)
+            {
+                case LineVerdict.DnsBroken:
+                case LineVerdict.NationalOnly:
+                case LineVerdict.FullyFiltered:
+                    _settings.DnsThroughTunnel = true;
+                    if (_chkDnsInTunnel != null) _chkDnsInTunnel.Checked = true;
+                    SettingsStore.Save(_settings);
+                    SetStatus(L.T("DNS داخل تونل روشن شد", "DNS inside the tunnel is on"));
+                    break;
+                case LineVerdict.TlsBlocked:
+                    {
+                        ConnectionEntry entry = SelectedConnection();
+                        if (entry != null && entry.CanCarryGame)
+                        {
+                            entry.FragmentTls = true;
+                            SettingsStore.Save(_settings);
+                            RefreshConnections();
+                            SetStatus(L.T("تکه‌تکه‌کردن TLS برای ", "TLS fragmentation is on for ") + entry.Name);
+                        }
+                        else
+                        {
+                            _settings.FragmentTls = true;
+                            SettingsStore.Save(_settings);
+                            SetStatus(L.T("تکه‌تکه‌کردن TLS برای همه مسیرهای جدید روشن شد",
+                                          "TLS fragmentation is on for every new route"));
+                        }
+                        break;
+                    }
+                case LineVerdict.ServerBlocked:
+                    SetStatus(L.T("سرور بازی از این خط جواب نمی‌دهد؛ «بهینه‌سازی مسیر بازی» را بزنید",
+                                  "the game server does not answer from this line; run Optimise game route"));
+                    OptimiseGameRoute();
+                    break;
+                default:
+                    SetStatus(L.T("تغییری لازم نیست", "nothing needs changing"));
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Five measurements through the selected connection: the average, the jitter and the loss.
+        /// A route can look fast once and still rubber band all evening; this is the number that
+        /// says which one it is.
+        /// </summary>
+        private void StabilityTest(bool all)
+        {
+            if (_stabilityBusy)
+            {
+                SetStatus(L.T("یک تست پایداری در جریان است", "a stability test is already running"));
+                return;
+            }
+            var targets = new List<ConnectionEntry>();
+            if (all)
+            {
+                foreach (ConnectionEntry entry in _settings.Connections)
+                    if (entry.Enabled && entry.CanCarryGame) targets.Add(entry);
+            }
+            else
+            {
+                ConnectionEntry entry = SelectedConnection();
+                if (entry == null)
+                {
+                    SetStatus(L.T("اول یک اتصال را انتخاب کنید", "select a connection first"));
+                    return;
+                }
+                targets.Add(entry);
+            }
+            if (targets.Count == 0)
+            {
+                SetStatus(L.T("اتصالی برای تست نیست", "there is nothing to test"));
+                return;
+            }
+            if (_pipeline.GameRunning || _worker != null && _worker.IsAlive)
+            {
+                SetStatus(L.T("پایپ‌لاین در حال اجراست؛ بعد از اجرای بازی تست کنید",
+                              "the pipeline is running; test after the game has started"));
+                return;
+            }
+
+            var profile = SelectedServer();
+            int timeout = Math.Min(4000, Math.Max(2000, _settings.ConnectionTestTimeoutMs));
+            _stabilityBusy = true;
+            SetStatus(L.T("تست پایداری…", "measuring stability…"));
+
+            var thread = new Thread(delegate ()
+            {
+                int index = 0;
+                foreach (ConnectionEntry entry in targets)
+                {
+                    index++;
+                    int shown = index;
+                    Ui(delegate
+                    {
+                        SetStatus(L.T("پایداری ", "stability ") + shown + "/" + targets.Count + " — " + entry.Name);
+                    });
+                    var result = new QualityResult();
+                    try
+                    {
+                        result = MeasureEntry(entry, profile, timeout, false);
+                    }
+                    catch (Exception ex)
+                    {
+                        result.Detail = ex.Message;
+                    }
+                    QualityResult captured = result;
+                    ConnectionEntry target = entry;
+                    Ui(delegate
+                    {
+                        target.LastPingMin = captured.MinMs;
+                        target.LastPingMax = captured.MaxMs;
+                        target.LastJitterMs = captured.JitterMs;
+                        target.LastLossPercent = captured.LossPercent;
+                        if (captured.AvgMs > 0)
+                        {
+                            target.LastDelayMs = captured.AvgMs;
+                            target.LastStatus = L.T("پایدار ", "stable ") + captured.Grade();
+                        }
+                        target.LastTestUtc = DateTime.Now.ToString("HH:mm:ss");
+                        AppendLog("[quality] " + target.Name + " — " + captured.Summary());
+                        SettingsStore.Save(_settings);
+                        RefreshConnections();
+                    });
+                }
+                Ui(delegate
+                {
+                    _stabilityBusy = false;
+                    SetStatus(L.T("تست پایداری تمام شد", "the stability test is done"));
+                });
+            });
+            thread.IsBackground = true;
+            thread.Start();
+        }
+
+        /// <summary>Runs the five-sample measurement through whichever route the entry describes.</summary>
+        private QualityResult MeasureEntry(ConnectionEntry entry, ServerProfile profile, int timeout, bool withSpeed)
+        {
+            string host = profile == null ? "" : profile.Host;
+            int port = profile == null ? 25565 : profile.Port;
+            if (string.IsNullOrEmpty(host)) host = L.T("سرور بازی", "the game server");
+            if (port <= 0) port = 25565;
+
+            if (entry.Kind == ConnectionKind.Socks5)
+                return QualityTest.Measure(new Socks5Client(entry.Host, entry.Port, entry.User, entry.Password, timeout),
+                                           host, port, 5, timeout);
+            if (entry.Kind == ConnectionKind.Http)
+                return QualityTest.Measure(new HttpProxyClient(entry.Host, entry.Port, entry.User, entry.Password, timeout),
+                                           host, port, 5, timeout);
+            if (entry.Kind == ConnectionKind.Dns)
+            {
+                var result = new QualityResult();
+                int total = 0, ok = 0;
+                for (int i = 0; i < 5; i++)
+                {
+                    DnsAnswer answer = DnsClient.Resolve(entry.DnsUrl, host, timeout);
+                    if (answer.Ok) { ok++; total += answer.ElapsedMs; }
+                    System.Threading.Thread.Sleep(80);
+                }
+                result.Samples = 5;
+                result.Lost = 5 - ok;
+                if (ok > 0) result.AvgMs = total / ok;
+                result.MinMs = result.AvgMs;
+                result.MaxMs = result.AvgMs;
+                result.Detail = L.T("تست DNS", "a DNS test");
+                return result;
+            }
+
+            // everything else runs by bringing the route up in a throwaway engine, which is exactly
+            // what the launch will do, so the numbers are the numbers the game will see
+            int socksPort = ProbeTunnel.NextPort();
+            var plan = new TunnelPlan();
+            plan.IncludeTun = false;
+            plan.SocksPort = socksPort;
+            plan.ClashController = "";
+            plan.LogPath = "";
+            plan.BuildUrlTest = false;
+            plan.DnsThroughRoute = false;
+            string tag = ConnectionRoute.TagFor(entry);
+            if (entry.Kind == ConnectionKind.WireGuard || entry.Kind == ConnectionKind.OpenVpn)
+                plan.ExtraEndpoints.Add(ConnectionRoute.BuildEndpoint(entry, tag));
+            else if (entry.Kind == ConnectionKind.SingBoxConfig)
+                throw new Exception(L.T("برای کانفیگ کامل، از دکمه تست خودش استفاده کنید",
+                                        "for a full config use its own test button"));
+            else
+                plan.ExtraOutbounds.Add(ConnectionRoute.BuildOutbound(entry, tag));
+            plan.RouteTag = tag;
+
+            string error;
+            string json = SingBoxConfig.Build(plan);
+            ProbeTunnel probe;
+            if (!ProbeTunnel.TryStart(json, socksPort, Math.Max(4000, timeout * 2), out probe, out error))
+            {
+                var failed = new QualityResult();
+                failed.Detail = error;
+                return failed;
+            }
+            try
+            {
+                var client = new Socks5Client("127.0.0.1", socksPort, timeout);
+                QualityResult result = QualityTest.Measure(client, host, port, 5, timeout);
+                if (withSpeed && result.Ok)
+                    result.SpeedKbps = QualityTest.DownloadSpeed(client, 512 * 1024, Math.Max(4000, timeout * 2));
+                return result;
+            }
+            finally
+            {
+                probe.Stop();
+            }
+        }
+
+        /// <summary>How much data this route can actually carry - a path that cannot download is no path.</summary>
+        private void SpeedTestSelected()
+        {
+            ConnectionEntry entry = SelectedConnection();
+            if (entry == null)
+            {
+                SetStatus(L.T("اول یک اتصال را انتخاب کنید", "select a connection first"));
+                return;
+            }
+            var profile = SelectedServer();
+            int timeout = Math.Min(4000, Math.Max(2000, _settings.ConnectionTestTimeoutMs));
+            SetStatus(L.T("تست سرعت ", "measuring the speed through ") + entry.Name + " …");
+
+            var thread = new Thread(delegate ()
+            {
+                try
+                {
+                    QualityResult result = MeasureEntry(entry, profile, timeout, true);
+                    Ui(delegate
+                    {
+                        entry.LastSpeedKbps = result.SpeedKbps;
+                        entry.LastTestUtc = DateTime.Now.ToString("HH:mm:ss");
+                        SettingsStore.Save(_settings);
+                        RefreshConnections();
+                        SetStatus(result.SpeedKbps > 0
+                            ? entry.Name + L.T(" — سرعت: ", " — speed: ") + result.SpeedKbps + L.T(" کیلوبایت/ثانیه", " KB/s")
+                            : L.T("سرعت اندازه‌گیری نشد: ", "the speed could not be measured: ") + result.Detail);
+                        AppendLog("[speed] " + entry.Name + " — " +
+                                  (result.SpeedKbps > 0 ? result.SpeedKbps + " KB/s" : result.Detail));
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Ui(delegate { SetStatus(L.T("تست سرعت شکست خورد: ", "the speed test failed: ") + ex.Message); });
+                }
+            });
+            thread.IsBackground = true;
+            thread.Start();
+        }
+
+        /// <summary>
+        /// Fetches a subscription link (the base64 list providers hand out) and adds everything the
+        /// parser understands. It can go out through one of the existing connections, which is the
+        /// only way to get the link at all when the subscription host itself is filtered.
+        /// </summary>
+        private void ImportSubscription()
+        {
+            var choices = new List<string>();
+            choices.Add(L.T("مستقیم", "Direct"));
+            foreach (ConnectionEntry entry in _settings.Connections)
+                if (entry.Enabled) choices.Add(entry.Name);
+
+            using (var dialog = new SubscriptionDialog(choices))
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                string url = dialog.Url;
+                ConnectionEntry via = null;
+                if (dialog.ViaIndex > 0)
+                {
+                    int wanted = dialog.ViaIndex - 1;
+                    int seen = 0;
+                    foreach (ConnectionEntry entry in _settings.Connections)
+                    {
+                        if (!entry.Enabled) continue;
+                        if (seen == wanted) { via = entry; break; }
+                        seen++;
+                    }
+                }
+                int timeout = Math.Max(4000, _settings.ConnectionTestTimeoutMs * 2);
+                SetStatus(L.T("دریافت اشتراک…", "fetching the subscription…"));
+
+                var thread = new Thread(delegate ()
+                {
+                    Subscription.FetchResult fetched = Subscription.Fetch(url, timeout, via);
+                    if (!fetched.Ok)
+                    {
+                        Ui(delegate
+                        {
+                            SetStatus(L.T("اشتراک خوانده نشد: ", "the subscription could not be fetched: ") + fetched.Error);
+                            MessageBox.Show(this,
+                                L.T("اشتراک خوانده نشد: ", "the subscription could not be fetched: ") + fetched.Error +
+                                Environment.NewLine + Environment.NewLine +
+                                L.T("اگر لینک اشتراک فیلتر است، آن را از طریق یکی از اتصال‌های سالم بگیرید.",
+                                    "if the link itself is filtered, fetch it through one of the working connections."),
+                                "Server Help", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        });
+                        return;
+                    }
+
+                    List<string> problems;
+                    List<ConnectionEntry> entries = Subscription.Parse(fetched.Text, out problems);
+                    Ui(delegate
+                    {
+                        int added = 0;
+                        foreach (ConnectionEntry entry in entries)
+                        {
+                            if (_settings.FindConnection(entry.Name) != null &&
+                                string.Equals(entry.Name, ConnectionEntry.Create(entry.Name, entry.Kind).Name, StringComparison.Ordinal))
+                                entry.Name = entry.Name + " (" + EntryHints(_settings) + ")";
+                            entry.Id = ConnectionEntry.NewId();
+                            _settings.Connections.Add(entry);
+                            added++;
+                        }
+                        SettingsStore.Save(_settings);
+                        RefreshConnections();
+                        AppendLog("[subscription] " + fetched.Via + " • " + fetched.Bytes + " bytes • " +
+                                  added + " connection(s)");
+                        foreach (string problem in problems) AppendLog("[subscription] skipped: " + problem);
+                        SetStatus(L.T("از اشتراک افزوده شد: ", "added from the subscription: ") + L.N(added) +
+                                  L.T(" اتصال", " connection(s)"));
+                        if (added == 0)
+                            MessageBox.Show(this,
+                                L.T("در این اشتراک چیزی که برنامه بشناسد نبود. اگر لینک اشتراک به‌جای متن، " +
+                                    "یک صفحه وب بود، از خود سرویس‌دهنده لینک خام (base64) را بگیرید.",
+                                    "nothing in this subscription could be recognised. If the link returned a web " +
+                                    "page instead of text, ask the provider for the raw (base64) link."),
+                                "Server Help", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    });
+                });
+                thread.IsBackground = true;
+                thread.Start();
+            }
+        }
+
+        private static int EntryHints(AppSettings settings)
+        {
+            return settings.Connections.Count + 2;
+        }
+
         /// <summary>
         /// Packet-raft style route hunting: every candidate (the plain line, each connection, and
         /// relay chains of two) is brought up in a throwaway engine and measured with a real

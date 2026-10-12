@@ -66,11 +66,21 @@ namespace ServerHelp.Core
         public int Dc = 2;                   // Telegram data centre for MTProto proxies (1..5)
         public string Notes = "";
 
+        /// <summary>Break up the TLS handshake of this route (helps against SNI filtering).</summary>
+        public bool FragmentTls;
+
         // last live test
         public int LastDelayMs = -1;
         public string LastStatus = "";
         public string LastError = "";
         public string LastTestUtc = "";
+
+        // last stability measurement (jitter, loss, throughput)
+        public int LastPingMin = -1;
+        public int LastPingMax = -1;
+        public int LastJitterMs = -1;
+        public int LastLossPercent = -1;
+        public int LastSpeedKbps = -1;
 
         public ConnectionKindInfo Info { get { return ConnectionKindInfo.Of(Kind); } }
 
@@ -225,7 +235,8 @@ namespace ServerHelp.Core
                 && string.Equals(Reserved, other.Reserved, StringComparison.Ordinal)
                 && Mtu == other.Mtu
                 && string.Equals(Config, other.Config, StringComparison.Ordinal)
-                && LocalSocksPort == other.LocalSocksPort;
+                && LocalSocksPort == other.LocalSocksPort
+                && FragmentTls == other.FragmentTls;
         }
 
         public void ForgetTest()
@@ -234,6 +245,11 @@ namespace ServerHelp.Core
             LastStatus = "";
             LastError = "";
             LastTestUtc = "";
+            LastPingMin = -1;
+            LastPingMax = -1;
+            LastJitterMs = -1;
+            LastLossPercent = -1;
+            LastSpeedKbps = -1;
         }
 
         public void CopyTestFrom(ConnectionEntry other)
@@ -243,6 +259,25 @@ namespace ServerHelp.Core
             LastStatus = other.LastStatus;
             LastError = other.LastError;
             LastTestUtc = other.LastTestUtc;
+            LastPingMin = other.LastPingMin;
+            LastPingMax = other.LastPingMax;
+            LastJitterMs = other.LastJitterMs;
+            LastLossPercent = other.LastLossPercent;
+            LastSpeedKbps = other.LastSpeedKbps;
+        }
+
+        /// <summary>The measured stability as one line, or empty when it was never measured.</summary>
+        public string QualityText()
+        {
+            if (LastJitterMs < 0 && LastLossPercent < 0 && LastSpeedKbps < 0 && LastPingMin < 0) return "";
+            var sb = new System.Text.StringBuilder();
+            if (LastPingMin > 0 && LastPingMax > 0)
+                sb.Append(L.T("کمین ", "min ")).Append(LastPingMin).Append('/')
+                  .Append(L.T("بیشینه ", "max ")).Append(LastPingMax).Append(" ms");
+            if (LastJitterMs >= 0) sb.Append(sb.Length > 0 ? " • " : "").Append("±").Append(LastJitterMs).Append(" ms");
+            if (LastLossPercent >= 0) sb.Append(sb.Length > 0 ? " • " : "").Append(L.T("افت ", "loss ")).Append(LastLossPercent).Append('%');
+            if (LastSpeedKbps > 0) sb.Append(sb.Length > 0 ? " • " : "").Append(LastSpeedKbps).Append(L.T(" کیلوبایت/ثانیه", " KB/s"));
+            return sb.ToString();
         }
 
         /// <summary>The parsed Telegram secret (only meaningful for MTProto entries).</summary>
@@ -334,6 +369,12 @@ namespace ServerHelp.Core
             w.Prop("lastStatus", LastStatus);
             w.Prop("lastError", LastError);
             w.Prop("lastTestUtc", LastTestUtc);
+            w.Prop("fragmentTls", FragmentTls);
+            w.Prop("lastPingMin", LastPingMin);
+            w.Prop("lastPingMax", LastPingMax);
+            w.Prop("lastJitterMs", LastJitterMs);
+            w.Prop("lastLossPercent", LastLossPercent);
+            w.Prop("lastSpeedKbps", LastSpeedKbps);
             w.EndObject();
         }
 
@@ -371,6 +412,12 @@ namespace ServerHelp.Core
             e.LastStatus = Json.GetStr(d, "lastStatus", "");
             e.LastError = Json.GetStr(d, "lastError", "");
             e.LastTestUtc = Json.GetStr(d, "lastTestUtc", "");
+            e.FragmentTls = Json.GetBool(d, "fragmentTls", false);
+            e.LastPingMin = Json.GetInt(d, "lastPingMin", -1);
+            e.LastPingMax = Json.GetInt(d, "lastPingMax", -1);
+            e.LastJitterMs = Json.GetInt(d, "lastJitterMs", -1);
+            e.LastLossPercent = Json.GetInt(d, "lastLossPercent", -1);
+            e.LastSpeedKbps = Json.GetInt(d, "lastSpeedKbps", -1);
             if (string.IsNullOrEmpty(e.Name)) e.Name = ConnectionKindInfo.Of(e.Kind).En;
             return e;
         }

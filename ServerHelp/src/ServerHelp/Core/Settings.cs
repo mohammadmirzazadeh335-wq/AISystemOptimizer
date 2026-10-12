@@ -108,6 +108,10 @@ namespace ServerHelp.Core
         public bool DnsThroughTunnel = true;
         /// <summary>How many two hop relay chains the route optimiser tries.</summary>
         public int OptimiseChains = 4;
+        /// <summary>Fragment the TLS handshake of every route by default (SNI filtering).</summary>
+        public bool FragmentTls = false;
+        /// <summary>Re-measure the connections in the background every N minutes (0 = off).</summary>
+        public int RetestMinutes = 0;
         /// <summary>When the chosen route fails, keep going with the automatic one.</summary>
         public bool AllowRouteFallback = true;
         /// <summary>Group every working proxy so sing-box itself fails over to the fastest one.</summary>
@@ -236,6 +240,8 @@ namespace ServerHelp.Core
                 s.PinnedChainHop = Json.GetStr(d, "pinnedChainHop", s.PinnedChainHop);
                 s.DnsThroughTunnel = Json.GetBool(d, "dnsThroughTunnel", s.DnsThroughTunnel);
                 s.OptimiseChains = Clamp(Json.GetInt(d, "optimiseChains", s.OptimiseChains), 0, 12);
+                s.FragmentTls = Json.GetBool(d, "fragmentTls", s.FragmentTls);
+                s.RetestMinutes = Clamp(Json.GetInt(d, "retestMinutes", s.RetestMinutes), 0, 720);
                 s.AllowRouteFallback = Json.GetBool(d, "allowRouteFallback", s.AllowRouteFallback);
                 s.ProxyFailover = Json.GetBool(d, "proxyFailover", s.ProxyFailover);
                 s.KillSwitch = Json.GetBool(d, "killSwitch", s.KillSwitch);
@@ -328,6 +334,8 @@ namespace ServerHelp.Core
                 w.Prop("pinnedChainHop", s.PinnedChainHop);
                 w.Prop("dnsThroughTunnel", s.DnsThroughTunnel);
                 w.Prop("optimiseChains", s.OptimiseChains);
+                w.Prop("fragmentTls", s.FragmentTls);
+                w.Prop("retestMinutes", s.RetestMinutes);
                 w.Prop("allowRouteFallback", s.AllowRouteFallback);
                 w.Prop("proxyFailover", s.ProxyFailover);
                 w.Prop("killSwitch", s.KillSwitch);
