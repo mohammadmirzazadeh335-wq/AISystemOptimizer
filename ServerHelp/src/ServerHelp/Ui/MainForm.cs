@@ -3160,7 +3160,12 @@ namespace ServerHelp.Ui
                 if (i < _lastScan.Count) targets.Add(_lastScan[i]);
             }
             bool tunnelUp = _pipeline.TunnelRunning;
-            string controller = "127.0.0.1:22346";
+            // The controller listens on the port and secret this run's tunnel was started with - asking
+            // with an empty secret is an unauthorized request, which is how this column used to stay
+            // empty even with the tunnel up.
+            string controller = "127.0.0.1:" + _pipeline.ClashPort;
+            string secret = _pipeline.ClashSecret;
+            List<WarpEndpoint> built = _pipeline.TunnelEndpoints;
             var thread = new Thread(delegate ()
             {
                 for (int i = 0; i < targets.Count; i++)
@@ -3168,15 +3173,22 @@ namespace ServerHelp.Ui
                     WarpEndpoint endpoint = targets[i];
                     int delay = NetUtil.TcpPing(endpoint.Ip, endpoint.Port, 2500);
                     int tunnelDelay = -1;
-                    string tag = "warp-" + (i + 1);
-                    if (tunnelUp) tunnelDelay = ClashApi.Delay(controller, "", tag, "https://cp.cloudflare.com/generate_204", 3000);
+                    // A number only means something for a row the running tunnel was actually built on:
+                    // the list can be from an older scan, and its rows are not the tunnel's tags.
+                    string tag = TagFor(built, endpoint.Ip, endpoint.Port);
+                    if (tunnelUp && tag.Length > 0)
+                        tunnelDelay = ClashApi.Delay(controller, secret, tag, "https://cp.cloudflare.com/generate_204", 3000);
+                    bool notInTunnel = tunnelUp && tag.Length == 0;
                     int index = i;
                     Ui(delegate
                     {
                         if (index >= _endpointList.Items.Count) return;
                         var item = _endpointList.Items[index];
                         if (item.SubItems.Count > 4) item.SubItems[4].Text = delay > 0 ? L.N(delay) + " ms" : "—";
-                        if (item.SubItems.Count > 5) item.SubItems[5].Text = tunnelDelay > 0 ? L.N(tunnelDelay) + " ms" : "—";
+                        if (item.SubItems.Count > 5)
+                            item.SubItems[5].Text = tunnelDelay > 0 ? L.N(tunnelDelay) + " ms"
+                                : notInTunnel ? L.T("در تونل فعلی نیست", "not in the running tunnel")
+                                : "—";
                         if (delay > 0) item.ForeColor = delay < 120 ? Color.FromArgb(24, 120, 50) : Color.FromArgb(180, 110, 0);
                     });
                 }
@@ -3428,6 +3440,24 @@ namespace ServerHelp.Ui
 
             if (_settings.MinimizeWhilePlaying && string.IsNullOrEmpty(report.Error))
                 WindowState = FormWindowState.Minimized;
+        }
+
+        /// <summary>
+        /// The "warp-N" tag of one endpoint inside the tunnel that is running, or "" when the tunnel was
+        /// not built on it. The tags follow the order of the list the tunnel was built from, so the match
+        /// is by address and port, never by the row number on screen.
+        /// </summary>
+        internal static string TagFor(List<WarpEndpoint> built, string ip, int port)
+        {
+            if (built == null || string.IsNullOrEmpty(ip)) return "";
+            for (int i = 0; i < built.Count; i++)
+            {
+                if (built[i] == null) continue;
+                if (!string.Equals(built[i].Ip, ip, StringComparison.OrdinalIgnoreCase)) continue;
+                if (port > 0 && built[i].Port != port) continue;
+                return "warp-" + (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+            return "";
         }
 
         private void OnGameExited(int code)

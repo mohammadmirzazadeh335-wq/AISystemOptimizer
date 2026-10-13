@@ -152,6 +152,13 @@ namespace ServerHelp.Orchestration
         public int SocksPort = 22345;
         public int ClashPort = 22346;
         public string ClashSecret = "";
+
+        /// <summary>
+        /// The WARP endpoints the tunnel was built on, in the order of its "warp-N" tags, or null when
+        /// no tunnel is up. The window shows per endpoint delays, and the only honest way to attach a
+        /// number to a row is to know which row the tunnel actually built.
+        /// </summary>
+        public volatile List<WarpEndpoint> TunnelEndpoints;
         public bool KeepTunnel;
         public bool AutoRestore;
         public bool KillSwitch;
@@ -620,6 +627,7 @@ namespace ServerHelp.Orchestration
             var plan = new TunnelPlan();
             plan.Credentials = credentials;
             plan.Endpoints = withPorts;
+            TunnelEndpoints = new List<WarpEndpoint>(withPorts);
             plan.ServerIps = new List<string>();
             foreach (string ip in serverIps)
             {
@@ -1368,7 +1376,13 @@ namespace ServerHelp.Orchestration
             _leakStopped = true;
             try
             {
-                if (!keepTunnel) Tunnel.Stop();
+                if (!keepTunnel)
+                {
+                    Tunnel.Stop();
+                    // Nothing is running any more, so the endpoints the last tunnel was built on must
+                    // not be reported as if they were.
+                    TunnelEndpoints = null;
+                }
             }
             catch (Exception ex) { Log.Warn("tunnel shutdown: " + ex.Message); }
 

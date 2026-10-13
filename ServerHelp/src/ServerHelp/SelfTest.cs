@@ -95,6 +95,7 @@ namespace ServerHelp
             Guard("the firewall rule lookup", failures, delegate { CheckFirewall(failures, passes); });
             Guard("the relay chain", failures, delegate { CheckRelayChain(failures, passes); });
             Guard("the game log reader", failures, delegate { CheckGameLog(failures, passes); });
+            Guard("the endpoint tags", failures, delegate { CheckEndpointTags(failures, passes); });
             Guard("the cache sweep", failures, delegate { CheckCacheSweep(failures, passes); });
             Guard("the leftover sweep", failures, delegate { CheckLeftovers(failures, passes); });
             Guard("the tester", failures, delegate { CheckTesterAnswers(failures, passes); });
@@ -102,6 +103,12 @@ namespace ServerHelp
             Guard("the OpenVPN profile", failures, delegate { CheckOvpn(failures, passes); });
             Guard("the generated tunnel configurations", failures, delegate { CheckConfigs(failures, passes); });
             Guard("the route optimiser", failures, delegate { CheckOptimizer(failures, passes); });
+        }
+
+        /// <summary>The window's own endpoint-to-tag rule, reachable from the shared self test.</summary>
+        private static string MainFormTag(List<WarpEndpoint> built, string ip, int port)
+        {
+            return Ui.MainForm.TagFor(built, ip, port);
         }
 
         private static void Guard(string what, List<string> failures, Action body)
@@ -541,6 +548,28 @@ namespace ServerHelp
                    !report.LeakGuardArmed && !report.LeakGuardTripped && report.LeakGuardNote.Length == 0 &&
                    report.WithinBudget,
                    "a finished run's report is wiped clean before the next run starts", failures, passes);
+        }
+
+        /// <summary>
+        /// The "delay inside the tunnel" column: a number may only appear next to a row the running
+        /// tunnel was actually built on, and the tag has to be found by address - the row order on
+        /// screen comes from a scan that may be older than the tunnel.
+        /// </summary>
+        private static void CheckEndpointTags(List<string> failures, List<string> passes)
+        {
+            var built = new List<WarpEndpoint>();
+            var first = new WarpEndpoint(); first.Ip = "162.159.192.1"; first.Port = 2408;
+            var second = new WarpEndpoint(); second.Ip = "162.159.193.1"; second.Port = 894;
+            built.Add(first); built.Add(second);
+
+            Expect(MainFormTag(built, "162.159.192.1", 2408) == "warp-1" &&
+                   MainFormTag(built, "162.159.193.1", 894) == "warp-2",
+                   "an endpoint the tunnel was built on is found by its address and port", failures, passes);
+            Expect(MainFormTag(built, "162.159.193.1", 2408) == "",
+                   "the same address on another port is a different row", failures, passes);
+            Expect(MainFormTag(built, "203.0.113.9", 2408) == "" && MainFormTag(null, "162.159.192.1", 2408) == "",
+                   "a row the tunnel was not built on gets no number at all", failures, passes);
+            Expect(MainFormTag(built, "", 0) == "", "an empty address never matches a tag", failures, passes);
         }
 
         /// <summary>
