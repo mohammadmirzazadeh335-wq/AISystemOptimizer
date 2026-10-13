@@ -93,6 +93,7 @@ namespace ServerHelp
             Guard("the launcher folder", failures, delegate { CheckVersions(failures, passes); });
             Guard("the launch report", failures, delegate { CheckReport(failures, passes); });
             Guard("the firewall rule lookup", failures, delegate { CheckFirewall(failures, passes); });
+            Guard("the relay chain", failures, delegate { CheckRelayChain(failures, passes); });
             Guard("the cache sweep", failures, delegate { CheckCacheSweep(failures, passes); });
             Guard("the leftover sweep", failures, delegate { CheckLeftovers(failures, passes); });
             Guard("the tester", failures, delegate { CheckTesterAnswers(failures, passes); });
@@ -529,6 +530,59 @@ namespace ServerHelp
                    !report.LeakGuardArmed && !report.LeakGuardTripped && report.LeakGuardNote.Length == 0 &&
                    report.WithinBudget,
                    "a finished run's report is wiped clean before the next run starts", failures, passes);
+        }
+
+        /// <summary>
+        /// The second hop of a pinned relay chain. The same rule decides what the line under the
+        /// connections table promises and what the launch actually builds, so it is pinned here: a hop
+        /// that is switched off, half filled in, or is the carrier itself must never be used - and the
+        /// window must not advertise it either.
+        /// </summary>
+        private static void CheckRelayChain(List<string> failures, List<string> passes)
+        {
+            var settings = new AppSettings();
+            var carrier = ConnectionEntry.Create("carrier", ConnectionKind.Socks5);
+            carrier.Host = "203.0.113.1"; carrier.Port = 1080;
+            var exit = ConnectionEntry.Create("exit", ConnectionKind.Socks5);
+            exit.Host = "203.0.113.2"; exit.Port = 1080;
+            var half = ConnectionEntry.Create("half filled", ConnectionKind.Socks5);
+            var telegram = ConnectionEntry.Create("telegram", ConnectionKind.Mtproto);
+            telegram.Host = "203.0.113.3"; telegram.Port = 443; telegram.Secret = "aa";
+            var all = new List<ConnectionEntry> { carrier, exit, half, telegram };
+
+            settings.PinnedChainHop = "exit";
+            Expect(LaunchPipeline.FindChainHop(settings, all, carrier) == exit,
+                   "the pinned second hop is used when it is ready", failures, passes);
+
+            settings.PinnedChainHop = "Exit";
+            Expect(LaunchPipeline.FindChainHop(settings, all, carrier) == exit,
+                   "the second hop matches by name whatever the letter case", failures, passes);
+
+            exit.Enabled = false;
+            settings.PinnedChainHop = "exit";
+            Expect(LaunchPipeline.FindChainHop(settings, all, carrier) == null,
+                   "a switched off second hop is not used", failures, passes);
+            exit.Enabled = true;
+
+            settings.PinnedChainHop = "half filled";
+            Expect(LaunchPipeline.FindChainHop(settings, all, carrier) == null,
+                   "a second hop with missing details is not used", failures, passes);
+
+            settings.PinnedChainHop = "telegram";
+            Expect(LaunchPipeline.FindChainHop(settings, all, carrier) == null,
+                   "a proxy that cannot carry the game is never used as the second hop", failures, passes);
+
+            settings.PinnedChainHop = "carrier";
+            Expect(LaunchPipeline.FindChainHop(settings, all, carrier) == null,
+                   "the carrier is never its own second hop", failures, passes);
+
+            settings.PinnedChainHop = "gone";
+            Expect(LaunchPipeline.FindChainHop(settings, all, carrier) == null,
+                   "a second hop that was deleted is not invented", failures, passes);
+
+            settings.PinnedChainHop = "";
+            Expect(LaunchPipeline.FindChainHop(settings, all, carrier) == null,
+                   "no pinned hop means a single hop route", failures, passes);
         }
 
         /// <summary>

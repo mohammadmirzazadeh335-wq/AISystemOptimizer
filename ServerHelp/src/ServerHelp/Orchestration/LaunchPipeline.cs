@@ -798,9 +798,12 @@ namespace ServerHelp.Orchestration
             return "1.1.1.1";
         }
 
-        /// <summary>The exit hop of a pinned relay chain, when the user pinned one.</summary>
-        private static ConnectionEntry FindChainHop(AppSettings settings, List<ConnectionEntry> connections,
-                                                    ConnectionEntry first)
+        /// <summary>
+        /// The exit hop of a pinned relay chain, when the user pinned one. Shared with the window so the
+        /// line under the table cannot promise a chain the run would not build.
+        /// </summary>
+        internal static ConnectionEntry FindChainHop(AppSettings settings, List<ConnectionEntry> connections,
+                                                     ConnectionEntry first)
         {
             if (settings == null || first == null || connections == null) return null;
             string name = settings.PinnedChainHop == null ? "" : settings.PinnedChainHop.Trim();
@@ -1057,6 +1060,17 @@ namespace ServerHelp.Orchestration
 
                 // a pinned relay chain: hop 1 carries, hop 2 exits
                 ConnectionEntry hop2 = FindChainHop(settings, _connections, entry);
+                if (hop2 == null && settings.PinnedChainHop != null && settings.PinnedChainHop.Trim().Length > 0)
+                {
+                    // The user asked for a two hop route. Saying nothing here would make the game go out
+                    // through one hop while the window still shows a chain, so the report says it.
+                    Report.Warnings.Add(L.T("گام دوم زنجیره قابل استفاده نبود (پیدا نشد، خاموش است، یا ترافیک بازی را حمل نمی‌کند): ",
+                                            "the second hop of the pinned chain could not be used (not found, switched off, or it cannot carry the game): ") +
+                                      settings.PinnedChainHop.Trim());
+                    Step("زنجیره رله", "Relay chain", StepState.Warn,
+                        L.T("گام دوم پیدا نشد؛ مسیر تک‌مرحله‌ای", "the second hop was not found; single hop route"),
+                        (int)watch.ElapsedMilliseconds);
+                }
                 if (hop2 != null)
                 {
                     chainTag = ConnectionRoute.TagFor(hop2);

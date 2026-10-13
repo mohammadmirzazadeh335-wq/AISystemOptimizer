@@ -1652,7 +1652,15 @@ namespace ServerHelp.Ui
             if (!pinned.CanCarryGame)
                 return pinned.Name + L.T(" (ترافیک بازی را حمل نمی‌کند)", " (it cannot carry the game traffic)");
             string chain = _settings.PinnedChainHop == null ? "" : _settings.PinnedChainHop.Trim();
-            if (chain.Length > 0) return pinned.Name + " → " + chain;
+            if (chain.Length > 0)
+            {
+                // Same rule the run uses, so the line cannot advertise a chain that would not be built.
+                ConnectionEntry hop = LaunchPipeline.FindChainHop(_settings, _settings.Connections, pinned);
+                if (hop == null)
+                    return pinned.Name + L.T(" → گام دوم زنجیره قابل استفاده نیست (تک‌مرحله‌ای اجرا می‌شود)",
+                                             " → the pinned second hop cannot be used (it runs single hop)");
+                return pinned.Name + " → " + hop.Name;
+            }
             return pinned.Name;
         }
 
@@ -1697,11 +1705,37 @@ namespace ServerHelp.Ui
         {
             ConnectionEntry entry = SelectedConnection();
             if (entry == null) return;
+            // Deleting is the one thing in this table that cannot be undone, and an entry holds
+            // credentials the user typed in: ask first, with the name in the question.
+            var answer = MessageBox.Show(this,
+                L.T("این اتصال حذف شود؟", "Delete this connection?") + Environment.NewLine + Environment.NewLine +
+                entry.Name + "  (" + entry.Info.Title + ")" + Environment.NewLine + Environment.NewLine +
+                L.T("حذف قابل برگشت نیست؛ اگر فقط می‌خواهید فعلاً استفاده نشود، به‌جای حذف خاموشش کنید.",
+                    "Deleting cannot be undone; if you only want it out of the way for now, switch it off instead."),
+                L.T("حذف اتصال", "Delete connection"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (answer != DialogResult.Yes) return;
+
             _settings.Connections.Remove(entry);
+            // A pin is stored by name, and the entry that carried it is gone: leaving the name behind
+            // makes the line under the table (and the plan) point at a connection that no longer exists.
+            var dropped = new List<string>();
             if (string.Equals(_settings.PinnedConnection, entry.Name, StringComparison.OrdinalIgnoreCase))
+            {
                 _settings.PinnedConnection = "";
+                dropped.Add(L.T("مسیر ثابت", "the pinned route"));
+            }
+            if (string.Equals(_settings.PinnedChainHop, entry.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                _settings.PinnedChainHop = "";
+                dropped.Add(L.T("گام دوم زنجیره", "the second hop of the chain"));
+            }
             SettingsStore.Save(_settings);
             RefreshConnections();
+            string note = dropped.Count > 0
+                ? L.T(" — ", " — ") + string.Join(L.T(" و ", " and "), dropped.ToArray()) + L.T(" هم برداشته شد", " was released too")
+                : "";
+            AppendLog("[connections] removed " + entry.Name + (note.Length > 0 ? note : ""));
+            SetStatus(L.T("اتصال حذف شد: ", "connection deleted: ") + entry.Name + note);
         }
 
         private void ToggleConnection()
