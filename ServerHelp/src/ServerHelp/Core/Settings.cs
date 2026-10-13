@@ -94,9 +94,10 @@ namespace ServerHelp.Core
         public bool AutoRestoreOnExit = true;
         public bool KeepTunnelAfterGame = false;
         public bool MinimizeWhilePlaying = true;
+        /// <summary>Closes the helper itself when the game exits, after the tunnel and the system
+        /// changes have been put back. Off by default: most people want to read the report first.</summary>
         public bool CloseAppWhenGameExits = false;
 
-        public bool GaugesOnDashboard = true;
         public int ConnectTimeoutMs = 6000;
         /// <summary>Runs a real login to learn whether the server is premium-only.</summary>
         public bool LoginProbe = true;
@@ -251,7 +252,6 @@ namespace ServerHelp.Core
             s.KeepTunnelAfterGame = Json.GetBool(d, "keepTunnelAfterGame", s.KeepTunnelAfterGame);
             s.MinimizeWhilePlaying = Json.GetBool(d, "minimizeWhilePlaying", s.MinimizeWhilePlaying);
             s.CloseAppWhenGameExits = Json.GetBool(d, "closeAppWhenGameExits", s.CloseAppWhenGameExits);
-            s.GaugesOnDashboard = Json.GetBool(d, "gaugesOnDashboard", s.GaugesOnDashboard);
             s.ConnectTimeoutMs = Clamp(Json.GetInt(d, "connectTimeoutMs", s.ConnectTimeoutMs), 1000, 30000);
             s.LoginProbe = Json.GetBool(d, "loginProbe", s.LoginProbe);
 
@@ -352,7 +352,6 @@ namespace ServerHelp.Core
             w.Prop("keepTunnelAfterGame", s.KeepTunnelAfterGame);
             w.Prop("minimizeWhilePlaying", s.MinimizeWhilePlaying);
             w.Prop("closeAppWhenGameExits", s.CloseAppWhenGameExits);
-            w.Prop("gaugesOnDashboard", s.GaugesOnDashboard);
             w.Prop("connectTimeoutMs", s.ConnectTimeoutMs);
             w.Prop("loginProbe", s.LoginProbe);
             w.Prop("pinnedConnection", s.PinnedConnection);

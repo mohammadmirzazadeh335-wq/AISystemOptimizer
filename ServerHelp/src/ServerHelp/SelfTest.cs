@@ -397,6 +397,18 @@ namespace ServerHelp
                    back.ConnectionTestTimeoutMs == 4500 && back.KillSwitch &&
                    !back.ProxyFailover && !back.AllowRouteFallback,
                    "every connection setting survives a save and load", failures, passes);
+            // A settings file written by an older build still carries the switch that was removed and
+            // the "close the app when the game exits" one, which is real now.
+            AppSettings legacy = SettingsStore.Parse(
+                "{\"gaugesOnDashboard\":false,\"closeAppWhenGameExits\":true,\"nickname\":\"old\"}");
+            Expect(legacy != null && legacy.Nickname == "old" && legacy.CloseAppWhenGameExits,
+                   "a settings file from an older build loads, keeps what is used and ignores what is gone",
+                   failures, passes);
+            Expect(SettingsStore.ToJson(legacy).IndexOf("gaugesOnDashboard", StringComparison.Ordinal) < 0 &&
+                   SettingsStore.ToJson(legacy).IndexOf("closeAppWhenGameExits", StringComparison.Ordinal) >= 0,
+                   "the removed setting is not written again, and the real one is",
+                   failures, passes);
+
             Expect(back.Servers.Count == 1 && back.Servers[0].Host == "smp3.mcsh.io" &&
                    back.Servers[0].Port == 11005 && back.Servers[0].PreferDomain &&
                    back.Servers[0].DirectIp == "163.5.201.3",

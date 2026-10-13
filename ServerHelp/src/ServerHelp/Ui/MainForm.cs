@@ -927,6 +927,10 @@ namespace ServerHelp.Ui
             _chkKeepTunnel = Check(L.T("نگه‌داشتن تونل بعد از بستن بازی", "Keep the tunnel after the game closes"), _settings.KeepTunnelAfterGame, delegate (bool v) { _settings.KeepTunnelAfterGame = v; });
             _chkAutoRestore = Check(L.T("بازگردانی تنظیمات هنگام خروج", "Restore settings on exit"), _settings.AutoRestoreOnExit, delegate (bool v) { _settings.AutoRestoreOnExit = v; });
             _chkMinimize = Check(L.T("کوچک‌کردن پنجره هنگام بازی", "Minimise the window while playing"), _settings.MinimizeWhilePlaying, delegate (bool v) { _settings.MinimizeWhilePlaying = v; });
+            var closeHint = UiKit.Sub(L.T("با این تیک، بعد از بستن بازی تونل و تغییرها برگردانده می‌شوند و همین پنجره خودش بسته می‌شود.",
+                                          "with this on, the tunnel and the system changes are put back when the game exits, and this window closes itself."));
+            closeHint.MaximumSize = new Size(760, 0);
+            var chkCloseApp = Check(L.T("بستن برنامه بعد از پایان بازی", "Close the app when the game exits"), _settings.CloseAppWhenGameExits, delegate (bool v) { _settings.CloseAppWhenGameExits = v; });
             _chkTuningAsk = Check(L.T("قبل از تغییرات سیستم اجازه بگیر (توصیه‌شده)", "Ask before changing system settings (recommended)"),
                                   _settings.ConfirmTuning, delegate (bool v) { _settings.ConfirmTuning = v; });
 
@@ -989,6 +993,8 @@ namespace ServerHelp.Ui
             // what happens to Windows, to the game, to the connection, and to the window.
             runNow.Margin = new Padding(3, 18, 3, 3);
             restore.Margin = runNow.Margin;
+            // the new switch and its hint belong under the heading about the app's own behaviour; the
+            // heading is added later in this method, so the order of the list below does the placement
             var secSystem = UiKit.Section(L.T("سیستم و ویندوز", "Windows and the system"));
             var secGame = UiKit.Section(L.T("بازی و جاوا", "The game and Java"));
             var secNet = UiKit.Section(L.T("شبکه و تونل", "Network and the tunnel"));
@@ -1028,6 +1034,8 @@ namespace ServerHelp.Ui
             panel.Controls.Add(_chkKeepTunnel);
             panel.Controls.Add(_chkAutoRestore);
             panel.Controls.Add(_chkMinimize);
+            panel.Controls.Add(chkCloseApp);
+            panel.Controls.Add(closeHint);
 
             panel.Controls.Add(runNow);
             panel.Controls.Add(restore);
@@ -3482,6 +3490,20 @@ namespace ServerHelp.Ui
             {
                 _pipeline.Shutdown(false);
                 SetStatus(L.T("بازی بسته شد و تنظیمات بازگردانی شد", "the game exited and everything was restored"));
+            }
+            if (_settings.CloseAppWhenGameExits)
+            {
+                // Nothing is left running at this point: the tunnel, the routes and the system changes
+                // were put back above (or were never taken), and closing the window runs the same
+                // shutdown path once more with nothing to do.
+                if (_settings.KeepTunnelAfterGame)
+                    // The two switches contradict each other: closing the window always takes the
+                    // tunnel down, so saying nothing would make the "keep the tunnel" switch look broken.
+                    AppendLog(L.T("توجه: «نگه‌داشتن تونل» با بستن برنامه بی‌اثر می‌شود؛ تونل بسته می‌شود.",
+                                  "note: \"keep the tunnel\" cannot survive the app closing; the tunnel is taken down."));
+                AppendLog(L.T("برنامه بسته می‌شود (تنظیم «بستن برنامه بعد از پایان بازی»)",
+                              "closing the helper (\"close the app when the game exits\" is on)"));
+                BeginInvoke(new Action(delegate { Close(); }));
             }
         }
 
