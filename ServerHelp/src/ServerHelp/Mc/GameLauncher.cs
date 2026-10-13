@@ -73,6 +73,26 @@ namespace ServerHelp.Mc
             return "";
         }
 
+        /// <summary>
+        /// True when a Java window process is alive, which for this app in practice means the game is
+        /// still running - the launcher starts <c>javaw.exe</c> and nothing else. The startup cleanup
+        /// asks this before it stops a leftover tunnel: cutting off a game that is still being played
+        /// would be a much worse side effect than leaving one process for the user to close.
+        /// </summary>
+        public static bool LooksRunning()
+        {
+            try
+            {
+                foreach (Process process in Process.GetProcessesByName("javaw"))
+                {
+                    try { if (!process.HasExited) return true; }
+                    catch { }
+                }
+            }
+            catch { }
+            return false;
+        }
+
         public bool Start(LaunchPlan plan, out string error)
         {
             error = "";

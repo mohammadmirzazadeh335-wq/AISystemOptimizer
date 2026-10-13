@@ -1346,18 +1346,29 @@ namespace ServerHelp.Ui
             // and our line in the hosts file may still pin the server name to an address that is no
             // longer routed. Both go now, before the first version scan and the first server check, so
             // a machine that was switched off in the middle of a game starts from a clean state.
-            int strayEngines = SingBoxRunner.KillStrayEngines();
-            if (strayEngines > 0)
+            if (GameLauncher.LooksRunning())
             {
-                AppendLog(L.T("موتور تونلِ جامانده از اجرای قبلی بسته شد: ", "a tunnel engine left behind by an earlier run was stopped: ")
-                          + L.N(strayEngines));
-                SetStatus(L.T("موتور جامانده بسته شد", "stray engine stopped"));
+                // A game is still open. The helper may have been crashed and reopened while the player
+                // is in the middle of a session: stopping the tunnel under it would cut the game off,
+                // so the leftovers are left exactly where they are and the log says why.
+                AppendLog(L.T("یک بازی جاوا هنوز باز است؛ تونل و خط hosts جامانده دست‌نخورده ماندند تا بازی قطع نشود.",
+                              "a Java game is still running; the leftover tunnel and hosts entry were left alone so the game is not cut off."));
             }
-            if (HostsFile.HasBlock())
+            else
             {
-                HostsFile.Remove();
-                AppendLog(L.T("خط جاماندهٔ فایل hosts از اجرای قبلی پاک شد",
-                              "the hosts entry left behind by an earlier run was removed"));
+                int strayEngines = SingBoxRunner.KillStrayEngines();
+                if (strayEngines > 0)
+                {
+                    AppendLog(L.T("موتور تونلِ جامانده از اجرای قبلی بسته شد: ", "a tunnel engine left behind by an earlier run was stopped: ")
+                              + L.N(strayEngines));
+                    SetStatus(L.T("موتور جامانده بسته شد", "stray engine stopped"));
+                }
+                if (HostsFile.HasBlock())
+                {
+                    HostsFile.Remove();
+                    AppendLog(L.T("خط جاماندهٔ فایل hosts از اجرای قبلی پاک شد",
+                                  "the hosts entry left behind by an earlier run was removed"));
+                }
             }
             RefreshVersions();
             CheckServerAsync();
@@ -2916,6 +2927,20 @@ namespace ServerHelp.Ui
                 SetStatus(L.T("چیزی برای ذخیره نیست", "there is nothing to save"));
                 return;
             }
+            // The export writes the entries exactly as the settings file holds them: passwords,
+            // MTProto secrets and WireGuard private keys in plain text. Nothing leaves the machine by
+            // itself, but a file like this is easy to forget somewhere, so the user is told once.
+            var proceed = MessageBox.Show(this,
+                L.T("این فایل رمزها، سکرت‌ها و کلیدهای خصوصی اتصال‌های شما را به‌صورت متن ساده ذخیره می‌کند." +
+                    Environment.NewLine + "جای امنی نگهش دارید و روی کامپیوتر مشترک نگذارید. ادامه؟",
+                    "This file stores your passwords, secrets and private keys as plain text." +
+                    Environment.NewLine + "Keep it somewhere safe and off shared machines. Continue?"),
+                L.T("ذخیره در فایل", "Save to file"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (proceed != DialogResult.Yes)
+            {
+                SetStatus(L.T("ذخیره لغو شد", "saving cancelled"));
+                return;
+            }
             using (var dialog = new SaveFileDialog())
             {
                 dialog.Title = L.T("ذخیره اتصال‌ها", "Save connections");
@@ -2971,6 +2996,13 @@ namespace ServerHelp.Ui
                     foreach (string problem in problems) AppendLog("[connections] skipped: " + problem);
                 }
 
+                if (loaded.Count == 0)
+                {
+                    SetStatus(L.T("در این فایل چیزی که برنامه بشناسد نبود",
+                                  "nothing in this file could be recognised"));
+                    AppendLog("[connections] nothing to load from " + dialog.FileName);
+                    return;
+                }
                 int added = 0;
                 foreach (ConnectionEntry entry in loaded)
                 {
