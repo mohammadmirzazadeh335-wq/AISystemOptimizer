@@ -73,14 +73,6 @@ public abstract class LocalPlayerMixin extends AbstractClientPlayer {
 	}
 
 	@Override
-	public float maxUpStep() {
-		if (FlightModule.INSTANCE.isEnabled()) {
-			return 1.25F;
-		}
-		return super.maxUpStep();
-	}
-
-	@Override
 	public void lerpMotion(Vec3 vec) {
 		if (FlightModule.INSTANCE.isEnabled()) {
 			return;
@@ -104,13 +96,5 @@ public abstract class LocalPlayerMixin extends AbstractClientPlayer {
 			return 0.0F;
 		}
 		return super.getFlyingSpeed();
-	}
-
-	@Override
-	public boolean isInWater() {
-		if (FlightModule.INSTANCE.isEnabled()) {
-			return false;
-		}
-		return super.isInWater();
 	}
 }

@@ -9,6 +9,8 @@
     "BlockEntityRenderDispatcherMixin",
     "BlockMixin",
     "BlockStateBaseMixin",
+    "CameraMixin",
+    "ClientPacketListenerMixin",
     "ClientTelemetryManagerMixin",
     "EntityMixin",
     "EntityRendererMixin",
