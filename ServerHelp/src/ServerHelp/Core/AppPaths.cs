@@ -35,6 +35,8 @@ namespace ServerHelp.Core
         public static string AppLog { get { return Path.Combine(Logs, "serverhelp.log"); } }
         /// <summary>Everything the game itself printed, kept so a launch that died can explain itself.</summary>
         public static string GameLog { get { return Path.Combine(Logs, "minecraft.log"); } }
+        /// <summary>The written-down state of the machine and the app, made to be handed over.</summary>
+        public static string DiagnosisFile { get { return Path.Combine(Logs, "diagnosis.txt"); } }
 
         public static string ExeDir
         {

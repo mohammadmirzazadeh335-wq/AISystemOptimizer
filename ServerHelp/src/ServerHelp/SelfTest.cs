@@ -96,6 +96,7 @@ namespace ServerHelp
             Guard("the relay chain", failures, delegate { CheckRelayChain(failures, passes); });
             Guard("the game log reader", failures, delegate { CheckGameLog(failures, passes); });
             Guard("the endpoint tags", failures, delegate { CheckEndpointTags(failures, passes); });
+            Guard("the diagnosis report", failures, delegate { CheckDiagnosis(failures, passes); });
             Guard("the cache sweep", failures, delegate { CheckCacheSweep(failures, passes); });
             Guard("the leftover sweep", failures, delegate { CheckLeftovers(failures, passes); });
             Guard("the tester", failures, delegate { CheckTesterAnswers(failures, passes); });
@@ -560,6 +561,67 @@ namespace ServerHelp
                    !report.LeakGuardArmed && !report.LeakGuardTripped && report.LeakGuardNote.Length == 0 &&
                    report.WithinBudget,
                    "a finished run's report is wiped clean before the next run starts", failures, passes);
+        }
+
+        /// <summary>
+        /// The file a user hands over when something is wrong. Two things have to be true: it says what
+        /// is needed to understand the problem, and it cannot leak what the user typed in - so the
+        /// secret values are put into the entries here and then looked for in the output.
+        /// </summary>
+        private static void CheckDiagnosis(List<string> failures, List<string> passes)
+        {
+            var settings = AppSettings.Default();
+            settings.Connections.Clear();
+            settings.Language = L.Fa;
+            settings.PinnedConnection = "home";
+            const string password = "hunter2-secret";
+            const string mtSecret = "dd0123456789abcdef0123456789abcdef";
+            const string privateKey = "PRIVATEKEY0123456789ABCDEF=";
+            const string pasted = "{\"type\":\"vless\",\"uuid\":\"9f9f9f9f-secret-uuid\"}";
+            var proxy = ConnectionEntry.Create("home", ConnectionKind.Socks5);
+            proxy.Host = "203.0.113.7";
+            proxy.Port = 1080;
+            proxy.User = "someone";
+            proxy.Password = password;
+            settings.Connections.Add(proxy);
+            var tg = ConnectionEntry.Create("tg", ConnectionKind.Mtproto);
+            tg.Host = "203.0.113.8";
+            tg.Port = 443;
+            tg.Secret = mtSecret;
+            settings.Connections.Add(tg);
+            var wg = ConnectionEntry.Create("wg", ConnectionKind.WireGuard);
+            wg.Address = "10.0.0.2";
+            wg.PeerHost = "203.0.113.9";
+            wg.PeerPublicKey = "PUBLICKEY0123456789ABCDEF=";
+            wg.Config = pasted;
+            wg.Secret = privateKey;
+            settings.Connections.Add(wg);
+
+            string text = Diagnosis.Build("1.0.0.999", false, settings, "strategy       : warp\ntunnel ping    : 118 ms", "12:00:00 step: Diagnose");
+            Expect(text.Contains("Server Help - diagnosis report") && text.Contains("1.0.0.999") &&
+                   text.Contains("normal user") && text.Contains("strategy       : warp") &&
+                   text.Contains("118 ms") && text.Contains("Diagnose"),
+                   "the diagnosis report carries the version, the rights, the last run and the log",
+                   failures, passes);
+            // the kind is printed in the reader's language, so it is compared with the same source
+            Expect(text.Contains("home") && text.Contains("203.0.113.7") &&
+                   text.Contains(ConnectionKindInfo.Of(ConnectionKind.Socks5).Title) &&
+                   text.Contains("203.0.113.9"),
+                   "the diagnosis report names the connections, their kinds and their addresses",
+                   failures, passes);
+            Expect(text.IndexOf(password, StringComparison.Ordinal) < 0 &&
+                   text.IndexOf(mtSecret, StringComparison.Ordinal) < 0 &&
+                   text.IndexOf(privateKey, StringComparison.Ordinal) < 0 &&
+                   text.IndexOf(pasted, StringComparison.Ordinal) < 0 &&
+                   text.IndexOf("PUBLICKEY0123456789ABCDEF=", StringComparison.Ordinal) < 0,
+                   "no password, secret, private key or pasted config can reach the diagnosis file",
+                   failures, passes);
+            Expect(text.Contains("safe to share"), "the file says that it is safe to hand over", failures, passes);
+
+            string empty = Diagnosis.Build("1.0.0.999", true, null, "", "");
+            Expect(empty.Contains("administrator") && empty.Contains("no settings could be read") &&
+                   empty.Contains("no run in this session yet") && empty.Contains("the log is empty"),
+                   "a report built before anything was configured still reads as a report", failures, passes);
         }
 
         /// <summary>

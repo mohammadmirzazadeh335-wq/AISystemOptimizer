@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 using ServerHelp.Core;
@@ -1276,6 +1277,11 @@ namespace ServerHelp.Ui
                 string tail = Log.TailFile(AppPaths.SingBoxLog, 6000);
                 _logBox.AppendText(Environment.NewLine + "----- sing-box -----" + Environment.NewLine + tail + Environment.NewLine);
             };
+            var saveDiagnosis = new Button();
+            saveDiagnosis.Text = L.T("ذخیره گزارش عیب‌یابی", "Save diagnosis");
+            saveDiagnosis.Width = 190;
+            saveDiagnosis.Click += delegate { SaveDiagnosis(); };
+            buttons.Controls.Add(saveDiagnosis);
             buttons.Controls.Add(openLogs);
             buttons.Controls.Add(singboxLog);
             buttons.Controls.Add(clear);
@@ -1648,6 +1654,57 @@ namespace ServerHelp.Ui
                                       L.T(" • تست‌شده با تأخیر: ", " • measured: ") + L.N(working) +
                                       L.T("    |  مسیر انتخابی: ", "    |  chosen route: ") +
                                       ChosenRouteText() + running;
+        }
+
+        /// <summary>
+        /// Writes everything a person (or whoever they ask for help) needs into one file: the machine,
+        /// the settings, the last run and the log - with no passwords or keys in it, which the code
+        /// that builds it keeps out by construction. The file is opened right away so it does not have
+        /// to be looked for.
+        /// </summary>
+        private void SaveDiagnosis()
+        {
+            try
+            {
+                string text = Diagnosis.Build(Program.Version(), Program.IsAdmin(), _settings, LastRunText(),
+                                              Log.TailFile(AppPaths.AppLog, 120000));
+                File.WriteAllText(AppPaths.DiagnosisFile, text, new UTF8Encoding(false));
+                AppendLog("[diagnosis] written to " + AppPaths.DiagnosisFile);
+                SetStatus(L.T("گزارش عیب‌یابی ذخیره شد: ", "diagnosis saved: ") + AppPaths.DiagnosisFile);
+                try { Process.Start("explorer.exe", "/select,\"" + AppPaths.DiagnosisFile + "\""); } catch { }
+            }
+            catch (Exception ex)
+            {
+                SetStatus(L.T("گزارش عیب‌یابی ذخیره نشد: ", "the diagnosis could not be saved: ") + ex.Message);
+                Log.Warn("diagnosis failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>The last run in plain lines, for the diagnosis file.</summary>
+        private string LastRunText()
+        {
+            LaunchReport report = _pipeline.Report;
+            if (string.IsNullOrEmpty(report.Strategy) && string.IsNullOrEmpty(report.Error) && report.GamePid <= 0)
+                return "";
+            var sb = new StringBuilder();
+            sb.AppendLine("strategy       : " + report.Strategy);
+            sb.AppendLine("tunnel up      : " + (report.TunnelUp ? "yes" : "no"));
+            sb.AppendLine("proxy only     : " + (report.ProxyOnlyMode ? "yes" : "no"));
+            sb.AppendLine("chosen ip      : " + report.ChosenIp + "   (resolved: " + string.Join(", ", report.ResolvedIps.ToArray()) + ")");
+            sb.AppendLine("direct ping    : " + report.DirectPing + " ms");
+            sb.AppendLine("tunnel ping    : " + report.TunnelPing + " ms");
+            sb.AppendLine("connection     : " + report.ConnectionUsed + "  [" + report.ConnectionKind + "]");
+            sb.AppendLine("endpoint       : " + report.EndpointUsed);
+            sb.AppendLine("dns            : " + (report.DnsThroughTunnel ? "through the tunnel" : "system") + " " + report.DnsDetail);
+            sb.AppendLine("hosts pinned   : " + (report.HostsApplied ? "yes" : "no"));
+            sb.AppendLine("kill switch    : " + (report.LeakGuardArmed ? "armed " + report.LeakGuardNote : "off") +
+                          (report.LeakGuardTripped ? "  [TRIPPED]" : ""));
+            sb.AppendLine("game pid       : " + report.GamePid);
+            sb.AppendLine("elapsed        : " + report.ElapsedMs + " ms (budget " + LaunchPipeline.BudgetMs + "), within budget: " + (report.WithinBudget ? "yes" : "no"));
+            if (report.Error.Length > 0) sb.AppendLine("error          : " + report.Error);
+            foreach (string warning in report.Warnings) sb.AppendLine("warning        : " + warning);
+            foreach (string candidate in report.Candidates) sb.AppendLine("connection test: " + candidate);
+            return sb.ToString();
         }
 
         /// <summary>
