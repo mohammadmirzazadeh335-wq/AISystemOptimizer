@@ -284,7 +284,10 @@ namespace ServerHelp.Core
             DateTime tested;
             if (!DateTime.TryParse(LastTestUtc, CultureInfo.InvariantCulture, DateTimeStyles.None, out tested))
                 return true;
-            return DateTime.Now - tested >= TimeSpan.FromMinutes(minutes);
+            TimeSpan age = DateTime.Now - tested;
+            // A stamp in the future (the clock was changed, or the value came from a build that wrote
+            // only a time of day) must not pass for a fresh measurement.
+            return age < TimeSpan.Zero || age >= TimeSpan.FromMinutes(minutes);
         }
 
         /// <summary>The stamp as a table shows it: the clock time while it is today, otherwise the day.</summary>

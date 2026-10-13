@@ -218,9 +218,19 @@ namespace ServerHelp
             neverTested.LastTestUtc = "2001-01-01 00:00:00";
             Expect(neverTested.MeasurementOlderThan(60) && neverTested.TestedText() == "2001-01-01 00:00",
                    "an old measurement is stale and the table says which day it was", failures, passes);
+            // A time of day with no date came from a build before the stamps carried one. What is
+            // promised is that it is shown exactly as it is - whether it counts as stale depends on the
+            // hour of the day, so no expectation is built on that half.
             neverTested.LastTestUtc = "12:00:00";
-            Expect(neverTested.MeasurementOlderThan(60) && neverTested.TestedText() == "12:00:00",
-                   "a stamp from an older build counts as stale and is still shown as it is", failures, passes);
+            Expect(neverTested.TestedText() == "12:00:00",
+                   "a stamp written by an older build is still shown as it is", failures, passes);
+            neverTested.LastTestUtc = "yesterday";
+            Expect(neverTested.MeasurementOlderThan(60) && neverTested.TestedText() == "yesterday",
+                   "a stamp that cannot be read counts as stale instead of crashing", failures, passes);
+            neverTested.LastTestUtc = DateTime.Now.AddHours(5)
+                .ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+            Expect(neverTested.MeasurementOlderThan(60),
+                   "a stamp in the future never passes for a fresh measurement", failures, passes);
             Expect(!neverTested.MeasurementOlderThan(0),
                    "with no retest interval set, nothing is ever called stale", failures, passes);
 
