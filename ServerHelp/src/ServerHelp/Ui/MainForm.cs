@@ -2515,11 +2515,15 @@ namespace ServerHelp.Ui
             SetStatus(L.T("بهینه‌سازی مسیر بازی…", "optimising the game route…"));
             AppendLog("[route] optimising for " + host + ":" + port);
 
+            // The hunt can take minutes, and the Connections table stays editable while it runs: the
+            // list is copied here, on this thread, so an edit in the middle cannot break the run.
+            var routeConnections = new List<ConnectionEntry>(_settings.Connections);
+
             var thread = new Thread(delegate ()
             {
                 try
                 {
-                    List<RouteCandidate> candidates = RouteOptimizer.Plan(_settings.Connections, true, chains, true);
+                    List<RouteCandidate> candidates = RouteOptimizer.Plan(routeConnections, true, chains, true);
                     // the direct line first, because it is the baseline every other route is compared to
                     var measured = new List<RouteCandidate>();
                     int baseline = -1;
@@ -2568,6 +2572,18 @@ namespace ServerHelp.Ui
                                             MessageBoxButtons.OK, MessageBoxIcon.Warning);
                             return;
                         }
+                        if (winner.PinName.Length == 0)
+                        {
+                            // The plain line won. There is nothing to pin for that: "no pin" already means
+                            // "test everything and take the fastest", which is exactly this answer.
+                            MessageBox.Show(this,
+                                report.ToString() + Environment.NewLine +
+                                L.T("سریع‌ترین مسیر، اتصال مستقیم است؛ پس پینی لازم نیست و حالت خودکار همان را انتخاب می‌کند.",
+                                    "the fastest route is the plain line, so there is nothing to pin: automatic mode picks it anyway."),
+                                L.T("بهینه‌سازی مسیر", "Route optimisation"),
+                                MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            return;
+                        }
                         DialogResult answer = MessageBox.Show(this,
                             report.ToString() + Environment.NewLine +
                             L.T("همین مسیر برای بازی پین شود؟", "pin this route for the game?"),
@@ -2575,6 +2591,20 @@ namespace ServerHelp.Ui
                             MessageBoxButtons.YesNo, MessageBoxIcon.Information);
                         if (answer == DialogResult.Yes)
                         {
+                            // The entries may have been edited, renamed or removed while this ran. A pin
+                            // that points at a name nobody has is worse than no pin at all, so it is only
+                            // written when both hops are still there.
+                            bool firstThere = _settings.FindConnection(winner.PinName) != null;
+                            bool secondThere = winner.PinSecondName.Length == 0 ||
+                                               _settings.FindConnection(winner.PinSecondName) != null;
+                            if (!firstThere || !secondThere)
+                            {
+                                SetStatus(L.T("پین نشد: آن اتصال در این فاصله تغییر کرده یا پاک شده است",
+                                              "not pinned: that connection was changed or removed while this ran"));
+                                AppendLog("[route] not pinned: " + winner.Describe() +
+                                          " is no longer in the connections list");
+                                return;
+                            }
                             _settings.PinnedConnection = winner.PinName;
                             _settings.PinnedChainHop = winner.PinSecondName;
                             SettingsStore.Save(_settings);
