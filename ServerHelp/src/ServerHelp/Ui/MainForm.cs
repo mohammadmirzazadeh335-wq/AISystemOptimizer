@@ -3434,6 +3434,7 @@ namespace ServerHelp.Ui
         {
             AppendLog(L.T("بازی بسته شد (کد ", "game closed (code ") + code + ")");
             SetStatus(L.T("بازی بسته شد", "the game exited"));
+            ReportEarlyExit(code);
             if (_pipeline.Report.LeakGuardTripped)
             {
                 // the kill switch closed the game on purpose: say so, or it looks like a crash
@@ -3452,6 +3453,55 @@ namespace ServerHelp.Ui
                 _pipeline.Shutdown(false);
                 SetStatus(L.T("بازی بسته شد و تنظیمات بازگردانی شد", "the game exited and everything was restored"));
             }
+        }
+
+        /// <summary>
+        /// A game that closes a few seconds after Play is the worst thing this app can hand the user:
+        /// the window said "started" and then nothing happened, with no reason anywhere. The game's own
+        /// log - which this app already keeps - names the reason in almost every case (a JVM flag its
+        /// Java build does not know, a Java version too old for the version, a file that is missing),
+        /// so it is read out here and said plainly.
+        /// </summary>
+        private void ReportEarlyExit(int code)
+        {
+            try
+            {
+                if (_pipeline.Report.LeakGuardTripped) return;      // the kill switch closed it on purpose
+                TimeSpan ran = _pipeline.Game.RanFor;
+                if (ran == TimeSpan.Zero || ran.TotalSeconds > 25) return;
+                string problem = GameLauncher.FirstProblemLine(Log.TailFile(AppPaths.GameLog, 12000));
+                int seconds = (int)Math.Round(ran.TotalSeconds);
+                AppendLog(L.T("بازی ", "the game ran ") + L.N(seconds) +
+                          L.T(" ثانیه بعد از اجرا بسته شد؛ لاگ خودش را ببینید: ", " s then closed; its own log says: ")
+                          + AppPaths.GameLog);
+                if (problem.Length > 0) AppendLog("[game] " + problem);
+                SetStatus(L.T("بازی بلافاصله بسته شد — دلیلش در لاگ است",
+                              "the game closed right after starting — the reason is in the log"));
+                string text = L.T("بازی ", "The game ran ") + L.N(seconds) +
+                              L.T(" ثانیه بعد از اجرا بسته شد (کد ", " s and then closed (code ") + code + ")." +
+                              Environment.NewLine + Environment.NewLine +
+                              (problem.Length > 0
+                                  ? L.T("لاگ خود بازی: ", "the game's own log: ") + Environment.NewLine + problem +
+                                    Environment.NewLine + Environment.NewLine
+                                  : L.T("لاگ بازی خط خطایی نشان نمی‌دهد.", "the game's log names no error line.") +
+                                    Environment.NewLine + Environment.NewLine) +
+                              L.T("کارهایی که بیشتر وقت‌ها مشکل را حل می‌کند:", "what fixes it most of the time:") +
+                              Environment.NewLine +
+                              L.T("• همان نسخه را در تب «نسخه‌ها» انتخاب و دوبار کلیک کنید تا حداقل یک‌بار " +
+                                  "از خود لانچر هم اجرا شود (فایل‌های جاافتاده دانلود می‌شوند).",
+                                  "• pick the same version in the Versions tab and double click it so the launcher " +
+                                  "runs it once (that downloads the missing files).") + Environment.NewLine +
+                              L.T("• در تب «تنظیمات» یک Java مناسب بدهید یا از Java خودِ TLauncher استفاده کنید.",
+                                  "• set a suitable Java in Settings, or use the Java that ships with TLauncher.") +
+                              Environment.NewLine +
+                              L.T("• اگر سرور پریمیوم است، اجرای آفلاین جواب نمی‌دهد.",
+                                  "• if the server is premium-only, offline launching will not work.") +
+                              Environment.NewLine + Environment.NewLine +
+                              L.T("لاگ کامل: ", "full log: ") + AppPaths.GameLog;
+                MessageBox.Show(this, text, L.T("بازی بسته شد", "The game exited"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            catch (Exception ex) { Log.Debug("early exit report: " + ex.Message); }
         }
 
         private void StopEverything()

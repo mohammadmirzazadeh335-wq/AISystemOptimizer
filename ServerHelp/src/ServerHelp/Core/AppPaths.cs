@@ -33,6 +33,8 @@ namespace ServerHelp.Core
         public static string SingBoxConfig { get { return Path.Combine(Bin, "serverhelp-singbox.json"); } }
         public static string SingBoxLog { get { return Path.Combine(Logs, "sing-box.log"); } }
         public static string AppLog { get { return Path.Combine(Logs, "serverhelp.log"); } }
+        /// <summary>Everything the game itself printed, kept so a launch that died can explain itself.</summary>
+        public static string GameLog { get { return Path.Combine(Logs, "minecraft.log"); } }
 
         public static string ExeDir
         {

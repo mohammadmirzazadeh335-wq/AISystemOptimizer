@@ -94,6 +94,7 @@ namespace ServerHelp
             Guard("the launch report", failures, delegate { CheckReport(failures, passes); });
             Guard("the firewall rule lookup", failures, delegate { CheckFirewall(failures, passes); });
             Guard("the relay chain", failures, delegate { CheckRelayChain(failures, passes); });
+            Guard("the game log reader", failures, delegate { CheckGameLog(failures, passes); });
             Guard("the cache sweep", failures, delegate { CheckCacheSweep(failures, passes); });
             Guard("the leftover sweep", failures, delegate { CheckLeftovers(failures, passes); });
             Guard("the tester", failures, delegate { CheckTesterAnswers(failures, passes); });
@@ -540,6 +541,35 @@ namespace ServerHelp
                    !report.LeakGuardArmed && !report.LeakGuardTripped && report.LeakGuardNote.Length == 0 &&
                    report.WithinBudget,
                    "a finished run's report is wiped clean before the next run starts", failures, passes);
+        }
+
+        /// <summary>
+        /// Reading the game's own log. A launch that dies seconds after Play is reported from these
+        /// lines, so "the first line that names a problem" has to be exactly that: the first one, not
+        /// the last, and nothing at all when the log only shows a normal start.
+        /// </summary>
+        private static void CheckGameLog(List<string> failures, List<string> passes)
+        {
+            string crashed = "[12:00:00] [main/INFO]: Setting user: Player\n" +
+                             "[12:00:00] [main/INFO]: Backend library: LWJGL\n" +
+                             "Unrecognized VM option 'UseG1GC'\n" +
+                             "Error: Could not create the Java Virtual Machine.\n";
+            Expect(GameLauncher.FirstProblemLine(crashed) == "Unrecognized VM option 'UseG1GC'",
+                   "the game log names the first real problem, not the last echo of it", failures, passes);
+
+            string normal = "[12:00:00] [main/INFO]: Setting user: Player\n" +
+                            "[12:00:00] [main/INFO]: Starting Minecraft\n";
+            Expect(GameLauncher.FirstProblemLine(normal).Length == 0,
+                   "a normal startup has no problem line to report", failures, passes);
+            Expect(GameLauncher.FirstProblemLine("").Length == 0 && GameLauncher.FirstProblemLine(null).Length == 0,
+                   "an empty log is not treated as a problem", failures, passes);
+            Expect(GameLauncher.FirstProblemLine("[ServerHelp] error in our own line\n").Length == 0,
+                   "our own lines are never read back as the game's problem", failures, passes);
+
+            string longLine = "Error: " + new string('x', 400);
+            string trimmed = GameLauncher.FirstProblemLine(longLine);
+            Expect(trimmed.Length == 301 && trimmed.EndsWith("…"),
+                   "a very long problem line is cut to something a dialog can show", failures, passes);
         }
 
         /// <summary>

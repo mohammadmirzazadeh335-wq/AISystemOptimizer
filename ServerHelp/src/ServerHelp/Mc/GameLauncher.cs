@@ -35,6 +35,44 @@ namespace ServerHelp.Mc
 
         public DateTime StartedAt = DateTime.MinValue;
 
+        /// <summary>How long the game ran. Empty until it has been started.</summary>
+        public TimeSpan RanFor
+        {
+            get
+            {
+                try
+                {
+                    if (StartedAt == DateTime.MinValue) return TimeSpan.Zero;
+                    TimeSpan ran = DateTime.Now - StartedAt;
+                    return ran > TimeSpan.Zero ? ran : TimeSpan.Zero;
+                }
+                catch { return TimeSpan.Zero; }
+            }
+        }
+
+        /// <summary>
+        /// The first line of the game's own log that names a problem, or "" when it only printed normal
+        /// startup lines. This is what turns "the game closed by itself" into something a user can act
+        /// on: a wrong Java version or a JVM flag its build does not know says exactly that in here.
+        /// </summary>
+        public static string FirstProblemLine(string logTail)
+        {
+            if (string.IsNullOrEmpty(logTail)) return "";
+            foreach (string raw in logTail.Replace("\r\n", "\n").Split('\n'))
+            {
+                string line = raw.Trim();
+                if (line.Length == 0) continue;
+                if (line.StartsWith("[ServerHelp]", StringComparison.OrdinalIgnoreCase)) continue;
+                string lower = line.ToLowerInvariant();
+                if (lower.IndexOf("unrecognized") >= 0 || lower.IndexOf("unsupported") >= 0 ||
+                    lower.IndexOf("could not") >= 0 || lower.IndexOf("cannot ") >= 0 ||
+                    lower.IndexOf("failed") >= 0 || lower.IndexOf("exception") >= 0 ||
+                    lower.IndexOf("error") >= 0)
+                    return line.Length <= 300 ? line : line.Substring(0, 300) + "…";
+            }
+            return "";
+        }
+
         public bool Start(LaunchPlan plan, out string error)
         {
             error = "";
@@ -66,13 +104,16 @@ namespace ServerHelp.Mc
                 };
 
                 AppPaths.EnsureAll();
-                _log = new StreamWriter(new FileStream(Path.Combine(AppPaths.Logs, "minecraft.log"),
+                _log = new StreamWriter(new FileStream(AppPaths.GameLog,
                     FileMode.Create, FileAccess.Write, FileShare.ReadWrite), Encoding.UTF8);
                 _log.AutoFlush = true;
 
                 if (!process.Start())
                 {
+                    // the log was opened for a process that never came up: closing it here keeps the
+                    // file handle from being held until the next garbage collection
                     error = L.T("اجرای بازی ممکن نشد.", "Could not start the game.");
+                    CloseLog();
                     return false;
                 }
                 process.BeginOutputReadLine();
@@ -112,6 +153,8 @@ namespace ServerHelp.Mc
                 }
             }
             catch { }
+            try { if (_process != null) _process.Dispose(); } catch { }
+            _process = null;
             CloseLog();
         }
 
