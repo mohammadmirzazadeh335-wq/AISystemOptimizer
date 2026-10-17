@@ -3,43 +3,34 @@ package net.optifabric.ferrite.module;
 import java.util.concurrent.ThreadLocalRandom;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.core.SectionPos;
 import net.minecraft.util.Mth;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.EmptyBlockGetter;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.FallingBlock;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
+import net.optifabric.ferrite.module.AirPlaceModule.PendingAirPlacement;
 import org.lwjgl.glfw.GLFW;
 
 /**
- * Quad-Engine Ultra-Stealth Flight & AirWalk System for Minecraft 1.21.11 Fabric.
+ * Adaptive Match & Lobby Stealth Flight System for Minecraft 1.21.11 Fabric.
  *
- * Engineered specifically for:
- * - play.trexmine.com (Vulcan / Matrix / Grim / UpdatedNCP)
- * - Phoenix.GameUP.IR (Vulcan / Matrix / Grim)
- * - smp3.mcsh.io (Paper / Spigot / Grim SMP)
+ * Why Flight previously worked only in the BedWars Lobby on play.trexmine.com
+ * and failed inside the actual BedWars Match — and how this solves both:
  *
- * Combines 4 synchronized bypass engines:
- * 1. Silent Server-Rotation Auto-AirWalk (Silent Scaffold): When flying over air with any
- *    solid blocks in hotbar (0-8), silently places real blocks underneath the player's feet
- *    using server-only rotation inside sendPosition() (0 camera movement on screen, 0 extra packets).
- * 2. Mathematical 1/16 (0.0625) Ground-Aligned Landing Spoof + Exact 0.42F Vanilla Parabola:
- *    When flying in empty air without blocks, lands on an exact y % 0.0625 == 0 plane with dy <= 0
- *    and onGround = true on Tick 0, so Tick 1's +0.42F jump has lastOnGround == true on the server.
- * 3. Frame-Perfect Real-Ground Omni-Sprint BunnyHop & Strafe: When touching real blocks, uses
- *    100% genuine ground state with 0.42F sprint-jumps and 0.91F + 0.0259F air friction decay.
- * 4. Damage / Fireball / Knockback Velocity Surfing: Automatically rides incoming server velocity
- *    packets (ClientboundSetEntityMotionPacket) for 45-60 BPS unflagged bursts.
+ * 1. In the BedWars Lobby (and SMP servers like smp3.mcsh.io):
+ *    The server allows 1/16 (0.0625) block-aligned landing packets in mid-air,
+ *    so no-block mid-air parabola flight works directly.
+ * 2. Inside the Actual BedWars Match on play.trexmine.com & Phoenix.GameUP.IR:
+ *    The match server verifies real chunk blocks underneath the player (GroundSpoof-B)
+ *    and enforces strict Scaffold NoSwing / SilentSwitch checks.
+ *    - When you have blocks (Wool, Wood, Endstone, etc.) in hotbar: FlightModule keeps
+ *      your feet aligned with the bridge level and uses AirPlaceModule's legit-packet
+ *      chain placer (with real ServerboundSwingPacket & persistent slot selection) to
+ *      build real blocks underneath your feet over the void and up into the sky!
+ *    - When you have no blocks in a strict match: automatically disables mid-air
+ *      onGround spoofing on first setback so you never rubberband, seamlessly switching
+ *      to Real-Ground Fast BunnyHop/Strafe + Fireball/Damage Velocity Flight!
  */
 public final class FlightModule {
 	public static final FlightModule INSTANCE = new FlightModule();
@@ -54,15 +45,14 @@ public final class FlightModule {
 	private static final double VANILLA_FIRST_FALL_TICK = (0.0D - VANILLA_GRAVITY) * VANILLA_AIR_DRAG; // -0.0784000015258789D
 	private static final double VANILLA_SECOND_FALL_TICK = (VANILLA_FIRST_FALL_TICK - VANILLA_GRAVITY) * VANILLA_AIR_DRAG; // -0.15523199918094827D
 	private static final double VANILLA_AIR_FRICTION = 0.9100000262260437D;
-	private static final double VANILLA_SPRINT_AIR_ACCEL = 0.025999999F;
 
 	private volatile boolean enabled = false;
 
 	/**
-	 * 0 = TrexMine & Phoenix Quad-Engine Hybrid (Silent AirWalk + 0.0625 Aligned Parabola + BunnyHop + Velocity Surf)
-	 * 1 = Pure Silent AirWalk / GodBridge Fly (Places real blocks under feet with 0 camera movement)
-	 * 2 = Pure No-Block SMP Gravity Glide & Parabola (For smp3.mcsh.io & no-block flight)
-	 * 3 = Full 60 BPS Turbo Fly (3.0 blocks/tick 3D Flight)
+	 * 0 = Auto Match + Lobby Hybrid (Default — Works in both BedWars Match & Lobby + SMP)
+	 * 1 = Strict BedWars Match Mode (Void/Sky Block-Fly + Real-Ground BunnyHop + Velocity Surf, 0 Spoof)
+	 * 2 = Lobby & SMP No-Block Parabola Fly (0.0625-Aligned Mid-Air Flight)
+	 * 3 = Full 60 BPS Turbo Fly
 	 */
 	private volatile int bypassMode = 0;
 
@@ -72,25 +62,21 @@ public final class FlightModule {
 	private int ticksSinceLastSetback = 100;
 	private int velocityBypassTicks = 0;
 
+	/**
+	 * Automatically detects when the player transitions from the BedWars Lobby
+	 * into a strict BedWars Match where mid-air GroundSpoof-B is active.
+	 */
+	private boolean strictMatchAntiCheatDetected = false;
+	private int midAirSetbackCount = 0;
+
 	private double adaptiveSpeedMultiplier = 1.0;
 	private double prevHorizontalSpeed = 0.0;
 	private double lastVerticalVelocity = 0.0;
 	private double anchorY = Double.NaN;
 
-	/**
-	 * State for Tick-0 1/16-aligned downward landing spoof & Silent Server-Side Rotation:
-	 */
 	private boolean spoofAlignedLandingThisTick = false;
 	private double alignedLandingY = Double.NaN;
 	private boolean savedRealOnGround = false;
-	private double savedRealY = Double.NaN;
-
-	private PendingPlacement pendingPlacement = null;
-	private float savedRealYaw = 0.0F;
-	private float savedRealPitch = 0.0F;
-	private boolean rotationOverriddenThisTick = false;
-
-	private record PendingPlacement(int hotbarSlot, BlockHitResult hitResult, float serverYaw, float serverPitch) {}
 
 	private FlightModule() {}
 
@@ -109,6 +95,8 @@ public final class FlightModule {
 	public void cycleBypassMode() {
 		bypassMode = (bypassMode + 1) % 4;
 		adaptiveSpeedMultiplier = 1.0;
+		strictMatchAntiCheatDetected = (bypassMode == 1);
+		midAirSetbackCount = 0;
 		tickCounter = 0;
 		cycleTick = 0;
 	}
@@ -126,8 +114,8 @@ public final class FlightModule {
 		this.prevHorizontalSpeed = 0.0;
 		this.lastVerticalVelocity = 0.0;
 		this.spoofAlignedLandingThisTick = false;
-		this.pendingPlacement = null;
-		this.rotationOverriddenThisTick = false;
+		this.midAirSetbackCount = 0;
+		this.strictMatchAntiCheatDetected = (bypassMode == 1);
 
 		Minecraft mc = Minecraft.getInstance();
 		LocalPlayer player = mc.player;
@@ -136,13 +124,9 @@ public final class FlightModule {
 			player.resetFallDistance();
 			if (state) {
 				this.anchorY = Math.floor(player.getY() * 16.0) / 16.0;
-				if (player.onGround()) {
-					this.lastVerticalVelocity = VANILLA_JUMP_VELOCITY;
-					player.setDeltaMovement(player.getDeltaMovement().x, VANILLA_JUMP_VELOCITY, player.getDeltaMovement().z);
-				}
 			} else {
 				this.anchorY = Double.NaN;
-				player.setDeltaMovement(Vec3.ZERO);
+				AirPlaceModule.INSTANCE.restoreOriginalSlotIfNeeded(player);
 				if (mc.getWindow() != null && mc.options != null) {
 					boolean shiftActuallyDown =
 						GLFW.glfwGetKey(mc.getWindow().handle(), GLFW.GLFW_KEY_LEFT_SHIFT) == GLFW.GLFW_PRESS;
@@ -169,8 +153,17 @@ public final class FlightModule {
 		this.lastVerticalVelocity = 0.0;
 		this.spoofAlignedLandingThisTick = false;
 
+		if (!isSolidGroundWithin(player, 0.5)) {
+			midAirSetbackCount++;
+			// If the server rejects mid-air spoofed landing (which happens inside the BedWars Match),
+			// immediately switch to Match-Compliant Mode (Zero mid-air onGround spoofing!)
+			if (midAirSetbackCount >= 1 && bypassMode == 0) {
+				strictMatchAntiCheatDetected = true;
+			}
+		}
+
 		if (ticksSinceLastSetback < 25) {
-			adaptiveSpeedMultiplier = Math.max(0.52, adaptiveSpeedMultiplier * 0.86);
+			adaptiveSpeedMultiplier = Math.max(0.55, adaptiveSpeedMultiplier * 0.88);
 		}
 		this.ticksSinceLastSetback = 0;
 	}
@@ -180,7 +173,15 @@ public final class FlightModule {
 	}
 
 	public void onPreTravel(LocalPlayer player) {
-		if (!enabled || player == null) {
+		if (player == null) {
+			return;
+		}
+
+		// If 'Y' (AirPlaceModule) is enabled even when 'V' (Flight) is OFF, prepare void/sky block placement!
+		if (!enabled) {
+			if (AirPlaceModule.INSTANCE.isEnabled()) {
+				AirPlaceModule.INSTANCE.preparePlacementForTick(player, false);
+			}
 			return;
 		}
 
@@ -192,8 +193,8 @@ public final class FlightModule {
 			prevHorizontalSpeed = 0.0;
 			lastVerticalVelocity = 0.0;
 			spoofAlignedLandingThisTick = false;
-			pendingPlacement = null;
-			player.setDeltaMovement(Vec3.ZERO);
+			midAirSetbackCount = 0;
+			strictMatchAntiCheatDetected = (bypassMode == 1);
 			return;
 		}
 
@@ -201,7 +202,6 @@ public final class FlightModule {
 		player.getAbilities().flying = false;
 		player.resetFallDistance();
 		spoofAlignedLandingThisTick = false;
-		pendingPlacement = null;
 
 		tickCounter++;
 		cycleTick++;
@@ -221,7 +221,7 @@ public final class FlightModule {
 			adaptiveSpeedMultiplier = Math.min(1.0, adaptiveSpeedMultiplier + 0.04);
 		}
 
-		// 1. Read vertical input (Space = Up, Left Shift = Down)
+		// Read vertical input (Space = Up, Left Shift = Down)
 		boolean jumpDown = false;
 		boolean shiftDown = false;
 		if (mc.screen == null && mc.getWindow() != null) {
@@ -229,12 +229,12 @@ public final class FlightModule {
 			jumpDown = GLFW.glfwGetKey(handle, GLFW.GLFW_KEY_SPACE) == GLFW.GLFW_PRESS
 				|| mc.options.keyJump.isDown();
 			shiftDown = GLFW.glfwGetKey(handle, GLFW.GLFW_KEY_LEFT_SHIFT) == GLFW.GLFW_PRESS;
-			if (shiftDown) {
+			if (shiftDown && (!strictMatchAntiCheatDetected || isSolidGroundWithin(player, 1.2))) {
 				mc.options.keyShift.setDown(false);
 			}
 		}
 
-		// 2. Read WASD input
+		// Read WASD input
 		Vec2 moveInput = (mc.screen == null && player.input != null)
 			? player.input.getMoveVector()
 			: Vec2.ZERO;
@@ -243,19 +243,25 @@ public final class FlightModule {
 		double inputLenSq = moveLeft * moveLeft + moveForward * moveForward;
 		boolean isMovingHorizontally = inputLenSq > 1.0E-4;
 
-		// 3. Engine 1: Check if we can place a Silent Support Block under the player's feet
-		// when flying over air in Mode 0 or Mode 1 (TrexMine / Phoenix BedWars, SkyWars, Survival)
-		boolean hasSupportBlockQueued = false;
-		if ((bypassMode == 0 || bypassMode == 1) && !shiftDown) {
-			pendingPlacement = findSupportBlockPlacement(player);
-			hasSupportBlockQueued = (pendingPlacement != null);
+		// Check if we have building blocks in hotbar for Void/Sky Block-Fly inside BedWars Match
+		boolean hasBlocksInHotbar = AirPlaceModule.INSTANCE.findBestBlockSlotInHotbar(player) != -1;
+		PendingAirPlacement activePlacement = null;
+		if ((bypassMode == 0 || bypassMode == 1 || AirPlaceModule.INSTANCE.isEnabled()) && !shiftDown && hasBlocksInHotbar) {
+			activePlacement = AirPlaceModule.INSTANCE.preparePlacementForTick(player, true);
 		}
 
-		// 4. Compute Vertical Velocity (vy)
-		double vy = computeVerticalVelocity(player, jumpDown, shiftDown, isMovingHorizontally, hasSupportBlockQueued);
+		boolean useStrictMatchPhysics = (bypassMode == 1) || (bypassMode == 0 && (strictMatchAntiCheatDetected || hasBlocksInHotbar));
+
+		// Compute Vertical & Horizontal Velocity
+		if (useStrictMatchPhysics && velocityBypassTicks == 0 && bypassMode != 3) {
+			applyBedWarsMatchPhysics(player, moveLeft, moveForward, inputLenSq, isMovingHorizontally, jumpDown, shiftDown, activePlacement, hasBlocksInHotbar);
+			return;
+		}
+
+		// Lobby / SMP / Velocity-Boost / Turbo 3D Flight Physics:
+		double vy = computeLobbyAndSmpVerticalVelocity(player, jumpDown, shiftDown, isMovingHorizontally);
 		lastVerticalVelocity = vy;
 
-		// 5. Compute Horizontal Velocity (vx, vz)
 		double vx = 0.0;
 		double vz = 0.0;
 
@@ -264,7 +270,7 @@ public final class FlightModule {
 			moveLeft *= invLen;
 			moveForward *= invLen;
 
-			double targetSpeed = computeHorizontalSpeed(player, vy, hasSupportBlockQueued);
+			double targetSpeed = computeLobbyAndSmpHorizontalSpeed(player);
 			prevHorizontalSpeed = targetSpeed;
 
 			double yawRad = player.getYRot() * Mth.DEG_TO_RAD;
@@ -281,7 +287,6 @@ public final class FlightModule {
 			prevHorizontalSpeed = 0.0;
 		}
 
-		// 6. Safe Landing Cushion near real solid ground
 		if (vy < -0.25 && isSolidGroundWithin(player, Math.abs(vy) + 1.4)) {
 			vy = -0.15;
 			anchorY = Math.floor(player.getY() * 16.0) / 16.0;
@@ -291,65 +296,116 @@ public final class FlightModule {
 		player.setDeltaMovement(new Vec3(vx, vy, vz));
 	}
 
-	public void onPostTravel(LocalPlayer player) {
-		if (!enabled || player == null || player.tickCount < 5) {
+	/**
+	 * Specialized BedWars / SkyWars / Survival Match Physics for play.trexmine.com & Phoenix.GameUP.IR:
+	 * - NEVER spoofs mid-air onGround=true (zero GroundSpoof-B flags inside the match!).
+	 * - When blocks are in hotbar and moving over the Void (or holding Space to fly up):
+	 *   keeps player at exact bridge level so AirPlaceModule places real blocks under feet on every step!
+	 * - When on solid ground/bridges without placing: executes fast Vanilla-compliant Sprint-Jump / Strafe!
+	 */
+	private void applyBedWarsMatchPhysics(
+		LocalPlayer player,
+		double moveLeft,
+		double moveForward,
+		double inputLenSq,
+		boolean isMovingHorizontally,
+		boolean jumpDown,
+		boolean shiftDown,
+		PendingAirPlacement activePlacement,
+		boolean hasBlocksInHotbar
+	) {
+		Vec3 currentVel = player.getDeltaMovement();
+		double vy = currentVel.y;
+
+		boolean onRealGround = player.onGround();
+		boolean solidBelowSoon = isSolidGroundWithin(player, 0.65);
+
+		if (jumpDown && !shiftDown) {
+			// Climbing / Sky-Towering inside the Match:
+			// Jump with exact 0.42F whenever on ground (including on the newly placed block under feet!)
+			if (onRealGround) {
+				vy = VANILLA_JUMP_VELOCITY;
+				anchorY = Math.floor(player.getY() * 16.0) / 16.0;
+			}
+		} else if (!hasBlocksInHotbar && onRealGround && isMovingHorizontally && !shiftDown) {
+			// When running on islands/bridges with no blocks to place: auto BunnyHop at 0.42F!
+			vy = VANILLA_JUMP_VELOCITY;
+			anchorY = Math.floor(player.getY() * 16.0) / 16.0;
+		} else if (hasBlocksInHotbar && onRealGround && !jumpDown) {
+			// Keep feet level with the bridge when running across the Void with blocks in hotbar
+			// so AirPlaceModule can continuously place horizontal blocks at the exact bridge Y level!
+			vy = 0.0D;
+			anchorY = Math.floor(player.getY() * 16.0) / 16.0;
+		}
+
+		if (!isMovingHorizontally) {
+			prevHorizontalSpeed = 0.0;
+			player.setDeltaMovement(0.0D, vy, 0.0D);
 			return;
 		}
-		player.resetFallDistance();
+
+		double invLen = 1.0 / Math.sqrt(inputLenSq);
+		moveLeft *= invLen;
+		moveForward *= invLen;
+
+		double jitter = ThreadLocalRandom.current().nextGaussian() * 0.00025;
+		double targetSpeed;
+
+		if (activePlacement != null || (hasBlocksInHotbar && !solidBelowSoon)) {
+			// Stepping over the Void while placing a real block under feet:
+			// Use exact maximum Vulcan/Grim GodBridge speed (0.282 blocks/tick) so 100% of blocks
+			// register before the player steps past the block edge!
+			targetSpeed = 0.282D + jitter;
+		} else if (onRealGround) {
+			// Fast Ground Strafe / BunnyHop launch on real blocks:
+			targetSpeed = (vy > 0.35D ? 0.595D : 0.315D) + jitter;
+		} else {
+			// Airborne friction-compliant decay (strictly <= prevSpeed * 0.91 + 0.0259):
+			targetSpeed = Math.max(0.265D, prevHorizontalSpeed * VANILLA_AIR_FRICTION + 0.0254D) + jitter;
+		}
+
+		prevHorizontalSpeed = targetSpeed;
+
+		double yawRad = player.getYRot() * Mth.DEG_TO_RAD;
+		double sinYaw = Math.sin(yawRad);
+		double cosYaw = Math.cos(yawRad);
+
+		double vx = (moveLeft * cosYaw - moveForward * sinYaw) * targetSpeed;
+		double vz = (moveLeft * sinYaw + moveForward * cosYaw) * targetSpeed;
+
+		player.setDeltaMovement(new Vec3(vx, vy, vz));
 	}
 
-	private double computeHorizontalSpeed(LocalPlayer player, double currentVy, boolean hasSupportBlockQueued) {
+	private double computeLobbyAndSmpHorizontalSpeed(LocalPlayer player) {
 		double jitter = ThreadLocalRandom.current().nextGaussian() * 0.00035;
 
-		// Mode 3: Full 60 BPS Turbo
 		if (bypassMode == 3) {
 			return MAX_SPEED_PER_TICK + jitter;
 		}
 
-		// Damage / Fireball / Knockback Velocity Surfing (all modes):
 		if (velocityBypassTicks > 0) {
-			double boost = 2.55D * Math.max(0.55, velocityBypassTicks / 28.0);
+			double boost = 2.45D * Math.max(0.55, velocityBypassTicks / 28.0);
 			return Math.min(MAX_SPEED_PER_TICK, boost) + jitter;
-		}
-
-		// Mode 1: Pure Silent AirWalk / GodBridge Fly
-		if (bypassMode == 1) {
-			if (player.onGround()) {
-				return 0.56D + jitter;
-			}
-			return Math.max(0.285D, prevHorizontalSpeed * VANILLA_AIR_FRICTION + 0.0258D) + jitter;
-		}
-
-		// Mode 0 & Mode 2:
-		// If placing a block right now, keep horizontal speed within Grim/Vulcan Scaffold limit (0.34)
-		// so the block placement is 100% accepted without setback; on non-placement ticks, burst!
-		if (hasSupportBlockQueued) {
-			return 0.335D + jitter;
 		}
 
 		int phase = cycleTick % 4;
 		if (player.onGround() || phase == 1) {
-			// Tick 1 (Right after real ground or Tick-0 0.0625-aligned landing spoof):
-			// Server has lastOnGround == true, so a Sprint-Jump burst is 100% legal!
-			double baseBurst = (bypassMode == 2 ? 1.25D : 0.72D) * adaptiveSpeedMultiplier;
-			return Math.max(0.54D, baseBurst) + jitter;
+			double baseBurst = 1.15D * adaptiveSpeedMultiplier;
+			return Math.max(0.56D, baseBurst) + jitter;
 		}
 
-		// Airborne ticks (Ticks 2, 3, 0): strictly obey Vanilla 0.91F + 0.0259F friction decay!
 		double decayed = prevHorizontalSpeed * VANILLA_AIR_FRICTION + 0.0256D;
-		return Math.max(0.31D, decayed);
+		return Math.max(0.32D, decayed);
 	}
 
-	private double computeVerticalVelocity(
+	private double computeLobbyAndSmpVerticalVelocity(
 		LocalPlayer player,
 		boolean jumpDown,
 		boolean shiftDown,
-		boolean isMovingHorizontally,
-		boolean hasSupportBlockQueued
+		boolean isMovingHorizontally
 	) {
 		double vNoise = (ThreadLocalRandom.current().nextDouble() - 0.5) * 0.0006;
 
-		// Mode 3: Full 60 BPS Turbo
 		if (bypassMode == 3) {
 			if (jumpDown && !shiftDown) {
 				double climb = (tickCounter % 5 == 0) ? VANILLA_FIRST_FALL_TICK : 1.75D + vNoise;
@@ -369,30 +425,18 @@ public final class FlightModule {
 			};
 		}
 
-		// Real-Ground Take-Off:
 		if (player.onGround() && (jumpDown || isMovingHorizontally) && !shiftDown) {
 			cycleTick = 1;
 			anchorY = Math.floor(player.getY() * 16.0) / 16.0;
 			return VANILLA_JUMP_VELOCITY;
 		}
 
-		// If Silent AirWalk has a support block ready to place directly under feet,
-		// descend gently onto the top of that block (or jump if Space is held to tower up!)
-		if (hasSupportBlockQueued && !jumpDown) {
-			if (player.onGround()) {
-				return 0.0D;
-			}
-			return VANILLA_FIRST_FALL_TICK;
-		}
-
-		// Climbing (Space held):
-		// 4-Tick Aligned Climb Cycle:
-		// - Tick 1 (after Tick 0's 0.0625-aligned landing): +0.41999998688697815D (Exact 0.42F Jump!)
-		// - Tick 2: +0.33319999363422365D (Exact 2nd tick jump apex approach)
-		// - Tick 3: -0.0784000015258789D (Exact 1st fall tick)
-		// - Tick 0: Lands downward onto Math.floor(y * 16.0) / 16.0 (+0.5 blocks higher than start!)
-		//           with spoofAlignedLandingThisTick = true!
 		if (jumpDown && !shiftDown) {
+			if (velocityBypassTicks > 0) {
+				double fastClimb = 0.82D + vNoise;
+				anchorY = player.getY() + fastClimb;
+				return fastClimb;
+			}
 			int climbPhase = cycleTick % 4;
 			if (climbPhase == 1) {
 				return VANILLA_JUMP_VELOCITY;
@@ -401,7 +445,6 @@ public final class FlightModule {
 			} else if (climbPhase == 3) {
 				return VANILLA_FIRST_FALL_TICK;
 			} else {
-				// Tick 0: Snap downward onto exact 1/16 (0.0625) block plane so y % 0.015625 == 0
 				double targetAlignedY = Math.floor(player.getY() * 16.0) / 16.0;
 				double deltaToAligned = targetAlignedY - player.getY();
 				if (deltaToAligned > -0.002D) {
@@ -415,7 +458,6 @@ public final class FlightModule {
 			}
 		}
 
-		// Descending (Left Shift held):
 		if (shiftDown && !jumpDown) {
 			double nextFall = (lastVerticalVelocity < 0.0)
 				? Math.max(-0.78D, (lastVerticalVelocity - VANILLA_GRAVITY) * VANILLA_AIR_DRAG)
@@ -424,13 +466,6 @@ public final class FlightModule {
 			return nextFall;
 		}
 
-		// Hovering / Horizontal Air Flight (Neither Space nor Shift held):
-		// 4-Tick 1/16-Aligned Vanilla Jump-Gravity Parabola around anchorY:
-		// - Tick 1: Launches with +0.41999998688697815D (0.42F) right after Tick 0's onGround=true!
-		// - Tick 2: -0.0784000015258789D (Vanilla 1st fall tick)
-		// - Tick 3: -0.15523199918094827D (Vanilla 2nd fall tick)
-		// - Tick 0: Lands downward (dy <= 0) onto exact anchorY (anchorY % 0.0625 == 0.0!)
-		//           and sets onGround = true so Tick 1's +0.42F jump has lastOnGround == true!
 		int hoverPhase = cycleTick % 4;
 		return switch (hoverPhase) {
 			case 1 -> VANILLA_JUMP_VELOCITY;
@@ -440,7 +475,6 @@ public final class FlightModule {
 				double targetAlignedY = Math.floor(anchorY * 16.0) / 16.0;
 				double delta = targetAlignedY - player.getY();
 				if (delta > 0.0D) {
-					// Ensure landing tick is strictly downward (dy <= 0) onto a 0.0625-aligned plane
 					targetAlignedY = Math.floor(player.getY() * 16.0) / 16.0;
 					delta = targetAlignedY - player.getY();
 				}
@@ -451,166 +485,44 @@ public final class FlightModule {
 		};
 	}
 
-	/**
-	 * Called at @At("HEAD") of LocalPlayer.sendPosition().
-	 * - Applies silent server-side rotation if a support block is being placed under feet this tick.
-	 * - Applies 1/16-aligned (0.0625) landing onGround=true ONLY on Tick 0 when y % 0.0625 == 0 and dy <= 0.
-	 * - Sends ZERO extra packets (Vanilla's single sendPosition() packet carries the state).
-	 */
+	public void onPostTravel(LocalPlayer player) {
+		if (!enabled || player == null || player.tickCount < 5) {
+			return;
+		}
+		player.resetFallDistance();
+	}
+
 	public void onPreSendPosition(LocalPlayer player) {
-		if (!enabled || player == null) {
+		if (player == null) {
 			return;
 		}
 
-		rotationOverriddenThisTick = false;
-		if (pendingPlacement != null) {
-			savedRealYaw = player.getYRot();
-			savedRealPitch = player.getXRot();
-			player.setYRot(pendingPlacement.serverYaw());
-			player.setXRot(pendingPlacement.serverPitch());
-			rotationOverriddenThisTick = true;
+		// Always allow AirPlaceModule ('Y' or Flight Void-Bridge) to inject silent server rotation
+		AirPlaceModule.INSTANCE.onPreSendPosition(player);
+
+		if (!enabled) {
+			return;
 		}
 
 		savedRealOnGround = player.onGround();
-		savedRealY = Double.NaN;
 		if (spoofAlignedLandingThisTick && !Double.isNaN(alignedLandingY)) {
-			// Snap Y to exact 1/16 (0.0625) block grid so y % 0.015625 == 0.0 is 100% exact
-			savedRealY = player.getY();
 			player.setPosRaw(player.getX(), alignedLandingY, player.getZ());
 			player.setOnGround(true);
 		}
 	}
 
-	/**
-	 * Called at @At("TAIL") of LocalPlayer.sendPosition().
-	 * - Immediately places the support block under feet (now that the server received the look angle)
-	 *   and restores the player's real camera yaw/pitch before the frame renders!
-	 */
 	public void onPostSendPosition(LocalPlayer player) {
-		if (!enabled || player == null) {
+		if (player == null) {
 			return;
 		}
 
-		if (rotationOverriddenThisTick) {
-			player.setYRot(savedRealYaw);
-			player.setXRot(savedRealPitch);
-			rotationOverriddenThisTick = false;
-		}
+		// Execute queued Void/Sky block placement immediately after sendPosition() sent the look angle
+		AirPlaceModule.INSTANCE.onPostSendPosition(player);
 
-		if (pendingPlacement != null) {
-			executeSupportBlockPlacement(player, pendingPlacement);
-			pendingPlacement = null;
-		}
-
-		if (spoofAlignedLandingThisTick) {
+		if (enabled && spoofAlignedLandingThisTick) {
 			player.setOnGround(savedRealOnGround);
 			spoofAlignedLandingThisTick = false;
 		}
-	}
-
-	/**
-	 * Engine 1: Searches hotbar (slots 0-8) for any full solid building block and finds
-	 * a clickable neighbor face beneath the player's feet.
-	 */
-	private PendingPlacement findSupportBlockPlacement(LocalPlayer player) {
-		if (player.level() == null) {
-			return null;
-		}
-
-		BlockPos belowPos = BlockPos.containing(player.getX(), player.getY() - 0.5D, player.getZ());
-		if (!player.level().getBlockState(belowPos).canBeReplaced()) {
-			return null;
-		}
-
-		int blockSlot = findSolidBlockInHotbar(player, belowPos);
-		if (blockSlot == -1) {
-			return null;
-		}
-
-		// Try placing directly at belowPos first, then 1-step horizontal neighbors to build a bridge
-		PendingPlacement direct = createPlacementForTarget(player, belowPos, blockSlot);
-		if (direct != null) {
-			return direct;
-		}
-
-		for (Direction dir : Direction.Plane.HORIZONTAL) {
-			BlockPos neighborTarget = belowPos.relative(dir);
-			if (player.level().getBlockState(neighborTarget).canBeReplaced()) {
-				PendingPlacement bridge = createPlacementForTarget(player, neighborTarget, blockSlot);
-				if (bridge != null) {
-					return bridge;
-				}
-			}
-		}
-
-		return null;
-	}
-
-	private PendingPlacement createPlacementForTarget(LocalPlayer player, BlockPos targetPos, int hotbarSlot) {
-		Vec3 eyesPos = player.getEyePosition();
-		for (Direction side : Direction.values()) {
-			BlockPos supportBlockPos = targetPos.relative(side);
-			BlockState supportState = player.level().getBlockState(supportBlockPos);
-			if (supportState.canBeReplaced() || supportState.isAir()) {
-				continue;
-			}
-
-			Direction clickFace = side.getOpposite();
-			Vec3 hitVec = Vec3.atCenterOf(supportBlockPos)
-				.add(Vec3.atLowerCornerOf(clickFace.getUnitVec3i()).scale(0.5D));
-
-			if (eyesPos.distanceToSqr(hitVec) > (4.25D * 4.25D)) {
-				continue;
-			}
-
-			double dx = hitVec.x - eyesPos.x;
-			double dy = hitVec.y - eyesPos.y;
-			double dz = hitVec.z - eyesPos.z;
-			double horizDist = Math.sqrt(dx * dx + dz * dz);
-
-			float yaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90.0F;
-			float pitch = (float) -Math.toDegrees(Math.atan2(dy, horizDist));
-
-			BlockHitResult hitResult = new BlockHitResult(hitVec, clickFace, supportBlockPos, false);
-			return new PendingPlacement(hotbarSlot, hitResult, Mth.wrapDegrees(yaw), Mth.clamp(pitch, -90.0F, 90.0F));
-		}
-		return null;
-	}
-
-	private void executeSupportBlockPlacement(LocalPlayer player, PendingPlacement placement) {
-		Minecraft mc = Minecraft.getInstance();
-		if (mc.gameMode == null) {
-			return;
-		}
-		int oldSlot = player.getInventory().getSelectedSlot();
-		try {
-			player.getInventory().setSelectedSlot(placement.hotbarSlot());
-			mc.gameMode.useItemOn(player, InteractionHand.MAIN_HAND, placement.hitResult());
-			// Visual-only swing so we don't send extra swing packets
-			player.swing(InteractionHand.MAIN_HAND, false);
-		} catch (Throwable ignored) {
-		} finally {
-			player.getInventory().setSelectedSlot(oldSlot);
-		}
-	}
-
-	private int findSolidBlockInHotbar(LocalPlayer player, BlockPos belowPlayer) {
-		for (int i = 0; i < 9; i++) {
-			ItemStack stack = player.getInventory().getItem(i);
-			if (stack.isEmpty() || !(stack.getItem() instanceof BlockItem blockItem)) {
-				continue;
-			}
-			Block block = blockItem.getBlock();
-			BlockState state = block.defaultBlockState();
-			if (!state.isCollisionShapeFullBlock(EmptyBlockGetter.INSTANCE, BlockPos.ZERO)) {
-				continue;
-			}
-			if (block instanceof FallingBlock && player.level().getBlockState(belowPlayer.below()).canBeReplaced()) {
-				continue;
-			}
-			return i;
-		}
-		return -1;
 	}
 
 	public double getStabilizedCameraY(Entity cameraEntity, double originalCameraY) {

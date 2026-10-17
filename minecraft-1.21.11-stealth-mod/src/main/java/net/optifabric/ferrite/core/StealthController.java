@@ -3,6 +3,7 @@ package net.optifabric.ferrite.core;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.optifabric.ferrite.module.AirPlaceModule;
 import net.optifabric.ferrite.module.AutoClickerModule;
 import net.optifabric.ferrite.module.FlightModule;
 import net.optifabric.ferrite.module.XRayModule;
@@ -67,7 +68,14 @@ public final class StealthController {
 			return false;
 		}
 
-		if (key == GLFW.GLFW_KEY_X) {
+		if (key == GLFW.GLFW_KEY_Y) {
+			// Y: Toggle Void, Sky & Mid-Air Block Placement (AirPlace / GodBridge / Sky-Tower)
+			AirPlaceModule.INSTANCE.toggle();
+			if (AirPlaceModule.INSTANCE.isEnabled() && mc.player != null) {
+				AirPlaceModule.INSTANCE.preparePlacementForTick(mc.player, false);
+			}
+			return true;
+		} else if (key == GLFW.GLFW_KEY_X) {
 			if (altHeld) {
 				// Alt + X: Toggle Mobs + Lava + Water visibility in X-Ray
 				XRayModule.INSTANCE.toggleShowMobsAndFluids();
