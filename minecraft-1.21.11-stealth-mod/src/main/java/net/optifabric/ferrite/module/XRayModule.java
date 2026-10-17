@@ -13,17 +13,17 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.vehicle.minecart.AbstractMinecart;
+import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.ShulkerBoxBlock;
 import net.minecraft.world.level.block.state.BlockState;
-import net.optifabric.ferrite.bridge.OptionInstanceDuck;
 
 public final class XRayModule {
 	public static final XRayModule INSTANCE = new XRayModule();
 
 	/**
-	 * Zero-allocation O(1) identity set of core valuable blocks (Ores, Containers, Spawners, Portals).
+	 * Zero-allocation O(1) identity set of core valuable blocks (Ores, Containers, Spawners, Portals, Beds).
 	 * Eliminates String/Identifier allocations during chunk meshing so flying at 60 BPS with X-Ray has zero lag.
 	 */
 	private static final Set<Block> CORE_VALUABLE_BLOCKS = new ReferenceOpenHashSet<>(new Block[] {
@@ -63,6 +63,7 @@ public final class XRayModule {
 		Blocks.COPPER_ORE,
 		Blocks.DEEPSLATE_COPPER_ORE,
 		Blocks.RAW_COPPER_BLOCK,
+		Blocks.COPPER_BLOCK,
 		Blocks.NETHER_QUARTZ_ORE,
 		// Containers, Stashes & Redstone Base Mechanisms
 		Blocks.CHEST,
@@ -134,11 +135,10 @@ public final class XRayModule {
 	private volatile boolean enabled = false;
 	/**
 	 * Option requested by user: when enabled (default = true, toggleable via B or Alt + X),
-	 * Mobs, Lava, and Water are also rendered alongside main ores & chests.
+	 * Mobs, Lava, and Water are also rendered alongside main ores, beds & chests.
 	 */
 	private volatile boolean showMobsAndFluids = true;
 	private volatile boolean exposedOnlyBypass = false;
-	private double savedGamma = 1.0;
 
 	private XRayModule() {}
 
@@ -177,29 +177,12 @@ public final class XRayModule {
 			return;
 		}
 		this.enabled = state;
-		Minecraft mc = Minecraft.getInstance();
-		if (mc.options != null) {
-			if (state) {
-				double current = mc.options.gamma().get();
-				if (current <= 1.0) {
-					savedGamma = current;
-				}
-				OptionInstanceDuck.of(mc.options.gamma()).setUncheckedValue(16.0);
-			} else {
-				OptionInstanceDuck.of(mc.options.gamma()).setUncheckedValue(savedGamma);
-			}
-		}
 		reloadChunks();
 	}
 
 	public void onTick() {
-		if (!enabled) {
-			return;
-		}
-		Minecraft mc = Minecraft.getInstance();
-		if (mc.options != null && mc.options.gamma().get() < 16.0) {
-			OptionInstanceDuck.of(mc.options.gamma()).setUncheckedValue(16.0);
-		}
+		// Gamma 16.0 is dynamically returned in OptionInstanceMixin.onGet() without
+		// ever mutating the stored field or writing to .minecraft/options.txt.
 	}
 
 	public Boolean shouldDrawSide(BlockState state, BlockPos pos) {
@@ -229,7 +212,9 @@ public final class XRayModule {
 		if (FLUID_BLOCKS.contains(block)) {
 			return showMobsAndFluids;
 		}
-		boolean isValuable = CORE_VALUABLE_BLOCKS.contains(block) || block instanceof ShulkerBoxBlock;
+		boolean isValuable = CORE_VALUABLE_BLOCKS.contains(block)
+			|| block instanceof ShulkerBoxBlock
+			|| block instanceof BedBlock;
 		if (!isValuable) {
 			return false;
 		}

@@ -1,7 +1,9 @@
 package net.optifabric.ferrite.core;
 
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.optifabric.ferrite.module.AutoClickerModule;
 import net.optifabric.ferrite.module.FlightModule;
 import net.optifabric.ferrite.module.XRayModule;
 import org.lwjgl.glfw.GLFW;
@@ -20,12 +22,15 @@ public final class StealthController {
 		return zoomActive;
 	}
 
-	public void onKeyPress(int key, int action, int modifiers) {
+	/**
+	 * @return true if the key event should be consumed (cancelled from reaching Vanilla keybinds).
+	 */
+	public boolean onKeyPress(int key, int action, int modifiers) {
 		Minecraft mc = Minecraft.getInstance();
 		// Never process hotkeys while any GUI/Chat/Inventory/Sign/Pause screen is open
 		if (mc.screen != null || mc.player == null) {
 			zoomActive = false;
-			return;
+			return false;
 		}
 
 		// Z key: smooth 4x Cave & Ore Zoom while held
@@ -35,15 +40,32 @@ public final class StealthController {
 			} else if (action == GLFW.GLFW_RELEASE) {
 				zoomActive = false;
 			}
-			return;
-		}
-
-		if (action != GLFW.GLFW_PRESS) {
-			return;
+			return false;
 		}
 
 		boolean ctrlHeld = (modifiers & GLFW.GLFW_MOD_CONTROL) != 0;
 		boolean altHeld = (modifiers & GLFW.GLFW_MOD_ALT) != 0;
+
+		// T key: Toggle 30-50 Variable CPS AutoClicker (consume event so Chat doesn't open mid-PvP)
+		if (key == GLFW.GLFW_KEY_T && !ctrlHeld && !altHeld) {
+			if (action == GLFW.GLFW_PRESS) {
+				AutoClickerModule.INSTANCE.toggle();
+			}
+			return true;
+		}
+
+		// Allow Enter or Ctrl + T to open Chat seamlessly when in-game
+		if ((key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER || (key == GLFW.GLFW_KEY_T && ctrlHeld))
+			&& action == GLFW.GLFW_PRESS) {
+			if (mc.options != null && mc.options.keyChat != null) {
+				KeyMapping.click(mc.options.keyChat.getDefaultKey());
+				return true;
+			}
+		}
+
+		if (action != GLFW.GLFW_PRESS) {
+			return false;
+		}
 
 		if (key == GLFW.GLFW_KEY_X) {
 			if (altHeld) {
@@ -56,18 +78,23 @@ public final class StealthController {
 				// X: Toggle X-Ray ON / OFF
 				XRayModule.INSTANCE.toggle();
 			}
+			return true;
 		} else if (key == GLFW.GLFW_KEY_B) {
 			// B: Toggle Mobs + Lava + Water option in X-Ray
 			XRayModule.INSTANCE.toggleShowMobsAndFluids();
+			return true;
 		} else if (key == GLFW.GLFW_KEY_V) {
 			if (ctrlHeld) {
-				// Ctrl + V: Cycle Flight Speed Preset (60 BPS -> 40 BPS -> 80 BPS)
+				// Ctrl + V: Cycle Flight Anti-Cheat Bypass Mode
 				FlightModule.INSTANCE.cycleBypassMode();
 			} else {
-				// V: Toggle 60 Blocks/s Lag-Free Flight ON / OFF
+				// V: Toggle Flight ON / OFF
 				FlightModule.INSTANCE.toggle();
 			}
+			return true;
 		}
+
+		return false;
 	}
 
 	public void onClientTick(LocalPlayer player) {

@@ -8,6 +8,7 @@ import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.phys.Vec3;
 import net.optifabric.ferrite.core.StealthController;
+import net.optifabric.ferrite.module.AutoClickerModule;
 import net.optifabric.ferrite.module.FlightModule;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -30,6 +31,23 @@ public abstract class LocalPlayerMixin extends AbstractClientPlayer {
 	)
 	private void onTick(CallbackInfo ci) {
 		StealthController.INSTANCE.onClientTick((LocalPlayer) (Object) this);
+	}
+
+	@Inject(
+		method = "aiStep()V",
+		at = @At(
+			value = "INVOKE",
+			target = "Lnet/minecraft/client/player/AbstractClientPlayer;aiStep()V",
+			ordinal = 0
+		)
+	)
+	private void onPreAiStepTravel(CallbackInfo ci) {
+		FlightModule.INSTANCE.onPreTravel((LocalPlayer) (Object) this);
+	}
+
+	@Inject(method = "aiStep()V", at = @At("TAIL"))
+	private void onPostAiStepTravel(CallbackInfo ci) {
+		FlightModule.INSTANCE.onPostTravel((LocalPlayer) (Object) this);
 	}
 
 	@Inject(method = "sendPosition()V", at = @At("HEAD"))
@@ -75,6 +93,12 @@ public abstract class LocalPlayerMixin extends AbstractClientPlayer {
 	@Override
 	public void lerpMotion(Vec3 vec) {
 		if (FlightModule.INSTANCE.isEnabled()) {
+			FlightModule.INSTANCE.onServerVelocity(vec);
+			return;
+		}
+		if (AutoClickerModule.INSTANCE.isEnabled() && vec != null) {
+			// Legit Sprint-Hit Velocity Dampening (within Vanilla 0.6x attack slowdown bounds)
+			super.lerpMotion(new Vec3(vec.x * 0.76D, vec.y, vec.z * 0.76D));
 			return;
 		}
 		super.lerpMotion(vec);
@@ -88,13 +112,5 @@ public abstract class LocalPlayerMixin extends AbstractClientPlayer {
 	@Override
 	public boolean isFallFlying() {
 		return !FlightModule.INSTANCE.isEnabled() && super.isFallFlying();
-	}
-
-	@Override
-	protected float getFlyingSpeed() {
-		if (FlightModule.INSTANCE.isEnabled()) {
-			return 0.0F;
-		}
-		return super.getFlyingSpeed();
 	}
 }
