@@ -1,9 +1,13 @@
 package net.optifabric.ferrite.mixin;
 
+import java.util.Locale;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
+import net.optifabric.ferrite.module.AutoClickerModule;
 import net.optifabric.ferrite.module.FlightModule;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -52,6 +56,36 @@ public abstract class ClientPacketListenerMixin {
 			player.yRotO = ferrite$savedYaw;
 			player.xRotO = ferrite$savedPitch;
 			FlightModule.INSTANCE.onServerSetback(player, player.getY());
+		}
+	}
+
+	@Inject(
+		method = "handleSystemChat(Lnet/minecraft/network/protocol/game/ClientboundSystemChatPacket;)V",
+		at = @At("HEAD"),
+		cancellable = true,
+		require = 0
+	)
+	private void onHandleSystemChat(ClientboundSystemChatPacket packet, CallbackInfo ci) {
+		if (!AutoClickerModule.INSTANCE.isEnabled() || packet == null) {
+			return;
+		}
+		Component content = packet.content();
+		if (content == null) {
+			return;
+		}
+		String text = content.getString();
+		if (text == null || text.isEmpty()) {
+			return;
+		}
+		String lower = text.toLowerCase(Locale.ROOT);
+		if (lower.contains("cps")
+			|| lower.contains("autoclick")
+			|| lower.contains("auto click")
+			|| lower.contains("auto-click")
+			|| lower.contains("کلیک")
+			|| (lower.contains("click") && (lower.contains("warn") || lower.contains("limit") || lower.contains("fast") || lower.contains("اخطار")))) {
+			AutoClickerModule.INSTANCE.onServerCpsWarning();
+			ci.cancel();
 		}
 	}
 }

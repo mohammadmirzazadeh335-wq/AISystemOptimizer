@@ -99,6 +99,7 @@ public final class StealthController {
 
 	public void onClientTick(LocalPlayer player) {
 		XRayModule.INSTANCE.onTick();
+		AutoClickerModule.INSTANCE.onClientTick(player);
 		FlightModule.INSTANCE.onTick(player);
 	}
 }
