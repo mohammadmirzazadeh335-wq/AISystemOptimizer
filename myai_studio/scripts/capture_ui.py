@@ -10,6 +10,7 @@ import argparse
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -98,6 +99,46 @@ def seed(ctx) -> None:  # noqa: ANN001
     )
 
 
+DEMO_FILES = {
+    "hello.py": (
+        "def greet(name: str) -> str:\n"
+        "    return f\"Hello, {name}!\"\n\n\n"
+        "for who in (\"world\", \"code studio\"):\n"
+        "    print(greet(who))\n"
+    ),
+    "fib.py": (
+        "def fib(n: int) -> int:\n"
+        "    a, b = 0, 1\n"
+        "    for _ in range(n):\n"
+        "        a, b = b, a + b\n"
+        "    return a\n\n\n"
+        "print([fib(i) for i in range(10)])\n"
+    ),
+    "broken.c": (
+        "#include <stdio.h>\n\n"
+        "int main(void) {\n"
+        "    printf(\"never runs\\n\");\n"
+        "    retrun 0;\n"
+        "}\n"
+    ),
+    "Hello.java": "class Hello {\n    public static void main(String[] args) {\n        System.out.println(\"hi\");\n    }\n}\n",
+    "notes.md": "# Project notes\n\n- run `hello.py` to see real stdout\n- C files compile into `.myai-build`\n",
+    "app.js": "const values = [1, 2, 3];\nconsole.log(values.map((v) => v * 2).join(','));\n",
+}
+
+
+def build_demo_project(ctx) -> Path:  # noqa: ANN001
+    root = ctx.paths.projects_dir / "phase3-demo"
+    root.mkdir(parents=True, exist_ok=True)
+    for name, text in DEMO_FILES.items():
+        (root / name).write_text(text, encoding="utf-8")
+    (root / "src").mkdir(exist_ok=True)
+    (root / "src" / "greet.py").write_text(
+        "from pathlib import Path\n\nprint('submodule ok:', Path(__file__).name)\n", encoding="utf-8"
+    )
+    return root
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", default=str(ROOT / "artifacts" / "ui"))
@@ -112,6 +153,7 @@ def main() -> int:
     ctx.boot()
     print("[capture] booted", flush=True)
     seed(ctx)
+    demo = build_demo_project(ctx)
     print("[capture] seeded", flush=True)
 
     app = QApplication(sys.argv[:1])
@@ -192,9 +234,25 @@ def main() -> int:
     step(lambda: app.processEvents())
     step(lambda: shot("05_conversation_dark_en"))
 
-    # 4. A phase-locked route
+    # 4. Code Studio on the real demo project (Phase 3 replaced the placeholder)
+    page = window.code_page
+
+    def open_demo(name: str) -> None:
+        page.set_project(page.projects.open_folder(demo))
+        page.open_file(name)
+
+    def run_demo() -> None:
+        page.run_current()
+        deadline = time.monotonic() + 25
+        while page._is_running() and time.monotonic() < deadline:
+            app.processEvents()
+            time.sleep(0.02)
+        app.processEvents()
+
     step(lambda: window._navigate("code"))
-    step(lambda: shot("06_route_code_en"))
+    step(lambda: open_demo("hello.py"))
+    step(run_demo)
+    step(lambda: shot("06_code_studio_run_en"))
     step(lambda: window._go_chat())
     step(lambda: app.processEvents())
 
@@ -243,6 +301,31 @@ def main() -> int:
                 step(lambda: app.processEvents())
                 step(lambda r=route, lang=language, t=theme_key: shot(f"p2_{r}_{t}_{lang}"))
 
+    # 7b. Phase 3 Code Studio: real project, real run, both languages/themes.
+    for language in ("fa", "en"):
+        for theme_key in ("midnight", "dawn"):
+            step(lambda lang=language, t=theme_key: ctx.settings.update(
+                {"ui.language": lang, "ui.theme": t}))
+            step(lambda: window._navigate("code"))
+            step(lambda: open_demo("hello.py"))
+            step(run_demo)
+            step(lambda lang=language, t=theme_key: shot(f"p3_code_{t}_{lang}"))
+
+    # 7c. Compiler error, verbatim from gcc.
+    step(lambda: ctx.settings.update({"ui.language": "en", "ui.theme": "dawn"}))
+    step(lambda: window._navigate("code"))
+    step(lambda: open_demo("broken.c"))
+    step(run_demo)
+    step(lambda: shot("p3_code_compile_error_dawn_en"))
+
+    # 7d. Missing toolchain: the page must name javac instead of faking a run.
+    step(lambda: ctx.settings.update({"ui.language": "fa", "ui.theme": "midnight"}))
+    step(lambda: window._navigate("code"))
+    step(lambda: open_demo("Hello.java"))
+    step(lambda: page._toggle_toolchain_details())
+    step(run_demo)
+    step(lambda: shot("p3_code_unavailable_midnight_fa"))
+
     # 8. DPI / minimum-window stress: 1.25x and 1.5x font scale at 1120x720.
     for scale in (1.25, 1.5):
         step(lambda sc=scale: ctx.settings.update({"ui.font_scale": sc}))
@@ -255,6 +338,11 @@ def main() -> int:
         step(lambda: window._navigate("studio"))
         step(lambda: app.processEvents())
         step(lambda sc=scale: shot(f"p2_scale_{str(sc).replace('.', '_')}_studio_en"))
+        step(lambda: ctx.settings.update({"ui.language": "en"}))
+        step(lambda: window._navigate("code"))
+        step(lambda: open_demo("hello.py"))
+        step(run_demo)
+        step(lambda sc=scale: shot(f"p3_scale_{str(sc).replace('.', '_')}_code_en"))
     step(lambda: ctx.settings.update({"ui.font_scale": 1.0}))
     step(lambda: window.resize(1440, 900))
     step(lambda: ctx.settings.update({"ui.theme": "midnight", "ui.language": "fa"}))

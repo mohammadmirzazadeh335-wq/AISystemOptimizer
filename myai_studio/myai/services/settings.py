@@ -55,6 +55,11 @@ DEFAULTS: dict[str, Any] = {
     "memory.enabled": True,
     "memory.auto_capture": True,
     "memory.context_warning_ratio": 0.8,
+    # Code Studio (phase 3)
+    "code.last_project": "",
+    "code.recent_projects": [],
+    "code.timeout_seconds": 10.0,
+    "code.show_whitespace": False,
     # Agent (phase 4)
     "agent.require_confirmation": True,
     "agent.max_steps": 12,
@@ -223,6 +228,8 @@ class SettingsService:
                 raise ValidationError("font scale out of range", message_key="error.settings")
             if key in {"memory.context_warning_ratio", "ai.context_warn_ratio"} and not 0.5 <= number <= 0.99:
                 raise ValidationError("context warning ratio out of range", message_key="error.settings")
+            if key == "code.timeout_seconds" and not 1.0 <= number <= 120.0:
+                raise ValidationError("code timeout out of range", message_key="error.settings")
             return number
         if key in {"ui.language"}:
             if value not in {"fa", "en"}:

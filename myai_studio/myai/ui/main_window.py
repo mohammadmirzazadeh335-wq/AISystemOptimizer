@@ -37,6 +37,7 @@ from .theme import runtime
 from .theme.manager import ThemeManager
 from .views.api_page import ApiPage
 from .views.chat_view import ChatView
+from .views.code_page import CodePage
 from .views.composer import Composer
 from .views.header import Header
 from .views.inspector import Inspector
@@ -51,7 +52,15 @@ from .widgets.feedback import ToastManager
 
 logger = logging.getLogger(__name__)
 
-AI_ROUTES = {"api", "memory", "persona", "studio"}
+AI_ROUTES = {"api", "memory", "persona", "studio", "code"}
+#: One source of truth for a page's header/window title (route -> title, subtitle).
+PAGE_TITLES = {
+    "api": ("api.title", "api.subtitle"),
+    "memory": ("memory.title", "memory.subtitle"),
+    "persona": ("persona.title", "persona.subtitle"),
+    "studio": ("studio.title", "studio.subtitle"),
+    "code": ("code.title", "code.subtitle"),
+}
 
 
 class _StreamBridge(QObject):
@@ -142,11 +151,13 @@ class MainWindow(QMainWindow):
         self.memory_page = MemoryPage(self.context)
         self.persona_page = PersonaPage(self.context)
         self.studio_page = OutputPage(self.context)
+        self.code_page = CodePage(self.context)
         self._pages = {
             "api": self.api_page,
             "memory": self.memory_page,
             "persona": self.persona_page,
             "studio": self.studio_page,
+            "code": self.code_page,
         }
         for page in self._pages.values():
             self.stack.addWidget(page)
@@ -156,6 +167,7 @@ class MainWindow(QMainWindow):
         self.memory_page.notify.connect(self._show_toast)
         self.persona_page.notify.connect(self._show_toast)
         self.studio_page.notify.connect(self._show_toast)
+        self.code_page.notify.connect(self._show_toast)
 
     def _shortcuts(self) -> None:
         self.shortcut_new = QShortcut(QKeySequence("Ctrl+N"), self)
@@ -330,15 +342,9 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(page)
         self.composer.hide()
         self.toasts.set_bottom_margin(30)
-        titles = {
-            "api": ("api.title", "api.subtitle"),
-            "memory": ("memory.title", "memory.subtitle"),
-            "persona": ("persona.title", "persona.subtitle"),
-            "studio": ("studio.title", "studio.subtitle"),
-        }
         # The page prints its own explanation under the header, so the header
         # carries only the title (a second copy read as a rendering bug).
-        title_key, _subtitle_key = titles[route]
+        title_key, _subtitle_key = PAGE_TITLES[route]
         self.header.set_section(tr(title_key))
         self.header.set_mode("chat")
         self.header.set_inspector_open(self.inspector.isVisible())
@@ -352,6 +358,8 @@ class MainWindow(QMainWindow):
             self.api_page.refresh()
         elif route == "studio":
             self.studio_page.refresh()
+        elif route == "code":
+            self.code_page.refresh()
         else:  # pragma: no cover - defensive
             page.refresh()
 
@@ -822,13 +830,7 @@ class MainWindow(QMainWindow):
             else:
                 self.header.set_conversation(None)
         elif self._current_route in AI_ROUTES:
-            titles = {
-                "api": ("api.title", "api.subtitle"),
-                "memory": ("memory.title", "memory.subtitle"),
-                "persona": ("persona.title", "persona.subtitle"),
-                "studio": ("studio.title", "studio.subtitle"),
-            }
-            title_key, _subtitle_key = titles[self._current_route]
+            title_key, _subtitle_key = PAGE_TITLES[self._current_route]
             self.header.set_section(tr(title_key))
         else:
             data = ROUTES[self._current_route]
@@ -886,12 +888,7 @@ class MainWindow(QMainWindow):
     def _update_window_title(self) -> None:
         if self._current_route != "chat":
             if self._current_route in AI_ROUTES:
-                key = {
-                    "api": "api.title",
-                    "memory": "memory.title",
-                    "persona": "persona.title",
-                    "studio": "studio.title",
-                }[self._current_route]
+                key = PAGE_TITLES[self._current_route][0]
                 self.setWindowTitle(f"{tr(key)} — {APP_NAME}")
                 return
             data = ROUTES.get(self._current_route)

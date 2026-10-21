@@ -18,6 +18,8 @@
 ├────────────────────────────────────────────────────────────┤
 │ services/               use-cases (no Qt imports)          │
 │   settings · conversations · activity · backup             │
+│   openrouter · chat · memory · persona · outputs           │
+│   toolchains · runner · projects                           │
 ├────────────────────────────────────────────────────────────┤
 │ data/ security/ core/   persistence, crypto, infra          │
 │   repositories · secret store · events · logging · errors   │
@@ -49,6 +51,27 @@ repositories and real SQLite files rather than mocks.
   worker threads.
 - Long operations are cancellable and report progress through the same bus.
 
+### 4.1 Code Studio execution
+
+```
+CodePage ──plan_for()──> Runner ──> ToolchainRegistry (cached detection)
+   │                        │
+   │  thread: myai-code-run │  subprocess per step, stdout/stderr streamed
+   │  cancel_event          │  new session → killpg on timeout/cancel
+   └── _RunBridge(Signal) ──┘  queued signals → GUI thread → output panel
+```
+
+- `services/toolchains.py` owns what can run: 10 toolchain specs, cached `--version`
+  detection with a 6 s probe, `RunPlan`/`RunStep`, and `ToolchainUnavailable` carrying
+  the exact missing executable. Compile artifacts go to `<project>/.myai-build`.
+- `services/runner.py` executes a plan without a shell, streams each line, enforces the
+  wall-clock limit, kills the whole process group, and never exposes the app's API key
+  to the child environment.
+- `services/projects.py` confines every path to the opened folder (traversal, drive
+  letters and symlink escapes are rejected), caps file size, and flags binary files.
+- The page only touches widgets on the GUI thread: the worker emits Qt signals through
+  a small bridge object, so the interface stays responsive during a 20 s program.
+
 ## 5. Data model (schema v1)
 
 | Table | Purpose | Notes |
@@ -56,7 +79,7 @@ repositories and real SQLite files rather than mocks.
 | `conversations` | title, folder, project, model, mode, pin, counts, preview | indexed on `updated_at`, `folder_id`, `project_id` |
 | `messages` | role, content, model, status, token counts, JSON meta | cascade delete, ordered by `created_at` + `rowid` |
 | `folders` | user folders for conversations | conversations are moved out, never deleted |
-| `projects` | project metadata (used from Phase 3) | — |
+| `projects` | project metadata (Code Studio keeps its folder list in settings) | — |
 | `settings` | validated key/value JSON registry | secrets never stored here |
 | `schema_info` | schema version for migrations | `MIGRATIONS` map in `data/db.py` |
 

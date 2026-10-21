@@ -91,13 +91,6 @@ ROUTES = {
         "body": "placeholder.agent_body",
         "features": [("route", 1), ("wrench", 2), ("shield", 3)],
     },
-    "code": {
-        "icon": "code",
-        "phase": 3,
-        "title": "placeholder.code_title",
-        "body": "placeholder.code_body",
-        "features": [("file", 1), ("terminal", 2), ("refresh", 3)],
-    },
     "images": {
         "icon": "image",
         "phase": 4,
@@ -141,7 +134,7 @@ class PlaceholderView(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._route = "code"
+        self._route = "agent"
         self._build()
 
     def _build(self) -> None:
@@ -164,7 +157,7 @@ class PlaceholderView(QWidget):
         self.content.set_content(data)
 
     def retranslate(self) -> None:
-        self.content.set_content(ROUTES.get(self._route, ROUTES["code"]))
+        self.content.set_content(ROUTES.get(self._route, ROUTES["agent"]))
 
 
 class _PlaceholderContent(QWidget):
@@ -231,8 +224,7 @@ class _PlaceholderContent(QWidget):
         self.note.setText(tr("placeholder.note"))
         self.back.setText(tr("placeholder.go_chat"))
         self.card.setAccessibleName(tr(data["title"]))
-        key = data["title"].replace("placeholder.", "placeholder.")  # e.g. placeholder.code_title
-        route = key[len("placeholder."):-len("_title")]
+        route = data["title"][len("placeholder."):-len("_title")]  # e.g. "agent"
         for icon_name, index in data["features"]:
             item = FeatureItem(icon_name, tr(f"placeholder.{route}.f{index}"))
             self.features_grid.addWidget(item)

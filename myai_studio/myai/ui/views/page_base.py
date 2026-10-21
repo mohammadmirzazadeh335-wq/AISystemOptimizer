@@ -35,11 +35,15 @@ class PageShell(QWidget):
         subtitle_key: str = "",
         *,
         icon_name: str = "",
+        scroll: bool = True,
+        stretch: bool = True,
+        actions_below: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._title_key = title_key
         self._subtitle_key = subtitle_key
+        self._stretch = stretch
         self.setAccessibleName(tr(title_key))
         self._icon_name = icon_name
         outer = QVBoxLayout(self)
@@ -51,9 +55,9 @@ class PageShell(QWidget):
         # headline two rows apart.
         header = QWidget()
         header.setObjectName("PageHeader")
-        head_layout = QHBoxLayout(header)
+        head_layout = QVBoxLayout(header) if actions_below else QHBoxLayout(header)
         head_layout.setContentsMargins(runtime.px(30), runtime.px(18), runtime.px(30), runtime.px(8))
-        head_layout.setSpacing(runtime.px(12))
+        head_layout.setSpacing(runtime.px(10) if actions_below else runtime.px(12))
         self.lead = QLabel(tr(subtitle_key) if subtitle_key else "")
         self.lead.setProperty("role", "muted")
         self.lead.setWordWrap(True)
@@ -62,22 +66,41 @@ class PageShell(QWidget):
         head_layout.addWidget(self.lead, 1)
         self.actions_row = QHBoxLayout()
         self.actions_row.setSpacing(runtime.px(8))
-        head_layout.addLayout(self.actions_row, 0)
+        if actions_below:
+            # A row of five actions cannot live beside the explanation: at 1.5x
+            # it wrapped into a column and pushed the workspace down the page.
+            self.actions_row.setContentsMargins(0, 0, 0, 0)
+            head_layout.addLayout(self.actions_row)
+        else:
+            head_layout.addLayout(self.actions_row, 0)
         outer.addWidget(header)
 
-        self.scroll = QScrollArea()
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
-        # Content is wrapped, so no horizontal bar is expected; keep the policy
-        # explicit instead of letting Qt show a stray track.
-        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        body = QWidget()
-        self.body = QVBoxLayout(body)
-        self.body.setContentsMargins(runtime.px(22), runtime.px(4), runtime.px(22), runtime.px(28))
-        self.body.setSpacing(runtime.px(13))
-        self.body.addStretch(1)
-        self.scroll.setWidget(body)
-        outer.addWidget(self.scroll, 1)
+        margins = (runtime.px(22), runtime.px(4), runtime.px(22), runtime.px(28))
+        if scroll:
+            self.scroll = QScrollArea()
+            self.scroll.setWidgetResizable(True)
+            self.scroll.setFrameShape(QFrame.Shape.NoFrame)
+            # Wrapped content normally fits, so the bar stays hidden; at 1.5x font
+            # scale on a small window the card column is wider than the viewport,
+            # and an unreachable right edge is worse than an honest scrollbar.
+            self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            body = QWidget()
+            self.body = QVBoxLayout(body)
+            self.body.setContentsMargins(*margins)
+            self.body.setSpacing(runtime.px(13))
+            self.scroll.setWidget(body)
+            outer.addWidget(self.scroll, 1)
+        else:
+            # Splitter-based pages (Code Studio) own their height; wrapping them
+            # in a scroll area would trap the splitters inside a fixed canvas.
+            self.scroll = None
+            body = QWidget()
+            self.body = QVBoxLayout(body)
+            self.body.setContentsMargins(*margins)
+            self.body.setSpacing(runtime.px(10))
+            outer.addWidget(body, 1)
+        if stretch:
+            self.body.addStretch(1)
 
     # ------------------------------------------------------------------ cards
     def card(self, title_key: str = "", icon_name: str = "") -> tuple[QFrame, QVBoxLayout]:
@@ -113,8 +136,7 @@ class PageShell(QWidget):
             item = self.actions_row.takeAt(0)
             widget = item.widget()
             if widget is not None:
-                widget.setParent(None)
-                widget.deleteLater()
+                _release(widget)
 
     def rebuild(self) -> None:
         """Recreate the body after a language or theme change.
@@ -131,12 +153,12 @@ class PageShell(QWidget):
             self.refresh()  # type: ignore[attr-defined]
 
     def clear_body(self) -> None:
-        while self.body.count() > 1:
+        keep = 1 if self._stretch else 0
+        while self.body.count() > keep:
             item = self.body.takeAt(0)
             widget = item.widget()
             if widget is not None:
-                widget.setParent(None)
-                widget.deleteLater()
+                _release(widget)
             elif item.layout() is not None:
                 _clear_layout(item.layout())
 
@@ -156,13 +178,23 @@ def auto_direction(editor) -> None:  # noqa: ANN001
     editor.document().setDefaultTextOption(option)
 
 
+def _release(widget: QWidget) -> None:
+    """Unparent and delete a widget without leaving dangling layout items."""
+    layout = widget.layout()
+    if layout is not None and hasattr(layout, "detach_items"):
+        layout.detach_items()
+    widget.setParent(None)
+    widget.deleteLater()
+
+
 def _clear_layout(layout: QLayout) -> None:
+    if hasattr(layout, "detach_items"):
+        layout.detach_items()  # type: ignore[attr-defined]
     while layout.count():
         item = layout.takeAt(0)
         widget = item.widget()
         if widget is not None:
-            widget.setParent(None)
-            widget.deleteLater()
+            _release(widget)
         elif item.layout() is not None:
             _clear_layout(item.layout())
 

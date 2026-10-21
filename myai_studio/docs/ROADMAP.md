@@ -7,8 +7,8 @@ next one starts. Status reflects **actual** progress, not intentions.
 | --- | --- | --- | --- |
 | 1 | Foundation | **Complete (v0.1.0)** | shell, design system, i18n/RTL, persistence, settings, secrets, backups, tests, screenshots, packaging scripts |
 | 2 | AI core | **Complete (v0.2.0)** | OpenRouter client (streaming, cancel, retry, timeouts), model catalogue, chat with real replies, token/latency stats, personality files, memory (global + per conversation), prompt library foundation |
-| 3 | Code Studio | Next | project tree, editor with syntax highlighting, terminal/output/errors/tests panels, diff view, autosave, real compile/run/debug loop with toolchain detection |
-| 4 | Agent & tools | Planned | validated tool registry, approval workflow, file/project tools, web search, image studio, GitHub integration, task center |
+| 3 | Code Studio | **Complete (v0.3.0)** | real folder tree, editor with syntax highlighting + line numbers, autosave and `Ctrl+S`, real execution with detected toolchains, verbatim compiler diagnostics, stdout/stderr/exit code, cancel + wall-clock limit, missing toolchains named (no interactive debugger yet — see report §4) |
+| 4 | Agent & tools | Next | validated tool registry, approval workflow, file/project tools, web search, image studio, GitHub integration, task center |
 | 5 | Ecosystem & polish | Planned | plugin architecture, performance monitor, video studio (only if a real service exists), accessibility pass, final report, installer |
 
 ## Acceptance criteria per phase

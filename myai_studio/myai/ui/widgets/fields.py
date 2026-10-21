@@ -437,13 +437,15 @@ class FlowLayout(QLayout):
         self._items.append(item)
 
     def count(self) -> int:
-        return len(self._items)
+        return len(self._prune_dead())
 
     def itemAt(self, index: int):  # noqa: ANN201
-        return self._items[index] if 0 <= index < len(self._items) else None
+        items = self._prune_dead()
+        return items[index] if 0 <= index < len(items) else None
 
     def takeAt(self, index: int):  # noqa: ANN201
-        return self._items.pop(index) if 0 <= index < len(self._items) else None
+        items = self._prune_dead()
+        return items.pop(index) if 0 <= index < len(items) else None
 
     def expandingDirections(self):  # noqa: ANN201
         return Qt.Orientation(0)
@@ -463,10 +465,36 @@ class FlowLayout(QLayout):
 
     def minimumSize(self) -> QSize:
         size = QSize()
-        for item in self._items:
+        for item in self._prune_dead():
             size = size.expandedTo(item.minimumSize())
         margins = self.contentsMargins()
         return size + QSize(margins.left() + margins.right(), margins.top() + margins.bottom())
+
+    def _prune_dead(self) -> list:
+        """Drop items whose widget is already gone.
+
+        A page rebuild reparents and deletes its action row; the layout object can
+        still be asked for its minimum size while the deletion is queued, and
+        touching a dead QWidgetItem there crashed the process.
+        """
+        if not self._items:
+            return []
+        try:
+            import shiboken6
+        except ImportError:  # pragma: no cover - PySide6 always ships it
+            return list(self._items)
+        alive = []
+        for item in self._items:
+            # Qt deletes the QWidgetItem when its widget dies, so the Python
+            # wrapper itself can already be dangling; check it before use.
+            if not shiboken6.isValid(item):
+                continue
+            widget = item.widget()
+            if widget is None or shiboken6.isValid(widget):
+                alive.append(item)
+        if len(alive) != len(self._items):
+            self._items = alive
+        return alive
 
     def _do_layout(self, rect, test_only: bool) -> int:  # noqa: ANN001
         margins = self.contentsMargins()
@@ -479,7 +507,7 @@ class FlowLayout(QLayout):
         cursor = effective.right() if rtl else effective.x()
         y = effective.y()
         line_height = 0
-        for item in self._items:
+        for item in self._prune_dead():
             widget = item.widget()
             if widget is not None and widget.isHidden():
                 continue
@@ -510,10 +538,20 @@ class FlowLayout(QLayout):
         return y + line_height - rect.y() + margins.bottom()
 
     def addWidget(self, widget) -> None:  # noqa: ANN001, N802 - Qt API name
-        from PySide6.QtWidgets import QWidgetItem
-
-        self.addItem(QWidgetItem(widget))
+        # QLayout::addWidget reparents the child and then calls our addItem.
+        # Building the QWidgetItem by hand left the button without a parent, so
+        # it never appeared on screen.
+        super().addWidget(widget)
         self.invalidate()
+
+    def detach_items(self) -> None:
+        """Forget the items before their widgets are deleted.
+
+        Python owns these QWidgetItems, so Qt cannot remove them when a child
+        dies; holding them past that point leaves dangling pointers that crash
+        the next layout pass.
+        """
+        self._items = []
 
 
 class PillToggle(QAbstractButton):

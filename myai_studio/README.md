@@ -4,12 +4,15 @@ A premium, local-first AI desktop workspace for Windows 11: multi-model chat, me
 a real code studio, supervised agents, media and research — delivered in five verified
 phases.
 
-> **Current build: Phase 2 — AI core** (`v0.2.0`)
-> Chat streams from OpenRouter, memory and personality are real and editable, and the
-> Output Studio keeps every revision. Code Studio, Agent Mode, web, image and GitHub
-> remain clearly labelled as later phases — they are **not** simulated.
+> **Current build: Phase 3 — Code Studio** (`v0.3.0`)
+> Chat streams from OpenRouter, memory and personality are real and editable, the Output
+> Studio keeps every revision, and Code Studio now opens real folders, edits real files
+> and runs them with the toolchains actually installed on the machine. Agent Mode, web,
+> image and GitHub remain clearly labelled as later phases — they are **not** simulated.
 
 ![Welcome screen](artifacts/ui/01_welcome_midnight_fa.png)
+
+![Code Studio running a real file](artifacts/ui/p3_code_dawn_en.png)
 
 ---
 
@@ -36,9 +39,17 @@ phases.
 | Global + per-conversation memory, CRUD, summaries with user consent | **Works** | `tests/unit/test_memory.py`, UI tests |
 | User profile file + assistant persona, separate from memory | **Works** | `tests/unit/test_persona_outputs.py`, `tests/ui/test_phase2_pages.py` |
 | Output Studio: code/text/prompt/Markdown/JSON, revisions, diff, restore, export | **Works** | `tests/unit/test_persona_outputs.py`, UI tests |
-| Code Studio, compiler loop, Agent Mode, web, media, GitHub | **Not in this build** — Phases 3–4 | — |
+| Code Studio: open a real folder, browse/edit files, `Ctrl+S`, autosave, recent projects | **Works** | `tests/ui/test_code_studio.py`, `p3_code_*.png` |
+| Real execution with the toolchain detected on this machine | **Works** | python 3.11.2 / node 22 / gcc / g++ / bash here; `tests/unit/test_code_services.py` |
+| Real stdout, stderr, exit code and duration in the output panel | **Works** | `06_code_studio_run_en.png`, `p3_code_dawn_en.png` |
+| Compiler errors shown verbatim, then fix and re-run | **Works** | `p3_code_compile_error_dawn_en.png` (gcc's own `broken.c:5:5: error: …`) |
+| Missing toolchains named with the exact executable | **Works** | `p3_code_unavailable_midnight_fa.png` (`javac and java not found on PATH`) |
+| Stop a running program, wall-clock limit, no GUI blocking | **Works** | `test_stop_kills_a_long_run`, `test_run_does_not_block_the_ui` |
+| Agent Mode, web research, Image Studio, GitHub, task centre | **Not in this build** — Phases 4–5 | — |
 
-The complete, honest matrix lives in [`docs/PHASE1_REPORT.md`](docs/PHASE1_REPORT.md).
+The complete, honest matrix lives in [`docs/PHASE3_REPORT.md`](docs/PHASE3_REPORT.md) §2
+(Phase 1: [`docs/PHASE1_REPORT.md`](docs/PHASE1_REPORT.md), Phase 2:
+[`docs/PHASE2_REPORT.md`](docs/PHASE2_REPORT.md)).
 
 ---
 
@@ -115,20 +126,23 @@ with `-Installer`, requiring Inno Setup 6).
 Last measured run (final code, after the last change):
 
 ```
-264 passed, 1 skipped in 81.31s
+319 passed, 1 skipped in 122.23s (0:02:02)
 ```
 
-The skip is the opt-in live OpenRouter test, which needs a real key and network
-access this build host does not have. Details and per-layer timings are in
-[`docs/PHASE2_REPORT.md`](docs/PHASE2_REPORT.md) §1.
+Per layer: `tests/unit` 156 passed + 1 skipped (3.92 s), `tests/integration` 14 passed
+(0.60 s), `tests/ui` 149 passed (113.85 s). The skip is the opt-in live OpenRouter test,
+which needs a real key and network access this build host does not have. Details and
+per-layer timings are in [`docs/PHASE3_REPORT.md`](docs/PHASE3_REPORT.md) §1.
 
 Test layout:
 
 ```
 tests/unit          providers (mocked transport), memory, persona, outputs, chat service,
+                    toolchains/runner/projects (real python, gcc and node runs),
                     tokens, i18n, markdown, DB, settings, secrets, backups
 tests/ui            real widgets: window, sidebar, composer, dialogs, themes, RTL,
-                    API/memory/personality/studio pages, streaming bubbles
+                    API/memory/personality/studio pages, Code Studio (real files and
+                    real processes), streaming bubbles
 tests/integration   cross-layer flows, backup secret-exclusion, restart survival
 ```
 
@@ -158,14 +172,14 @@ myai/
   core/               paths, events, logging, errors, markdown, time utils
   data/               SQLAlchemy models, database lifecycle, repositories
   services/           settings, conversations, activity, backups, openrouter, chat,
-                      memory, persona, outputs
+                      memory, persona, outputs, toolchains, runner, projects
   security/           encrypted secret store
   i18n/               translation runtime + fa/en catalogues
   ui/
     theme/            design tokens, theme manager, icon system
     widgets/          buttons, fields, feedback, dialogs, markdown, painting guard
     views/            sidebar, header, composer, chat, inspector, settings, placeholders,
-                      api_page, memory_page, persona_page, output_page
+                      api_page, memory_page, persona_page, output_page, code_page
     main_window.py    application shell
     brand.py          vector identity
 tests/                unit, ui, integration
@@ -191,6 +205,8 @@ artifacts/ui/         screenshots produced by scripts/capture_ui.py
 - [`docs/PHASE1_REPORT.md`](docs/PHASE1_REPORT.md) — foundation report
 - [`docs/PHASE2_REPORT.md`](docs/PHASE2_REPORT.md) — AI core report, API setup, real results
 - [`docs/PHASE2_REPORT_FA.md`](docs/PHASE2_REPORT_FA.md) — گزارش فارسی فاز ۲
+- [`docs/PHASE3_REPORT.md`](docs/PHASE3_REPORT.md) — Code Studio report, real-execution evidence, limits
+- [`docs/PHASE3_REPORT_FA.md`](docs/PHASE3_REPORT_FA.md) — گزارش فارسی فاز ۳
 - [`docs/INSTALL_FA.md`](docs/INSTALL_FA.md) — راهنمای نصب و اجرا (فارسی)
 - [`docs/TESTING.md`](docs/TESTING.md) — how to run and extend the tests
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — the five phases and their acceptance criteria

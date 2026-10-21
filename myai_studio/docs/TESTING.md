@@ -36,8 +36,8 @@ On Windows:
 
 | Directory | Scope | Examples |
 | --- | --- | --- |
-| `tests/unit` | pure logic, no widgets | token completeness, i18n catalogue parity, markdown escaping, SQLite CRUD/cascades, settings validation, DPAPI/Fernet secrets, zip backups |
-| `tests/ui` | real widgets on the offscreen platform | window bootstrap, typing + Enter to send, conversation switching, theme switch repaint, RTL flip, inspector animation, settings dialog pages, accent change |
+| `tests/unit` | pure logic, no widgets | token completeness, i18n catalogue parity, markdown escaping, SQLite CRUD/cascades, settings validation, DPAPI/Fernet secrets, zip backups, toolchain detection, real `python`/`gcc`/`node` runs, timeout and cancel, project path guards |
+| `tests/ui` | real widgets on the offscreen platform | window bootstrap, typing + Enter to send, conversation switching, theme switch repaint, RTL flip, inspector animation, settings dialog pages, accent change, Code Studio with real folders/files/processes, compile errors, missing toolchains, DPI rebuilds |
 | `tests/integration` | multiple layers together | restart persistence, architecture layering guard, backup/restore, export |
 
 ## Visual verification

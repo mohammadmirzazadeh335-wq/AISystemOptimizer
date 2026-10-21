@@ -143,8 +143,11 @@ def test_navigation_to_code_studio_and_back(ui) -> None:
     from PySide6.QtWidgets import QApplication
 
     QApplication.processEvents()
-    assert window.stack.currentWidget() is window.placeholder
+    # Phase 3: "code" is a real page now, not the phase-locked placeholder.
+    assert window.stack.currentWidget() is window.code_page
+    assert window.stack.currentWidget() is not window.placeholder
     assert not window.composer.isVisible()
+    assert window.header.title.text() == tr("code.title")
     window._go_chat()
     QApplication.processEvents()
     assert window.stack.currentWidget() is window.chat_view
