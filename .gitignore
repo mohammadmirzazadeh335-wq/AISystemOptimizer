@@ -33,3 +33,11 @@ packages/
 # It is a 66 MB self-contained binary; committing it would bloat every clone.
 portable/*.exe
 portable/*.pdb
+
+# MyAI Studio (Python) — local tooling and virtualenv
+myai_studio/.venv/
+.venv/
+tools/headless_libs/
+__pycache__/
+.pytest_cache/
+.ruff_cache/

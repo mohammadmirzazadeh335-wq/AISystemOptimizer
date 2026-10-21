@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build output
+build/
+dist/
+*.spec
+
+# Runtime workspace (never commit user data, keys or databases)
+workspace/
+*.db
+*.db-wal
+*.db-shm
+secrets.bin
+secret.key
+logs/
+backups/
+outputs/
+
+# Local screenshots / scratch
+/artifacts/local/

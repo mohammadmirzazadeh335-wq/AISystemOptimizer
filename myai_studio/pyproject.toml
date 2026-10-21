@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "myai-studio"
+version = "0.1.0"
+description = "MyAI Studio Ultimate — a premium, multi-model AI desktop workspace for Windows"
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+license = { text = "MIT" }
+authors = [{ name = "MyAI Studio" }]
+keywords = ["ai", "desktop", "pyside6", "agent", "llm"]
+dependencies = [
+    "PySide6>=6.6,<6.9",
+    "SQLAlchemy>=2.0,<2.1",
+    "httpx>=0.27,<0.29",
+    "cryptography>=42,<45",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0,<9",
+    "pytest-qt>=4.4,<5",
+    "ruff>=0.6",
+]
+build = ["pyinstaller>=6.10,<7"]
+
+[project.scripts]
+myai-studio = "myai.app:main"
+
+[tool.setuptools]
+package-dir = { "" = "." }
+
+[tool.setuptools.packages.find]
+include = ["myai*"]
+
+[tool.setuptools.package-data]
+myai = ["i18n/locales/*.json"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "ui: tests that create real Qt widgets",
+    "integration: end-to-end flows",
+]
+filterwarnings = ["ignore::DeprecationWarning:PySide6.*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+exclude = ["artifacts", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501", "B008", "UP037"]
