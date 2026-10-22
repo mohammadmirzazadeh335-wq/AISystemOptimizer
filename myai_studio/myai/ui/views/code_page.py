@@ -523,6 +523,7 @@ class CodePage(PageShell):
         layout.addLayout(head)
 
         self.editor = CodeEditor()
+        self.editor.setAccessibleName(tr("code.editor_hint"))
         self.editor.setPlaceholderText(tr("code.editor_hint"))
         self.editor.textChanged.connect(self._on_text_changed)
         self.editor.cursorPositionChanged.connect(self._update_cursor_label)
@@ -564,6 +565,7 @@ class CodePage(PageShell):
         layout.addLayout(head)
 
         self.output_view = QTextEdit()
+        self.output_view.setAccessibleName(tr("code.output"))
         self.output_view.setReadOnly(True)
         self.output_view.setFont(runtime.mono_font(11))
         self.output_view.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)

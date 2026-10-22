@@ -42,18 +42,26 @@ from .views.code_page import CodePage
 from .views.composer import Composer
 from .views.header import Header
 from .views.inspector import Inspector
+from .views.media_page import ImagesPage, VideoPage
 from .views.memory_page import MemoryPage
 from .views.output_page import OutputPage
+from .views.performance_page import PerformancePage
 from .views.persona_page import PersonaPage
-from .views.placeholder import ROUTES, PlaceholderView
+from .views.plugins_page import PluginsPage
+from .views.prompts_page import PromptsPage
 from .views.settings_dialog import SettingsDialog
 from .views.sidebar import Sidebar
+from .views.tasks_page import TasksPage
+from .views.web_page import WebPageView
 from .widgets.dialogs import ConfirmDialog, PromptDialog
 from .widgets.feedback import ToastManager
 
 logger = logging.getLogger(__name__)
 
-AI_ROUTES = {"api", "memory", "persona", "studio", "code", "agent"}
+AI_ROUTES = {
+    "api", "memory", "persona", "studio", "code", "agent",
+    "prompts", "tasks", "performance", "images", "video", "web", "plugins",
+}
 #: One source of truth for a page's header/window title (route -> title, subtitle).
 PAGE_TITLES = {
     "api": ("api.title", "api.subtitle"),
@@ -62,6 +70,13 @@ PAGE_TITLES = {
     "studio": ("studio.title", "studio.subtitle"),
     "code": ("code.title", "code.subtitle"),
     "agent": ("agent.title", "agent.subtitle"),
+    "prompts": ("prompts.title", "prompts.subtitle"),
+    "tasks": ("tasks.title", "tasks.subtitle"),
+    "performance": ("performance.title", "performance.subtitle"),
+    "images": ("images.title", "images.subtitle"),
+    "video": ("video.title", "video.subtitle"),
+    "web": ("web.title", "web.subtitle"),
+    "plugins": ("plugins.title", "plugins.subtitle"),
 }
 
 
@@ -124,9 +139,7 @@ class MainWindow(QMainWindow):
 
         self.stack = QStackedWidget()
         self.chat_view = ChatView()
-        self.placeholder = PlaceholderView()
         self.stack.addWidget(self.chat_view)
-        self.stack.addWidget(self.placeholder)
         self._build_pages()
         center_layout.addWidget(self.stack, 1)
 
@@ -155,6 +168,13 @@ class MainWindow(QMainWindow):
         self.studio_page = OutputPage(self.context)
         self.code_page = CodePage(self.context)
         self.agent_page = AgentPage(self.context)
+        self.prompts_page = PromptsPage(self.context)
+        self.tasks_page = TasksPage(self.context)
+        self.performance_page = PerformancePage(self.context)
+        self.images_page = ImagesPage(self.context)
+        self.video_page = VideoPage(self.context)
+        self.web_page = WebPageView(self.context)
+        self.plugins_page = PluginsPage(self.context)
         self._pages = {
             "api": self.api_page,
             "memory": self.memory_page,
@@ -162,6 +182,13 @@ class MainWindow(QMainWindow):
             "studio": self.studio_page,
             "code": self.code_page,
             "agent": self.agent_page,
+            "prompts": self.prompts_page,
+            "tasks": self.tasks_page,
+            "performance": self.performance_page,
+            "images": self.images_page,
+            "video": self.video_page,
+            "web": self.web_page,
+            "plugins": self.plugins_page,
         }
         for page in self._pages.values():
             self.stack.addWidget(page)
@@ -174,6 +201,12 @@ class MainWindow(QMainWindow):
         self.code_page.notify.connect(self._show_toast)
         self.agent_page.notify.connect(self._show_toast)
         self.agent_page.open_api_page.connect(lambda: self._navigate("api"))
+        for page in (
+            self.prompts_page, self.tasks_page, self.performance_page,
+            self.images_page, self.video_page, self.web_page, self.plugins_page,
+        ):
+            page.notify.connect(self._show_toast)
+        self.prompts_page.use_prompt.connect(self._use_prompt)
 
     def _shortcuts(self) -> None:
         self.shortcut_new = QShortcut(QKeySequence("Ctrl+N"), self)
@@ -324,20 +357,9 @@ class MainWindow(QMainWindow):
         if route in AI_ROUTES:
             self._show_ai_page(route)
             return
-        if route not in ROUTES:
-            return
-        self._current_route = route
-        self.sidebar.set_active(route)
-        self.placeholder.set_route(route)
-        self.stack.setCurrentWidget(self.placeholder)
-        self.composer.hide()
-        data = ROUTES[route]
-        self.header.set_section(tr(data["title"]), tr("settings.available_phase", phase=data["phase"]))
-        self.header.set_mode("agent" if route == "agent" else "chat")
-        self.header.set_inspector_open(self.inspector.isVisible())
-        self.inspector.set_conversation(None, [])
-        self._update_window_title()
-        self._show_toast(tr("settings.available_phase", phase=data["phase"]), "info")
+        # Phase 5 closed the last placeholder: every library route is a real page,
+        # so an unknown name is a no-op instead of a "coming soon" screen.
+        logger.debug("unknown_route route=%s", route)
 
     def _show_ai_page(self, route: str) -> None:
         page = self._pages.get(route)
@@ -352,7 +374,9 @@ class MainWindow(QMainWindow):
         # carries only the title (a second copy read as a rendering bug).
         title_key, _subtitle_key = PAGE_TITLES[route]
         self.header.set_section(tr(title_key))
-        self.header.set_mode("chat")
+        # The pill has to match the page: it said "Chat" on every agent shot in
+        # Phase 4, which was wrong. Library pages keep Chat as their return path.
+        self.header.set_mode("agent" if route == "agent" else "chat")
         self.header.set_inspector_open(self.inspector.isVisible())
         self.inspector.set_conversation(None, [])
         self._update_window_title()
@@ -368,7 +392,7 @@ class MainWindow(QMainWindow):
             self.agent_page.refresh()
         elif route == "code":
             self.code_page.refresh()
-        else:  # pragma: no cover - defensive
+        else:  # prompts, tasks, performance, images, video, web, plugins
             page.refresh()
 
     def _open_memory_for_current(self) -> None:
@@ -385,6 +409,12 @@ class MainWindow(QMainWindow):
         self._show_ai_page("studio")
         self.studio_page.open_draft(name, content, kind=kind)
         self._show_toast(tr("studio.draft_created", name=name), "success")
+
+    def _use_prompt(self, body: str, title: str) -> None:
+        """Hand a library prompt to the composer and go back to the chat."""
+        self._go_chat()
+        self.composer.set_text(body)
+        self._show_toast(tr("prompts.used_toast", title=title), "success")
 
     def _go_chat(self) -> None:
         self._current_route = "chat"
@@ -815,8 +845,6 @@ class MainWindow(QMainWindow):
                     page.rebuild()
                 elif hasattr(page, "refresh_theme"):
                     page.refresh_theme()
-        elif self._current_route != "chat":
-            self.placeholder.set_route(self._current_route)
         self.setWindowIcon(app_icon())
         self.update()
 
@@ -826,7 +854,6 @@ class MainWindow(QMainWindow):
         self.composer.retranslate()
         self.chat_view.retranslate()
         self.inspector.retranslate()
-        self.placeholder.retranslate()
         for page in self._pages.values():
             if hasattr(page, "rebuild"):
                 page.rebuild()
@@ -840,9 +867,6 @@ class MainWindow(QMainWindow):
         elif self._current_route in AI_ROUTES:
             title_key, _subtitle_key = PAGE_TITLES[self._current_route]
             self.header.set_section(tr(title_key))
-        else:
-            data = ROUTES[self._current_route]
-            self.header.set_section(tr(data["title"]), tr("settings.available_phase", phase=data["phase"]))
         self._update_window_title()
 
     # -------------------------------------------------------------- reactions
@@ -884,8 +908,8 @@ class MainWindow(QMainWindow):
             self.stack.setCurrentWidget(self._pages[route])
             self.composer.hide()
         else:
-            self.stack.setCurrentWidget(self.placeholder)
-            self.composer.hide()
+            self.stack.setCurrentWidget(self.chat_view)
+            self.composer.show()
 
     def _show_toast(self, message: str, level: str = "info") -> None:
         if not message:
@@ -898,10 +922,6 @@ class MainWindow(QMainWindow):
             if self._current_route in AI_ROUTES:
                 key = PAGE_TITLES[self._current_route][0]
                 self.setWindowTitle(f"{tr(key)} — {APP_NAME}")
-                return
-            data = ROUTES.get(self._current_route)
-            if data:
-                self.setWindowTitle(f"{tr(data['title'])} — {APP_NAME}")
                 return
         if self._current is not None:
             title = self._current.title.strip() or tr("chat.untitled")

@@ -37,14 +37,16 @@ On Windows:
 | Directory | Scope | Examples |
 | --- | --- | --- |
 | `tests/unit` | pure logic, no widgets | token completeness, i18n catalogue parity, markdown escaping, SQLite CRUD/cascades, settings validation, DPAPI/Fernet secrets, zip backups, toolchain detection, real `python`/`gcc`/`node` runs, timeout and cancel, project path guards |
-| `tests/ui` | real widgets on the offscreen platform | window bootstrap, typing + Enter to send, conversation switching, theme switch repaint, RTL flip, inspector animation, settings dialog pages, accent change, Code Studio with real folders/files/processes, compile errors, missing toolchains, DPI rebuilds |
+| `tests/ui` | real widgets on the offscreen platform | window bootstrap, typing + Enter to send, conversation switching, theme switch repaint, RTL flip, inspector animation, settings dialog pages, accent change, Code Studio with real folders/files/processes, compile errors, missing toolchains, DPI rebuilds, the seven Phase-5 pages, keyboard traversal and accessible names |
 | `tests/integration` | multiple layers together | restart persistence, architecture layering guard, backup/restore, export |
 
 ## Visual verification
 
-`scripts/capture_ui.py` drives the real window and captures the current matrix (55 PNGs)
-into `artifacts/ui/`, including every phase's pages in fa RTL and en LTR, both themes and
-two DPI scales:
+`scripts/capture_ui.py` drives the real window and captures the current matrix (84 PNGs)
+into `artifacts/ui/`, including every page of every phase in fa RTL and en LTR, both
+themes and two DPI scales. The Phase-5 block (`p5_*`) seeds real prompt/task rows, the
+example plugin with two imported prompts, and one image plus one video file, so the
+library pages show real state rather than an empty scaffold:
 
 | File | Shows |
 | --- | --- |
@@ -53,9 +55,14 @@ two DPI scales:
 | `03_sidebar_collapsed.png` | collapsed sidebar, icon rail |
 | `04_conversation_light_fa.png` | light theme in RTL |
 | `05_conversation_dark_en.png` | English LTR layout |
-| `06_placeholder_code_en.png` | phase-locked route placeholder |
+| `p5_prompts_midnight_fa.png` | prompt library with a plugin pack imported (RTL) |
 | `07b_confirm_dialog_only.png` | destructive confirmation dialog |
 | `08_settings_appearance.png` | settings dialog, theme and accent pickers |
+| `p5_tasks_dawn_en.png` | task centre with real persisted runs |
+| `p5_performance_midnight_fa.png` | measured CPU/RAM/disk/workspace tiles |
+| `p5_images_dawn_en.png` | Image Studio: honest unavailable state + real library |
+| `p5_plugins_dawn_en.png` | plugin manifest, permissions and enable switch |
+| `p5_prompt_editor_dawn_en.png` | prompt editor dialog over a dimmed backdrop |
 
 Regenerate after UI changes and inspect the images — this is how layout defects
 were found during Phase 1 (clipped inspector cards, raw translation keys, mixed

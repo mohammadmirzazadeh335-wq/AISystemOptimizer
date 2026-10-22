@@ -43,6 +43,8 @@ class SearchField(QFrame):
         layout.addWidget(self._icon)
         self._edit = QLineEdit()
         self._edit.setObjectName("SearchInput")
+        self.setAccessibleName(placeholder)
+        self._edit.setAccessibleName(placeholder)
         self._edit.setLayoutDirection(self.layoutDirection())
         self._edit.setPlaceholderText(placeholder)
         self._edit.setClearButtonEnabled(False)
@@ -87,6 +89,8 @@ class SearchField(QFrame):
 
     def set_placeholder(self, text: str) -> None:
         self._edit.setPlaceholderText(text)
+        self.setAccessibleName(text)
+        self._edit.setAccessibleName(text)
 
     def focus(self) -> None:
         self._edit.setFocus(Qt.FocusReason.ShortcutFocusReason)
@@ -150,6 +154,7 @@ class SelectField(QAbstractButton):
         self._placeholder = placeholder
         self._icon_name = icon_name
         self._compact = compact
+        self.setAccessibleName(placeholder)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
@@ -198,6 +203,7 @@ class SelectField(QAbstractButton):
 
     def set_placeholder(self, text: str) -> None:
         self._placeholder = text
+        self.setAccessibleName(text)
         self._recalc()
         self.update()
 

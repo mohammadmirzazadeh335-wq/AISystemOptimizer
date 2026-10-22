@@ -17,10 +17,12 @@ from PySide6.QtWidgets import QAbstractScrollArea, QApplication, QFrame, QLabel,
 
 from myai.i18n import tr
 from myai.services.backup import BackupService
-from myai.ui.views.placeholder import ROUTES
+from myai.ui.main_window import AI_ROUTES, PAGE_TITLES
 from myai.ui.views.settings_dialog import CATEGORIES, SettingsDialog
 
 KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$")
+#: Every library route is a real page in Phase 5; there is no placeholder left.
+REAL_ROUTES = sorted(AI_ROUTES)
 LANGUAGES = ["fa", "en"]
 THEMES = ["midnight", "dawn"]
 SIZES = [QSize(1280, 720), QSize(1440, 900), QSize(1920, 1080)]
@@ -102,34 +104,21 @@ def test_conversation_screen_states(ui, language: str, theme_key: str, collapsed
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
-@pytest.mark.parametrize("route", list(ROUTES))
+@pytest.mark.parametrize("route", REAL_ROUTES)
 def test_every_route_renders_in_both_languages(ui, language: str, route: str) -> None:
     window, ctx, theme = ui
     ctx.settings.set("ui.language", language)
     QApplication.processEvents()
     window._navigate(route)
     QApplication.processEvents()
-    assert window.stack.currentWidget() is window.placeholder
+    page = window._pages[route]
+    assert window.stack.currentWidget() is page
     assert not window.composer.isVisible()
-    assert not _raw_keys(window.placeholder), _raw_keys(window.placeholder)
+    assert not _raw_keys(page), _raw_keys(page)
 
     title = window.header.title.text()
     assert title and not KEY_PATTERN.fullmatch(title)
-    assert title == tr(ROUTES[route]["title"])
-
-    # The feature list must fit inside the card, not be clipped by it.
-    for child in window.placeholder.findChildren(QWidget):
-        if not _visible(child) or child.width() < 40:
-            continue
-        if isinstance(child, QLabel) and child.wordWrap():
-            continue
-        if _scrollable(child, window.placeholder):
-            continue
-        parent = child.parentWidget()
-        if parent is None or parent is window.placeholder:
-            continue
-        ok, detail = _inside(child, parent)
-        assert ok or child.height() > parent.height(), detail
+    assert title == tr(PAGE_TITLES[route][0])
 
     window._go_chat()
     QApplication.processEvents()

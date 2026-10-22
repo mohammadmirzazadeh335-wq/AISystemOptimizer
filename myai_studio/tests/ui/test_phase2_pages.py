@@ -12,7 +12,7 @@ import time
 
 import httpx
 import pytest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLabel
 
 from myai.i18n import set_language, tr
 from myai.services.openrouter import ModelInfo, OpenRouterClient
@@ -835,24 +835,30 @@ def test_english_pages_contain_no_persian_text(ui) -> None:
         set_language("fa")
 
 
-def test_placeholder_feature_rows_never_clip_wrapped_text(ui) -> None:
-    """A clipped second line was visible in the fa rendering of Code Studio."""
+def test_wrapped_hints_never_clip_in_the_plugins_page(ui) -> None:
+    """The Phase-5 pages are built from wrapping labels; none may clip.
+
+    The original Phase-2 defect was a clipped second line in the fa rendering of
+    a feature row. The placeholder is gone, so the same geometric check now runs
+    against the plugins page, which has the same three-line hint stack.
+    """
     window, ctx, theme = ui
     set_language("fa")
     try:
         window._retranslate()
         window.resize(1120, 720)
-        window._navigate("code")
+        window._navigate("plugins")
         for _ in range(4):
             pump()
-        content = window.placeholder.content
-        assert content.features_grid.count() == 3
-        for index in range(content.features_grid.count()):
-            item = content.features_grid.itemAt(index).widget()
-            label = item.label
+        labels = [
+            child
+            for child in window.plugins_page.notes.findChildren(QLabel)
+            if child.wordWrap() and child.isVisible()
+        ]
+        assert len(labels) >= 3
+        for label in labels:
             needed = label.heightForWidth(label.width())
-            assert label.height() >= needed - 1, (index, label.text(), label.height(), needed)
-            assert item.height() >= label.height(), (index, item.height(), label.height())
+            assert label.height() >= needed - 1, (label.text(), label.height(), needed)
     finally:
         set_language("en")
 

@@ -4,16 +4,21 @@ A premium, local-first AI desktop workspace for Windows 11: multi-model chat, me
 a real code studio, supervised agents, media and research — delivered in five verified
 phases.
 
-> **Current build: Phase 4 — Agent Mode** (`v0.4.0`)
+> **Current build: Phase 5 — Ecosystem** (`v0.5.0`)
 > Chat streams from OpenRouter, memory and personality are real and editable, the Output
 > Studio keeps every revision, Code Studio opens real folders and runs real files, and the
-> agent now acts **only** through twelve registered tools — each with a JSON schema, a risk
-> level and an approval gate. Web research, Image Studio, the prompt library UI and the
-> task centre remain clearly labelled as later phases; they are **not** simulated.
+> agent acts **only** through twelve registered tools behind an approval gate. Phase 5
+> added the prompt library, the task centre (every finished agent and program run is
+> persisted), a performance monitor sampled from the real process, plugin loading for
+> prompt packs, and full keyboard/screen-reader labelling. Image Studio, Video Studio and
+> web **search** are present and clearly marked **unavailable** — no provider exists — while
+> their libraries and direct page reading are real.
 
 ![Welcome screen](artifacts/ui/01_welcome_midnight_fa.png)
 
 ![Agent Mode after a real tool run](artifacts/ui/p4_agent_run_midnight_en.png)
+
+![Prompt library with a plugin pack imported](artifacts/ui/p5_prompts_midnight_fa.png)
 
 ---
 
@@ -53,7 +58,13 @@ phases.
 | Compiler errors shown verbatim, then fix and re-run | **Works** | `p3_code_compile_error_dawn_en.png` (gcc's own `broken.c:5:5: error: …`) |
 | Missing toolchains named with the exact executable | **Works** | `p3_code_unavailable_midnight_fa.png` (`javac and java not found on PATH`) |
 | Stop a running program, wall-clock limit, no GUI blocking | **Works** | `test_stop_kills_a_long_run`, `test_run_does_not_block_the_ui` |
-| Web research page, Image Studio, prompt library UI, task centre, performance monitor | **Not in this build** — Phase 5 | — |
+| Prompt library: SQLite store, six built-ins, CRUD, search, categories, tags, use counter, send to composer | **Works** | `tests/unit/test_phase5_services.py`, `tests/ui/test_phase5_pages.py`, `p5_prompts_*.png` |
+| Task centre: every finished agent and program run persisted with status, model, project, tools, duration, steps | **Works** | `tests/unit/test_phase5_services.py::test_a_finished_agent_run_becomes_a_real_task_row`, `p5_tasks_*.png` |
+| Performance monitor: process CPU/RAM/threads, system RAM, disk, workspace/database/log sizes, 2 s auto-refresh | **Works** | `tests/unit/test_phase5_services.py::test_performance_*`, `p5_performance_*.png` |
+| Image Studio and Video Studio | **Unavailable by design** — no provider; library of real files with preview/open/delete | `p5_images_*.png`, `p5_video_*.png`, `tests/ui/test_phase5_pages.py` |
+| Web research: read a public page, extract text, copy, save as Markdown | **Works**; **search is unavailable** — no search provider, said on the page | `tests/unit/test_phase5_services.py::test_web_fetch_*`, `p5_web_*.png` |
+| Plugins: `plugin.json` discovery, permissions, prompt packs disabled by default, edited copies survive disable | **Works**; code plugins are rejected, never executed | `tests/unit/test_phase5_services.py`, `p5_plugins_*.png` |
+| Accessibility: named controls on every page, Tab/Shift-Tab containment, Escape closes modals | **Works** | `tests/ui/test_accessibility.py` (36 assertions) |
 
 The complete, honest matrix lives in [`docs/PHASE4_REPORT.md`](docs/PHASE4_REPORT.md) §3
 (Phase 3: [`docs/PHASE3_REPORT.md`](docs/PHASE3_REPORT.md) §2)
@@ -135,13 +146,13 @@ with `-Installer`, requiring Inno Setup 6).
 Last measured run (final code, after the last change):
 
 ```
-432 passed, 1 skipped in 194.28s (0:03:14)
+531 passed, 1 skipped in 338.01s (0:05:38)
 ```
 
-Per layer: `tests/unit` + `tests/integration` 250 passed + 1 skipped (6.67 s),
-`tests/ui` 182 passed (189.90 s). The skip is the opt-in live OpenRouter test, which needs a real key and network
+Per layer: `tests/unit` 258 passed + 1 skipped, `tests/integration` 14 passed,
+`tests/ui` 259 passed. The skip is the opt-in live OpenRouter test, which needs a real key and network
 access this build host does not have. Details are in
-[`docs/PHASE4_REPORT.md`](docs/PHASE4_REPORT.md) §1.
+[`docs/PHASE5_REPORT.md`](docs/PHASE5_REPORT.md) §1.
 
 Test layout:
 
@@ -222,6 +233,8 @@ artifacts/ui/         screenshots produced by scripts/capture_ui.py
 - [`docs/PHASE3_REPORT_FA.md`](docs/PHASE3_REPORT_FA.md) — گزارش فارسی فاز ۳
 - [`docs/PHASE4_REPORT.md`](docs/PHASE4_REPORT.md) — Agent Mode report: tools, approvals, test numbers, limits
 - [`docs/PHASE4_REPORT_FA.md`](docs/PHASE4_REPORT_FA.md) — گزارش فارسی فاز ۴
+- [`docs/PHASE5_REPORT.md`](docs/PHASE5_REPORT.md) — Ecosystem report: prompt library, task centre, performance, plugins, a11y, limits
+- [`docs/PHASE5_REPORT_FA.md`](docs/PHASE5_REPORT_FA.md) — گزارش فارسی فاز ۵
 - [`docs/AGENT_MODE.md`](docs/AGENT_MODE.md) — Agent Mode guide: tools, approval, network setup
 - [`docs/AGENT_MODE_FA.md`](docs/AGENT_MODE_FA.md) — راهنمای حالت عامل (فارسی)
 - [`docs/INSTALL_FA.md`](docs/INSTALL_FA.md) — راهنمای نصب و اجرا (فارسی)

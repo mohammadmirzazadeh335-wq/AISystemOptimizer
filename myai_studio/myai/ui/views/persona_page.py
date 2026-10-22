@@ -85,6 +85,7 @@ class PersonaPage(PageShell):
         layout.addLayout(path_row)
 
         self.profile_editor = QPlainTextEdit()
+        self.profile_editor.setAccessibleName(tr("persona.profile_card"))
         self.profile_editor.setMinimumHeight(runtime.px(220))
         # Prose, not code: the UI font shapes Persian correctly, while a mono
         # fallback stretches the zero-width non-joiner into a visible gap.
@@ -115,12 +116,14 @@ class PersonaPage(PageShell):
         toggle_row = QHBoxLayout()
         toggle_row.setSpacing(runtime.px(9))
         self.enabled_toggle = PillToggle("sparkles", tr("persona.enabled"))
+        self.enabled_toggle.setAccessibleName(tr("persona.enabled"))
         self.enabled_toggle.toggled.connect(self._mark_dirty)
         toggle_row.addWidget(self.enabled_toggle)
         toggle_row.addStretch(1)
         layout.addLayout(toggle_row)
 
         self.persona_editor = QPlainTextEdit()
+        self.persona_editor.setAccessibleName(tr("persona.persona_card"))
         self.persona_editor.setFont(runtime.ui_font(12))
         self.persona_editor.setPlaceholderText(tr("persona.placeholder"))
         auto_direction(self.persona_editor)

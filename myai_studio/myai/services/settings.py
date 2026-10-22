@@ -64,9 +64,13 @@ DEFAULTS: dict[str, Any] = {
     "agent.require_confirmation": True,
     "agent.max_steps": 12,
     "agent.allow_network": False,
-    "web.search_provider": "duckduckgo",
+    # No search provider is wired in this build; the Web page reports that
+    # instead of pretending a key name is a working integration.
+    "web.search_provider": "",
     "web.search_url": "",
     "web.safe_search": True,
+    # Plugins (phase 5)
+    "plugins.enabled": [],
     # Data
     "data.backup_on_exit": False,
     "data.backups_to_keep": 10,

@@ -58,6 +58,9 @@ class Events:
     AGENT_TOOL_FINISHED = "agent.tool_finished"
     AGENT_FINISHED = "agent.finished"
 
+    PROMPTS_CHANGED = "prompts.changed"
+    PLUGINS_CHANGED = "plugins.changed"
+
     APP_STARTED = "app.started"
     APP_SHUTDOWN = "app.shutdown"
     THEME_CHANGED = "theme.changed"

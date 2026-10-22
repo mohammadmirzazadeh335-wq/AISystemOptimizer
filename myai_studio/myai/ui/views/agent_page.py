@@ -334,6 +334,7 @@ class AgentPage(PageShell):
         self.task_edit = QPlainTextEdit()
         self.task_edit.setObjectName("AgentTask")
         self.task_edit.setPlaceholderText(tr("agent.task_hint"))
+        self.task_edit.setAccessibleName(tr("agent.task"))
         self.task_edit.setFixedHeight(runtime.px(74))
         layout.addWidget(self.task_edit)
 
@@ -838,6 +839,7 @@ class AgentPage(PageShell):
                 cancel=cancel,
                 on_step=lambda step: bridge.step.emit(step),
                 on_delta=lambda text: bridge.delta.emit(text),
+                project=str(self.project.root) if self.project is not None else "",
             )
         except AppError as exc:
             run = AgentRun(

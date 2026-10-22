@@ -137,6 +137,7 @@ class ApiPage(PageShell):
         layout.addWidget(self.key_state)
 
         self.key_input = QLineEdit()
+        self.key_input.setAccessibleName(tr("api.key_label"))
         self.key_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.key_input.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         self.key_input.setPlaceholderText("sk-or-v1-…")
@@ -205,6 +206,7 @@ class ApiPage(PageShell):
         self.model_count.setProperty("role", "muted")
         top.addWidget(self.model_count, 1)
         self.search = QLineEdit()
+        self.search.setAccessibleName(tr("api.search_models"))
         self.search.setPlaceholderText(tr("api.search_models"))
         self.search.setFixedWidth(runtime.px(240))
         self.search.textChanged.connect(self._on_filter)

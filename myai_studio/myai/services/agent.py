@@ -100,6 +100,7 @@ class AgentRun:
     status: str = "running"  # ok | cancelled | limit | error
     steps: list[AgentStep] = field(default_factory=list)
     final_text: str = ""
+    project: str = ""
     error: dict[str, Any] | None = None
     started_at: str = field(default_factory=lambda: utcnow().isoformat())
     duration_ms: int = 0
@@ -122,6 +123,7 @@ class AgentRun:
             "started_at": self.started_at,
             "duration_ms": self.duration_ms,
             "tool_count": self.tool_count,
+            "project": self.project,
             "usage": self.usage,
         }
 
@@ -148,6 +150,7 @@ class AgentService:
         self._lock = threading.Lock()
         self._active = False
         self._history: list[AgentRun] = []
+        self._recorder: Callable[[AgentRun], object] | None = None
 
     # ------------------------------------------------------------------ state
     @property
@@ -160,6 +163,10 @@ class AgentService:
 
     def cancel(self) -> None:
         self._cancel.set()
+
+    def set_recorder(self, recorder: Callable[[AgentRun], object] | None) -> None:
+        """Register the task-centre sink; a failing sink must never break a run."""
+        self._recorder = recorder
 
     def history(self, limit: int = 20) -> list[AgentRun]:
         return list(self._history[:limit])
@@ -184,6 +191,7 @@ class AgentService:
         on_step: Callable[[AgentStep], None] | None = None,
         on_delta: Callable[[str], None] | None = None,
         history: list[dict[str, Any]] | None = None,
+        project: str = "",
     ) -> AgentRun:
         text = (task or "").strip()
         if not text:
@@ -200,7 +208,7 @@ class AgentService:
         cancel_event = self._cancel if cancel is None else cancel
         previous_cancel = context.cancel
         context.cancel = cancel_event
-        run = AgentRun(id=uuid.uuid4().hex, task=text, model_id=model_id)
+        run = AgentRun(id=uuid.uuid4().hex, task=text, model_id=model_id, project=project)
         started = time.perf_counter()
         messages = self._initial_messages(text, context, history)
         tools_payload = self._tools.to_openai(context)
@@ -305,6 +313,11 @@ class AgentService:
             self._cancel.clear()
             self._history.insert(0, run)
             del self._history[20:]
+            if self._recorder is not None:
+                try:
+                    self._recorder(run)
+                except Exception:  # noqa: BLE001 - persistence must not kill the run
+                    logger.exception("agent_run_not_recorded")
             self._bus.emit(Events.AGENT_FINISHED, run=run.to_dict())
             if self._activity is not None:
                 self._activity.record(

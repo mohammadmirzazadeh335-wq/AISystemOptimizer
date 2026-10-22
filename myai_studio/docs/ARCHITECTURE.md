@@ -72,7 +72,7 @@ CodePage ──plan_for()──> Runner ──> ToolchainRegistry (cached detect
 - The page only touches widgets on the GUI thread: the worker emits Qt signals through
   a small bridge object, so the interface stays responsive during a 20 s program.
 
-## 5. Data model (schema v1)
+## 5. Data model (schema v3)
 
 | Table | Purpose | Notes |
 | --- | --- | --- |
@@ -81,6 +81,8 @@ CodePage ──plan_for()──> Runner ──> ToolchainRegistry (cached detect
 | `folders` | user folders for conversations | conversations are moved out, never deleted |
 | `projects` | project metadata (Code Studio keeps its folder list in settings) | — |
 | `settings` | validated key/value JSON registry | secrets never stored here |
+| `prompts` | prompt library: title, body, category, tags JSON, source (`builtin` / `user` / `plugin:<id>`), uses | indexed on `category`, `updated_at`, `source` (Phase 5) |
+| `task_runs` | one row per finished agent or program run: kind, title, status, detail, model, project, tool count, duration, steps JSON | indexed on `created_at`, `kind` (Phase 5) |
 | `schema_info` | schema version for migrations | `MIGRATIONS` map in `data/db.py` |
 
 SQLite runs in WAL mode with `foreign_keys=ON` and a busy timeout. Each operation uses
@@ -164,3 +166,44 @@ AgentService.run(task)
 `packaging/launcher.py` is the frozen entry point (PyInstaller onedir). The build
 script runs tests, packages, smoke-tests the real executable, and only then allows
 the installer step (Inno Setup). No binary is committed to the repository.
+
+## 13. Phase 5 services
+
+```
+AppContext
+├── prompts     PromptService(db, bus)                 prompts table, seed-once built-ins
+├── tasks       TaskService(db, bus)                   task_runs table
+├── performance PerformanceService(paths)              process + /proc + disk_usage + os.walk
+├── media       MediaService(paths)                    outputs/images, outputs/videos
+├── web         WebService(transport=None)             httpx + HTMLParser extraction
+└── plugins     PluginService(paths, settings, prompts) plugin.json discovery, prompt packs
+```
+
+- **No service fabricates data.** `WebService.search_available` is `False` because no
+  provider is configured; `MediaService.image_provider()`/`video_provider()` return
+  `None`; the pages print those facts.
+- **Recorder seam.** `AgentService.set_recorder(fn)` is called once in
+  `build_context()` with `TaskService.record_agent_run`. Persistence failures are logged
+  and never surface as run failures.
+- **Performance sampling** is synchronous and cheap (one `os.walk` with a file cap);
+  the page owns the 2 s `QTimer` and stops it while hidden.
+- **Plugin format.** A folder under `<workspace>/plugins` containing `plugin.json`:
+  `id` (must equal the folder name), `name`, `version` (`x.y.z`), `kind` (`prompt_pack`
+  is the only executable-free kind), `permissions` (subset of `prompts.write`,
+  `library.read`) and `prompts[]` (title, body, category, tags). Nothing is imported or
+  executed; code kinds are rejected at load with a translation key.
+- **Enable/disable.** Enabling copies prompts into `prompts` with source
+  `plugin:<id>`; disabling removes only the copies whose body/category still match the
+  manifest, so user edits survive.
+- **Schema upgrades.** `create_all` adds the new tables to existing databases, and
+  `MIGRATIONS[3]` adds the five indexes; version 3 is written to `schema_info` after the
+  migration runs.
+
+## 14. Accessibility contract
+
+- Every page sets an `accessibleName`; shared fields (`SearchField`, `SelectField`)
+  derive theirs from the placeholder.
+- Interactive controls are tab stops with visible focus rings; modal dialogs trap focus
+  and close on Escape.
+- `tests/ui/test_accessibility.py` enforces names and Tab/Shift-Tab containment, so a
+  new page without labels fails the suite.

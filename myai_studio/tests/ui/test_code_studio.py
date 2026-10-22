@@ -19,7 +19,6 @@ from PySide6.QtWidgets import QApplication
 
 from myai.i18n import tr
 from myai.services.toolchains import registry
-from myai.ui.views.placeholder import ROUTES
 
 SLOW_SCRIPT = "import time\nprint('started', flush=True)\ntime.sleep(20)\n"
 
@@ -75,12 +74,10 @@ def test_code_page_is_a_real_route(ui) -> None:
     pump()
     page = window.code_page
     assert window.stack.currentWidget() is page
-    assert window.stack.currentWidget() is not window.placeholder
     assert not window.composer.isVisible()
     assert window.sidebar.nav_buttons["code"].isChecked()
     assert window.header.title.text() == tr("code.title")
     assert window.windowTitle() == f"{tr('code.title')} — MyAI Studio Ultimate"
-    assert "code" not in ROUTES, "code must not still be a phase-locked placeholder"
 
 
 def _wired(button, messages: list[str]) -> bool:  # noqa: ANN001

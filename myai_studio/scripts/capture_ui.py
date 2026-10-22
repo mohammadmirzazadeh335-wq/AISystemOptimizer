@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from PySide6.QtCore import QTimer  # noqa: E402
-from PySide6.QtGui import QPixmap  # noqa: E402
+from PySide6.QtGui import QColor, QPixmap  # noqa: E402
 from PySide6.QtWidgets import QApplication, QWidget  # noqa: E402
 
 from myai.context import build_context  # noqa: E402
@@ -106,6 +106,44 @@ def seed(ctx) -> None:  # noqa: ANN001
         '    return subprocess.call(["python", path], timeout=seconds)\n',
         note="raise limits",
     )
+
+
+    # Phase 5 surfaces: real prompt rows, real task rows, real files on disk.
+    ctx.tasks.record(
+        kind="agent",
+        title="Explain what hello.py prints",
+        status="ok",
+        detail="hello.py prints a greeting and exits with code 0.",
+        model_id="capture/tool-model",
+        project=str(ctx.paths.projects_dir / "phase3-demo"),
+        tool_count=1,
+        duration_ms=2400,
+        steps=[
+            {"index": 1, "kind": "tool", "text": "read_file hello.py",
+             "tool": "read_file", "ok": True, "error": ""},
+            {"index": 2, "kind": "final", "text": "hello.py prints a greeting.",
+             "tool": "", "ok": True, "error": ""},
+        ],
+    )
+    ctx.tasks.record(
+        kind="code",
+        title="python hello.py",
+        status="ok",
+        detail="Hello, world!\nHello, code studio!",
+        project=str(ctx.paths.projects_dir / "phase3-demo"),
+        duration_ms=420,
+    )
+    ctx.tasks.record(
+        kind="agent",
+        title="Rename the sandbox module",
+        status="cancelled",
+        detail="Stopped by the user after the first step.",
+        model_id="capture/tool-model",
+        tool_count=1,
+        duration_ms=1300,
+    )
+    ctx.plugins.write_example()
+    ctx.plugins.set_enabled("example-prompt-pack", True)
 
 
 DEMO_FILES = {
@@ -227,7 +265,9 @@ def main() -> int:
         dialog.show()
         app.processEvents()
         pixmap = QPixmap(dialog.size())
-        pixmap.fill(0)
+        # The dialog window is translucent, so an empty fill renders as a black
+        # rectangle in the evidence frame; a dim wash reads as the real backdrop.
+        pixmap.fill(QColor(0, 0, 0, 130))
         dialog.render(pixmap)
         combined = QPixmap(window.size())
         combined.fill(0)
@@ -457,7 +497,42 @@ def main() -> int:
 
     step(drop_capture_credentials)
 
-    # 8. DPI / minimum-window stress: 1.25x and 1.5x font scale at 1120x720.
+    # 7f. Phase 5: the seven library pages, fa RTL and en LTR.
+    def write_sample_image() -> None:
+        from PySide6.QtGui import QImage
+
+        image = QImage(320, 200, QImage.Format.Format_ARGB32)
+        image.fill(QColor("#7aa2ff"))
+        image.save(str(ctx.paths.images_dir / "dawn-moodboard.png"))
+
+    step(write_sample_image)
+    step(lambda: (ctx.paths.videos_dir / "walkthrough.mp4").write_bytes(b"\x00" * 4096))
+    for language in ("fa", "en"):
+        for theme_key in ("midnight", "dawn"):
+            step(lambda lang=language, t=theme_key: ctx.settings.update(
+                {"ui.language": lang, "ui.theme": t}))
+            for route in ("prompts", "tasks", "performance", "images", "video", "web", "plugins"):
+                step(lambda r=route: window._navigate(r))
+                step(lambda: app.processEvents())
+                step(lambda r=route, lang=language, t=theme_key: shot(
+                    f"p5_{r}_{t}_{lang}"))
+
+    def prompt_dialog() -> None:
+        from myai.ui.views.prompts_page import PromptEditor
+
+        entry = next(e for e in ctx.prompts.list() if e.title.startswith("Review"))
+        dialog = PromptEditor(window, entry=entry, categories=ctx.prompts.categories())
+        dialog_shot(dialog, "p5_prompt_editor_dawn_en")
+
+    step(lambda: ctx.settings.update({"ui.language": "en", "ui.theme": "dawn"}))
+    step(lambda: window._navigate("prompts"))
+    step(lambda: app.processEvents())
+    step(prompt_dialog)
+    step(lambda: ctx.settings.update({"ui.language": "fa", "ui.theme": "midnight"}))
+    step(lambda: window._navigate("prompts"))
+    step(lambda: app.processEvents())
+
+    # 8. DPI / minimum-window stress / minimum-window stress: 1.25x and 1.5x font scale at 1120x720.
     for scale in (1.25, 1.5):
         step(lambda sc=scale: ctx.settings.update({"ui.font_scale": sc}))
         step(lambda: window.resize(runtime.px(1120 * 1.0), runtime.px(720 * 1.0)))

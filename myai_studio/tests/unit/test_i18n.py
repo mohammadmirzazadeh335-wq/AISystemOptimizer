@@ -76,11 +76,9 @@ def test_dynamic_key_patterns_resolve() -> None:
             f"chat.suggestion_{index}_sub",
             f"chat.suggestion_{index}_prompt",
         ]
-    # The counts must match ROUTES in myai/ui/views/placeholder.py.
-    # "code" (Phase 3) and "agent" (Phase 4) are real pages, not placeholders.
-    for route, count in (("images", 3), ("web", 3),
-                         ("prompts", 3), ("tasks", 3), ("performance", 3)):
-        generated += [f"placeholder.{route}.f{i}" for i in range(1, count + 1)]
+    # The placeholder pages were removed in Phase 5; their keys stay in the
+    # catalogue only until the next translation sweep, so nothing is generated
+    # from ROUTES any more.
     generated += ["chat.trust_local", "chat.trust_secret", "chat.trust_real"]
     missing = [key for key in generated if key not in catalogue]
     assert not missing, missing
@@ -99,6 +97,9 @@ def test_plural_forms_exist_for_counted_keys() -> None:
         "memory.summary_review",
         "memory.summary_committed",
         "studio.revisions",
+        "images.count",
+        "plugins.prompt_count",
+        "plugins.imported_count",
     ]
     for key in counted:
         for suffix in ("one", "many"):

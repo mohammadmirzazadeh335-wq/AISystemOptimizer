@@ -186,6 +186,60 @@ class OutputRevision(Base):
     __table_args__ = (Index("ix_revisions_output", "output_id"),)
 
 
+class Prompt(Base):
+    """A reusable prompt in the library (Phase 5).
+
+    ``source`` records where the prompt came from: ``builtin`` (seeded defaults),
+    ``user`` (written here) or ``plugin:<id>`` (imported from an enabled data
+    plugin). Plugin copies can be removed again when the plugin is disabled.
+    """
+
+    __tablename__ = "prompts"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    title: Mapped[str] = mapped_column(String(240), nullable=False, default="Untitled prompt")
+    body: Mapped[str] = mapped_column(Text, default="")
+    category: Mapped[str] = mapped_column(String(60), default="general")
+    tags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    source: Mapped[str] = mapped_column(String(80), default="user")
+    uses: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+    __table_args__ = (
+        Index("ix_prompts_category", "category"),
+        Index("ix_prompts_updated", "updated_at"),
+        Index("ix_prompts_source", "source"),
+    )
+
+
+class TaskRun(Base):
+    """A completed run recorded by the task centre (Phase 5).
+
+    Rows are written after a real agent or code run finishes — never created
+    ahead of time — so the page can only ever show work that actually happened.
+    """
+
+    __tablename__ = "task_runs"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    kind: Mapped[str] = mapped_column(String(20), default="agent")
+    title: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="ok")
+    detail: Mapped[str] = mapped_column(Text, default="")
+    model_id: Mapped[str] = mapped_column(String(200), default="")
+    project: Mapped[str] = mapped_column(Text, default="")
+    tool_count: Mapped[int] = mapped_column(Integer, default=0)
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    steps: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    __table_args__ = (
+        Index("ix_task_runs_created", "created_at"),
+        Index("ix_task_runs_kind", "kind"),
+    )
+
+
 class SchemaInfo(Base):
     __tablename__ = "schema_info"
 

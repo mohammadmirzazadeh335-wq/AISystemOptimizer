@@ -22,7 +22,7 @@ from .models import Base
 
 logger = logging.getLogger(__name__)
 
-LATEST_SCHEMA = 2
+LATEST_SCHEMA = 3
 
 # Future schema changes are appended here: version -> list of SQL statements.
 # v2 adds the memory, output and output-revision tables; ``create_all`` already
@@ -34,7 +34,15 @@ MIGRATIONS: dict[int, list[str]] = {
         "CREATE INDEX IF NOT EXISTS ix_memories_conversation ON memories(conversation_id)",
         "CREATE INDEX IF NOT EXISTS ix_outputs_conversation ON outputs(conversation_id)",
         "CREATE INDEX IF NOT EXISTS ix_revisions_output ON output_revisions(output_id)",
-    ]
+    ],
+    # v3 adds the prompt library and the persisted task centre (Phase 5).
+    3: [
+        "CREATE INDEX IF NOT EXISTS ix_prompts_category ON prompts(category)",
+        "CREATE INDEX IF NOT EXISTS ix_prompts_updated ON prompts(updated_at)",
+        "CREATE INDEX IF NOT EXISTS ix_prompts_source ON prompts(source)",
+        "CREATE INDEX IF NOT EXISTS ix_task_runs_created ON task_runs(created_at)",
+        "CREATE INDEX IF NOT EXISTS ix_task_runs_kind ON task_runs(kind)",
+    ],
 }
 
 
@@ -146,7 +154,7 @@ class Database:
             return 0
 
     def counts(self) -> dict[str, int]:
-        from .models import Conversation, Folder, Memory, Message, OutputFile, Project
+        from .models import Conversation, Folder, Memory, Message, OutputFile, Project, Prompt, TaskRun
 
         with self.session() as session:
             return {
@@ -156,6 +164,8 @@ class Database:
                 "projects": _count(session, Project),
                 "memories": _count(session, Memory),
                 "outputs": _count(session, OutputFile),
+                "prompts": _count(session, Prompt),
+                "task_runs": _count(session, TaskRun),
             }
 
     def close(self) -> None:

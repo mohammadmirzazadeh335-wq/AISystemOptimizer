@@ -176,6 +176,7 @@ class MemoryPage(PageShell):
         self.editor_title.setProperty("role", "section")
         layout.addWidget(self.editor_title)
         self.editor = QTextEdit()
+        self.editor.setAccessibleName(tr("memory.editor_card"))
         self.editor.setPlaceholderText(tr("memory.placeholder"))
         self.editor.setFixedHeight(runtime.px(84))
         auto_direction(self.editor)

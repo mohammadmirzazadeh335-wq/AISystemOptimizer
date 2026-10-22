@@ -395,6 +395,8 @@ class Sidebar(QFrame):
         ("prompts", "book", "nav.prompts"),
         ("tasks", "list-check", "nav.tasks"),
         ("performance", "gauge", "nav.performance"),
+        ("video", "video", "nav.video"),
+        ("plugins", "plug", "nav.plugins"),
     ]
 
     def __init__(self, service: ConversationService, parent: QWidget | None = None) -> None:
