@@ -48,7 +48,7 @@ CATEGORIES = [
     ("language", "type", "settings.cat_language", ""),
     ("ai", "sparkles", "settings.cat_ai", "2"),
     ("memory", "database", "settings.cat_memory", "2"),
-    ("agent", "wrench", "settings.cat_agent", "4"),
+    ("agent", "wrench", "settings.cat_agent", ""),
     ("data", "hard-drive", "settings.cat_data", ""),
     ("shortcuts", "command", "settings.cat_shortcuts", ""),
     ("about", "info", "settings.cat_about", ""),
@@ -449,16 +449,199 @@ class SettingsDialog(ModalDialog):
         )
 
     def _page_agent(self) -> QWidget:
-        return self._locked_page(
-            4,
-            tr("settings.agent_confirm"),
-            tr("placeholder.agent_body"),
-            [
-                ("shield", "Every tool call is validated inside a sandbox."),
-                ("terminal", "Time limits and immediate stop for risky commands."),
-                ("user", "Approval prompts before sensitive actions."),
-            ],
+        from ...services.tools import ToolContext, registry
+
+        widget, layout = self._column()
+
+        # 1. Gates -------------------------------------------------------
+        card = QFrame()
+        card.setProperty("panel", "card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(runtime.px(6), runtime.px(6), runtime.px(6), runtime.px(6))
+        card_layout.setSpacing(runtime.px(2))
+        head = QHBoxLayout()
+        head.setContentsMargins(runtime.px(10), runtime.px(6), runtime.px(10), runtime.px(4))
+        title = QLabel(tr("settings.agent_permissions"))
+        title.setProperty("role", "h3")
+        head.addWidget(title)
+        head.addStretch(1)
+        head.addWidget(Badge(tr("settings.done_phase", phase=4), "success"))
+        card_layout.addLayout(head)
+        card_layout.addWidget(
+            toggle_row(
+                tr("settings.agent_confirm"),
+                tr("settings.agent_confirm_hint"),
+                bool(self._settings.get("agent.require_confirmation", True)),
+                lambda value: self._write("agent.require_confirmation", bool(value)),
+            )
         )
+        card_layout.addWidget(
+            toggle_row(
+                tr("settings.agent_network"),
+                tr("settings.agent_network_hint"),
+                bool(self._settings.get("agent.allow_network", False)),
+                self._set_agent_network,
+            )
+        )
+        steps = SelectField(
+            [("4", "4"), ("8", "8"), ("12", "12"), ("20", "20"), ("50", "50")],
+            placeholder="12",
+            compact=True,
+        )
+        steps.set_value(str(int(self._settings.get("agent.max_steps", 12) or 12)))
+        steps.value_changed.connect(lambda value: self._write("agent.max_steps", int(value)))
+        card_layout.addWidget(
+            SettingRow(tr("settings.agent_steps"), tr("settings.agent_steps_hint"), steps)
+        )
+        layout.addWidget(card)
+
+        # 2. Network credentials ----------------------------------------
+        cred_card = QFrame()
+        cred_card.setProperty("panel", "card")
+        cred_layout = QVBoxLayout(cred_card)
+        cred_layout.setContentsMargins(runtime.px(16), runtime.px(14), runtime.px(16), runtime.px(14))
+        cred_layout.setSpacing(runtime.px(8))
+
+        search_title = QLabel(tr("settings.agent_search_url"))
+        search_title.setProperty("role", "h3")
+        cred_layout.addWidget(search_title)
+        search_row = QHBoxLayout()
+        search_row.setSpacing(runtime.px(8))
+        self.agent_search_input = QLineEdit()
+        self.agent_search_input.setPlaceholderText("https://searx.example/search")
+        self.agent_search_input.setText(str(self._settings.get("web.search_url", "") or ""))
+        self.agent_search_input.setClearButtonEnabled(True)
+        search_row.addWidget(self.agent_search_input, 1)
+        save_search = QPushButton(tr("settings.agent_save"))
+        save_search.setProperty("variant", "secondary")
+        save_search.setProperty("buttonsize", "sm")
+        save_search.clicked.connect(
+            lambda: self._write("web.search_url", self.agent_search_input.text().strip())
+        )
+        search_row.addWidget(save_search)
+        cred_layout.addLayout(search_row)
+        search_hint = QLabel(tr("settings.agent_search_url_hint"))
+        search_hint.setProperty("role", "faint")
+        search_hint.setWordWrap(True)
+        cred_layout.addWidget(search_hint)
+
+        token_title = QLabel(tr("settings.agent_github_token"))
+        token_title.setProperty("role", "h3")
+        cred_layout.addWidget(token_title)
+        token_row = QHBoxLayout()
+        token_row.setSpacing(runtime.px(8))
+        self.agent_token_input = QLineEdit()
+        self.agent_token_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.agent_token_input.setPlaceholderText("ghp_…")
+        token_row.addWidget(self.agent_token_input, 1)
+        save_token = QPushButton(tr("settings.agent_save"))
+        save_token.setProperty("variant", "secondary")
+        save_token.setProperty("buttonsize", "sm")
+        save_token.clicked.connect(self._save_github_token)
+        token_row.addWidget(save_token)
+        clear_token = QPushButton(tr("settings.agent_clear_token"))
+        clear_token.setProperty("variant", "ghost")
+        clear_token.setProperty("buttonsize", "sm")
+        clear_token.clicked.connect(self._clear_github_token)
+        token_row.addWidget(clear_token)
+        cred_layout.addLayout(token_row)
+        self.agent_token_state = QLabel("")
+        self.agent_token_state.setProperty("role", "faint")
+        cred_layout.addWidget(self.agent_token_state)
+        token_hint = QLabel(tr("settings.agent_github_token_hint"))
+        token_hint.setProperty("role", "faint")
+        token_hint.setWordWrap(True)
+        cred_layout.addWidget(token_hint)
+        layout.addWidget(cred_card)
+
+        # 3. What actually works on this machine -------------------------
+        avail_card = QFrame()
+        avail_card.setProperty("panel", "card")
+        avail_layout = QVBoxLayout(avail_card)
+        avail_layout.setContentsMargins(runtime.px(16), runtime.px(14), runtime.px(16), runtime.px(14))
+        avail_layout.setSpacing(runtime.px(7))
+        avail_head = QHBoxLayout()
+        avail_title = QLabel(tr("settings.agent_availability"))
+        avail_title.setProperty("role", "h3")
+        avail_head.addWidget(avail_title)
+        avail_head.addStretch(1)
+        avail_layout.addLayout(avail_head)
+        avail_hint = QLabel(tr("settings.agent_availability_hint"))
+        avail_hint.setProperty("role", "faint")
+        avail_hint.setWordWrap(True)
+        avail_layout.addWidget(avail_hint)
+
+        from ...i18n import tr as translate
+
+        context = ToolContext(settings=self._settings, secrets=self._secrets)
+        for spec in registry().specs():
+            found = spec.reason_key(context)
+            if found is None:
+                reason = None
+            else:
+                reason_key, params = found
+                template = translate(reason_key)
+                try:
+                    reason = template.format(**params) if params else template
+                except (KeyError, IndexError):
+                    reason = template
+            row = QHBoxLayout()
+            row.setSpacing(runtime.px(8))
+            icon = QLabel()
+            icon.setPixmap(runtime.icons().px("check" if reason is None else "lock", 12,
+                                             "accent" if reason is None else "muted"))
+            row.addWidget(icon)
+            name = QLabel(tr(spec.label_key) if spec.label_key else spec.id)
+            name.setProperty("role", "muted")
+            row.addWidget(name)
+            if reason is None:
+                row.addStretch(1)
+                row.addWidget(Badge(tr("settings.agent_ready"), "success"))
+            else:
+                detail = QLabel(reason)
+                detail.setProperty("role", "faint")
+                detail.setWordWrap(True)
+                row.addWidget(detail, 1)
+                row.addWidget(Badge(tr("settings.agent_unavailable"), "muted"))
+            avail_layout.addLayout(row)
+        layout.addWidget(avail_card)
+        self._refresh_github_state()
+        return widget
+
+    # ------------------------------------------------------- agent helpers
+    def _set_agent_network(self, value: bool) -> None:
+        self._write("agent.allow_network", bool(value))
+        if value and not str(self._settings.get("web.search_url", "") or "").strip():
+            self._flash(tr("settings.agent_network_still_blocked"), "warning")
+
+    def _save_github_token(self) -> None:
+        token = self.agent_token_input.text().strip()
+        if not token:
+            self._flash(tr("settings.agent_token_empty"), "warning")
+            return
+        try:
+            self._secrets.set("github_token", token)
+        except Exception as exc:  # noqa: BLE001
+            self._flash(str(exc), "danger")
+            return
+        self.agent_token_input.clear()
+        self._refresh_github_state()
+        self._flash(tr("settings.agent_token_saved"), "success")
+
+    def _clear_github_token(self) -> None:
+        removed = self._secrets.delete("github_token")
+        self._refresh_github_state()
+        self._flash(
+            tr("settings.agent_token_removed") if removed else tr("settings.agent_token_absent"),
+            "success" if removed else "warning",
+        )
+
+    def _refresh_github_state(self) -> None:
+        stored = self._secrets.has("github_token")
+        self.agent_token_state.setText(
+            tr("settings.agent_token_stored") if stored else tr("settings.agent_token_missing")
+        )
+        self.agent_token_state.setProperty("role", "success" if stored else "faint")
 
     def _page_data(self) -> QWidget:
         widget, layout = self._column()

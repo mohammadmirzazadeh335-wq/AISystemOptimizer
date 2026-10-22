@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QListView,
     QMenu,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QStackedWidget,
     QStyle,
@@ -461,8 +462,25 @@ class Sidebar(QFrame):
         chats_header.addWidget(self.folder_button)
         outer.addLayout(chats_header)
 
+        # The library + AI sections are taller than a 720 px window at 100 %.
+        # They live in a scroll area so a short window scrolls instead of
+        # letting the empty state paint over the navigation rows.
+        self.nav_scroll = QScrollArea()
+        self.nav_scroll.setWidgetResizable(True)
+        self.nav_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.nav_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        nav_body = QWidget()
+        self.nav_layout = QVBoxLayout(nav_body)
+        self.nav_layout.setContentsMargins(0, 0, 0, 0)
+        self.nav_layout.setSpacing(runtime.px(4))
+        self.nav_scroll.setWidget(nav_body)
+
         self._stack = QStackedWidget()
         self._stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        # The conversation area takes the leftover height (stretch 1) but never
+        # less than this, so it cannot collapse to ~30 px and paint its empty
+        # state over the LIBRARY rows; below that the column scrolls instead.
+        self._stack.setMinimumHeight(runtime.px(76))
         self.list_view = QListView()
         self.list_view.setObjectName("ConversationList")
         self.list_view.setFrameShape(QFrame.Shape.NoFrame)
@@ -505,33 +523,34 @@ class Sidebar(QFrame):
         self._loading_timer.timeout.connect(self._initial_load)
         self._loading_timer.setSingleShot(True)
         self._loading_timer.start(160)
-        outer.addWidget(self._stack, 1)
+        self.nav_layout.addWidget(self._stack, 1)
 
         divider = QFrame()
         divider.setProperty("panel", "divider")
-        outer.addWidget(divider)
+        self.nav_layout.addWidget(divider)
         self.library_label = QLabel(tr("nav.library"))
         self.library_label.setProperty("role", "section")
         self.library_label.setContentsMargins(runtime.px(8), runtime.px(4), 0, runtime.px(2))
-        outer.addWidget(self.library_label)
+        self.nav_layout.addWidget(self.library_label)
 
         self.nav_buttons: dict[str, NavButton] = {}
         for key, icon_name, label_key in self.LIBRARY:
             button = NavButton(tr(label_key), icon_name)
             button.clicked.connect(lambda _=False, k=key: self._activate_route(k))
             self.nav_buttons[key] = button
-            outer.addWidget(button)
+            self.nav_layout.addWidget(button)
 
         self.ai_label = QLabel(tr("nav.ai_section"))
         self.ai_label.setProperty("role", "section")
         self.ai_label.setContentsMargins(runtime.px(8), runtime.px(6), 0, runtime.px(2))
-        outer.addWidget(self.ai_label)
+        self.nav_layout.addWidget(self.ai_label)
         for key, icon_name, label_key in self.AI_PAGES:
             button = NavButton(tr(label_key), icon_name)
             button.clicked.connect(lambda _=False, k=key: self._activate_route(k))
             self.nav_buttons[key] = button
-            outer.addWidget(button)
+            self.nav_layout.addWidget(button)
 
+        outer.addWidget(self.nav_scroll, 1)
         outer.addStretch(0)
         bottom = QHBoxLayout()
         bottom.setContentsMargins(0, runtime.px(4), 0, 0)
@@ -578,6 +597,12 @@ class Sidebar(QFrame):
         self._stack.setCurrentWidget(self.list_view)
         self.refresh()
         self.select_current(None)
+
+    def _fit_chat_list(self) -> None:
+        """Let the decorative circle go first when the list strip is short."""
+        if self._collapsed:
+            return
+        self.empty_state.circle.setVisible(self._stack.height() >= runtime.px(112))
 
     def refresh(self) -> None:
         self.model.refresh(self.search.text())
@@ -806,6 +831,7 @@ class Sidebar(QFrame):
         self.setMinimumWidth(width)
         self.setMaximumWidth(width)
         self.grip.reposition()
+        self._fit_chat_list()
 
     def set_manual_width(self, width_px: int) -> None:
         if self._collapsed:
@@ -906,6 +932,7 @@ class Sidebar(QFrame):
     def resizeEvent(self, event) -> None:  # noqa: ANN001
         super().resizeEvent(event)
         self.grip.reposition()
+        self._fit_chat_list()
 
     # --------------------------------------------------------------- themes/i18n
     def refresh_theme(self) -> None:

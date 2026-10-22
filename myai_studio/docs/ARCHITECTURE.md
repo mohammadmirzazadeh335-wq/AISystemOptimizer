@@ -132,14 +132,34 @@ reads configuration files directly.
 | Extension | Contract |
 | --- | --- |
 | AI provider | implement the Phase 2 `ChatProvider` protocol (`stream`, `models`, `cancel`) |
-| Tool | subclass `agent.tools.Tool` with name, schema, permission level, `run(ctx, args)` |
+| Tool | add a `ToolSpec` to `services/tools.py`: id, JSON schema, risk level, availability check, handler `(ctx, args)`; the registry exposes it to the model and the UI automatically |
 | Plugin | `plugin.json` declaring permissions and tools, loaded disabled by default |
 | Theme | add a palette dict + accent entry; tokens flow everywhere automatically |
 | Language | add `i18n/locales/<code>.json`; RTL is automatic for `fa/ar/he/ur` |
 | Migration | append SQL to `MIGRATIONS[version]` and bump `LATEST_SCHEMA` |
 | View | add a page to `QStackedWidget` and a route in the sidebar |
 
-## 11. Packaging
+## 11. Agent Mode (Phase 4)
+
+```
+AgentService.run(task)
+  → ChatService.stream_chat(messages, tools=registry.schemas())
+  → tool_calls?
+      → validate JSON + spec → availability gate → approval (write/execute/network)
+      → ToolRegistry.execute(...) on the worker thread
+      → ToolResult (stdout/stderr/HTTP body) appended verbatim as a tool message
+  → repeat until a final answer, cancel, or agent.max_steps
+```
+
+- The loop runs on a worker thread; the page receives `step`, `delta`, `approval` and
+  `finished` through queued Qt signals, so the window never blocks on a tool call.
+- Approval is a blocking callback **inside** the worker; the UI shows a modal
+  `ConfirmDialog` and resolves the request. Cancelling resolves it as denied.
+- Unavailable tools never reach the model as runnable: `ToolSpec.reason_key(ctx)` returns
+  a translation key plus parameters, rendered in the page and in Settings → Agent.
+- `generate_image` is registered with a reason that can never clear — no provider exists.
+
+## 12. Packaging
 
 `packaging/launcher.py` is the frozen entry point (PyInstaller onedir). The build
 script runs tests, packages, smoke-tests the real executable, and only then allows

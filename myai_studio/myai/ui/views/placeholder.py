@@ -84,13 +84,6 @@ class FeatureItem(QFrame):
 
 
 ROUTES = {
-    "agent": {
-        "icon": "sparkles",
-        "phase": 4,
-        "title": "placeholder.agent_title",
-        "body": "placeholder.agent_body",
-        "features": [("route", 1), ("wrench", 2), ("shield", 3)],
-    },
     "images": {
         "icon": "image",
         "phase": 4,
@@ -134,7 +127,7 @@ class PlaceholderView(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._route = "agent"
+        self._route = "images"
         self._build()
 
     def _build(self) -> None:
@@ -157,7 +150,7 @@ class PlaceholderView(QWidget):
         self.content.set_content(data)
 
     def retranslate(self) -> None:
-        self.content.set_content(ROUTES.get(self._route, ROUTES["agent"]))
+        self.content.set_content(ROUTES.get(self._route, ROUTES["images"]))
 
 
 class _PlaceholderContent(QWidget):

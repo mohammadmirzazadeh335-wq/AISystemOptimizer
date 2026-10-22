@@ -42,8 +42,9 @@ On Windows:
 
 ## Visual verification
 
-`scripts/capture_ui.py` drives the real window and captures nine PNGs into
-`artifacts/ui/`:
+`scripts/capture_ui.py` drives the real window and captures the current matrix (55 PNGs)
+into `artifacts/ui/`, including every phase's pages in fa RTL and en LTR, both themes and
+two DPI scales:
 
 | File | Shows |
 | --- | --- |

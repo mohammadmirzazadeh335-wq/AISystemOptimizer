@@ -8,7 +8,7 @@ next one starts. Status reflects **actual** progress, not intentions.
 | 1 | Foundation | **Complete (v0.1.0)** | shell, design system, i18n/RTL, persistence, settings, secrets, backups, tests, screenshots, packaging scripts |
 | 2 | AI core | **Complete (v0.2.0)** | OpenRouter client (streaming, cancel, retry, timeouts), model catalogue, chat with real replies, token/latency stats, personality files, memory (global + per conversation), prompt library foundation |
 | 3 | Code Studio | **Complete (v0.3.0)** | real folder tree, editor with syntax highlighting + line numbers, autosave and `Ctrl+S`, real execution with detected toolchains, verbatim compiler diagnostics, stdout/stderr/exit code, cancel + wall-clock limit, missing toolchains named (no interactive debugger yet — see report §4) |
-| 4 | Agent & tools | Next | validated tool registry, approval workflow, file/project tools, web search, image studio, GitHub integration, task center |
+| 4 | Agent & tools | **Complete (v0.4.0)** | 12 validated tools with JSON schemas and risk levels, approval gate for write/execute/network, real file/project tools, real execution through the Phase-3 toolchain detection, web search (SearxNG endpoint) and GitHub tools gated by settings, session run history, Settings → Agent page. Image generation is registered but **unavailable** — no provider exists (see report §4) |
 | 5 | Ecosystem & polish | Planned | plugin architecture, performance monitor, video studio (only if a real service exists), accessibility pass, final report, installer |
 
 ## Acceptance criteria per phase
@@ -25,9 +25,10 @@ compiler errors, edit and re-run. Toolchains that are missing are reported as
 unavailable rather than faked. Every language claim needs a test that compiles and
 runs a real file on this machine.
 
-**Phase 4** — every agent action goes through a registered tool with a schema, a
-permission level and a confirmation gate for sensitive operations. Web search and
-image generation are labelled unavailable if no working service is reachable.
+**Phase 4 (met)** — every agent action goes through a registered tool with a schema, a
+permission level and a confirmation gate for sensitive operations; a denied call never
+executes; tool results and errors are fed back verbatim; the loop is bounded; web search
+and image generation are labelled unavailable when no working service is configured.
 
 **Phase 5** — plugin loading with permission manifests, performance metrics measured
 from the real process, an honest capability table, Persian user guide, and a real

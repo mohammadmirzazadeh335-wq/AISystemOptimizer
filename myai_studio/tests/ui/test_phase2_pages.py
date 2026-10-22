@@ -45,7 +45,7 @@ def pump() -> None:
 
 
 # --------------------------------------------------------------------- routing
-@pytest.mark.parametrize("route", ["api", "memory", "persona", "studio"])
+@pytest.mark.parametrize("route", ["api", "memory", "persona", "studio", "agent"])
 def test_ai_pages_are_reachable(ui, route) -> None:
     window, ctx, theme = ui
     window._navigate(route)
@@ -952,7 +952,7 @@ def _is_wired(button, messages: list[str]) -> bool:  # noqa: ANN001
     return False
 
 
-@pytest.mark.parametrize("route", ["api", "memory", "persona", "studio"])
+@pytest.mark.parametrize("route", ["api", "memory", "persona", "studio", "agent"])
 def test_every_button_on_the_ai_pages_has_a_receiver(ui, monkeypatch, route) -> None:
     """A button that looks live but does nothing was an explicit acceptance fail."""
     from PySide6.QtWidgets import QLineEdit, QListWidget, QPlainTextEdit, QPushButton

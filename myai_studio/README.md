@@ -4,15 +4,16 @@ A premium, local-first AI desktop workspace for Windows 11: multi-model chat, me
 a real code studio, supervised agents, media and research — delivered in five verified
 phases.
 
-> **Current build: Phase 3 — Code Studio** (`v0.3.0`)
+> **Current build: Phase 4 — Agent Mode** (`v0.4.0`)
 > Chat streams from OpenRouter, memory and personality are real and editable, the Output
-> Studio keeps every revision, and Code Studio now opens real folders, edits real files
-> and runs them with the toolchains actually installed on the machine. Agent Mode, web,
-> image and GitHub remain clearly labelled as later phases — they are **not** simulated.
+> Studio keeps every revision, Code Studio opens real folders and runs real files, and the
+> agent now acts **only** through twelve registered tools — each with a JSON schema, a risk
+> level and an approval gate. Web research, Image Studio, the prompt library UI and the
+> task centre remain clearly labelled as later phases; they are **not** simulated.
 
 ![Welcome screen](artifacts/ui/01_welcome_midnight_fa.png)
 
-![Code Studio running a real file](artifacts/ui/p3_code_dawn_en.png)
+![Agent Mode after a real tool run](artifacts/ui/p4_agent_run_midnight_en.png)
 
 ---
 
@@ -40,14 +41,22 @@ phases.
 | User profile file + assistant persona, separate from memory | **Works** | `tests/unit/test_persona_outputs.py`, `tests/ui/test_phase2_pages.py` |
 | Output Studio: code/text/prompt/Markdown/JSON, revisions, diff, restore, export | **Works** | `tests/unit/test_persona_outputs.py`, UI tests |
 | Code Studio: open a real folder, browse/edit files, `Ctrl+S`, autosave, recent projects | **Works** | `tests/ui/test_code_studio.py`, `p3_code_*.png` |
+| Agent Mode: 12 registered tools with JSON schemas and risk levels | **Works** | `myai/services/tools.py`, `tests/unit/test_agent_tools.py` |
+| Approval gate: writes, runs and network calls ask first; a denial never executes | **Works** | `tests/unit/test_agent.py`, `tests/ui/test_agent_page.py` |
+| Unavailable tools name the exact missing piece (key, folder, network, endpoint, token, image provider) | **Works** | `agent.reason_*` in fa/en, tool rows, Settings → Agent |
+| Bounded loop with step limit, cancel and per-step results fed back verbatim | **Works** | `tests/unit/test_agent.py` |
+| Agent runs real `python` files through the Phase-3 toolchain detection | **Works** | `tests/unit/test_agent_tools.py::test_run_file_*` |
+| Web search and GitHub tools | **Works when configured** (SearxNG endpoint / GitHub token); otherwise reported unavailable | `tests/unit/test_openrouter_tools.py`, mocked `MockTransport` HTTP |
+| Image generation | **Not available** — no provider exists, and the tool says so | `tests/unit/test_agent_tools.py::test_generate_image_is_unavailable` |
 | Real execution with the toolchain detected on this machine | **Works** | python 3.11.2 / node 22 / gcc / g++ / bash here; `tests/unit/test_code_services.py` |
 | Real stdout, stderr, exit code and duration in the output panel | **Works** | `06_code_studio_run_en.png`, `p3_code_dawn_en.png` |
 | Compiler errors shown verbatim, then fix and re-run | **Works** | `p3_code_compile_error_dawn_en.png` (gcc's own `broken.c:5:5: error: …`) |
 | Missing toolchains named with the exact executable | **Works** | `p3_code_unavailable_midnight_fa.png` (`javac and java not found on PATH`) |
 | Stop a running program, wall-clock limit, no GUI blocking | **Works** | `test_stop_kills_a_long_run`, `test_run_does_not_block_the_ui` |
-| Agent Mode, web research, Image Studio, GitHub, task centre | **Not in this build** — Phases 4–5 | — |
+| Web research page, Image Studio, prompt library UI, task centre, performance monitor | **Not in this build** — Phase 5 | — |
 
-The complete, honest matrix lives in [`docs/PHASE3_REPORT.md`](docs/PHASE3_REPORT.md) §2
+The complete, honest matrix lives in [`docs/PHASE4_REPORT.md`](docs/PHASE4_REPORT.md) §3
+(Phase 3: [`docs/PHASE3_REPORT.md`](docs/PHASE3_REPORT.md) §2)
 (Phase 1: [`docs/PHASE1_REPORT.md`](docs/PHASE1_REPORT.md), Phase 2:
 [`docs/PHASE2_REPORT.md`](docs/PHASE2_REPORT.md)).
 
@@ -126,23 +135,25 @@ with `-Installer`, requiring Inno Setup 6).
 Last measured run (final code, after the last change):
 
 ```
-319 passed, 1 skipped in 122.23s (0:02:02)
+432 passed, 1 skipped in 194.28s (0:03:14)
 ```
 
-Per layer: `tests/unit` 156 passed + 1 skipped (3.92 s), `tests/integration` 14 passed
-(0.60 s), `tests/ui` 149 passed (113.85 s). The skip is the opt-in live OpenRouter test,
-which needs a real key and network access this build host does not have. Details and
-per-layer timings are in [`docs/PHASE3_REPORT.md`](docs/PHASE3_REPORT.md) §1.
+Per layer: `tests/unit` + `tests/integration` 250 passed + 1 skipped (6.67 s),
+`tests/ui` 182 passed (189.90 s). The skip is the opt-in live OpenRouter test, which needs a real key and network
+access this build host does not have. Details are in
+[`docs/PHASE4_REPORT.md`](docs/PHASE4_REPORT.md) §1.
 
 Test layout:
 
 ```
 tests/unit          providers (mocked transport), memory, persona, outputs, chat service,
                     toolchains/runner/projects (real python, gcc and node runs),
+                    agent tools (real files, real runs, mocked HTTP), the agent loop,
                     tokens, i18n, markdown, DB, settings, secrets, backups
 tests/ui            real widgets: window, sidebar, composer, dialogs, themes, RTL,
                     API/memory/personality/studio pages, Code Studio (real files and
-                    real processes), streaming bubbles
+                    real processes), Agent Mode (approval dialog, timeline, step limit),
+                    streaming bubbles
 tests/integration   cross-layer flows, backup secret-exclusion, restart survival
 ```
 
@@ -172,14 +183,16 @@ myai/
   core/               paths, events, logging, errors, markdown, time utils
   data/               SQLAlchemy models, database lifecycle, repositories
   services/           settings, conversations, activity, backups, openrouter, chat,
-                      memory, persona, outputs, toolchains, runner, projects
+                      memory, persona, outputs, toolchains, runner, projects,
+                      tools (registry + handlers), agent (bounded loop)
   security/           encrypted secret store
   i18n/               translation runtime + fa/en catalogues
   ui/
     theme/            design tokens, theme manager, icon system
     widgets/          buttons, fields, feedback, dialogs, markdown, painting guard
     views/            sidebar, header, composer, chat, inspector, settings, placeholders,
-                      api_page, memory_page, persona_page, output_page, code_page
+                      api_page, memory_page, persona_page, output_page, code_page,
+                      agent_page
     main_window.py    application shell
     brand.py          vector identity
 tests/                unit, ui, integration
@@ -207,6 +220,10 @@ artifacts/ui/         screenshots produced by scripts/capture_ui.py
 - [`docs/PHASE2_REPORT_FA.md`](docs/PHASE2_REPORT_FA.md) — گزارش فارسی فاز ۲
 - [`docs/PHASE3_REPORT.md`](docs/PHASE3_REPORT.md) — Code Studio report, real-execution evidence, limits
 - [`docs/PHASE3_REPORT_FA.md`](docs/PHASE3_REPORT_FA.md) — گزارش فارسی فاز ۳
+- [`docs/PHASE4_REPORT.md`](docs/PHASE4_REPORT.md) — Agent Mode report: tools, approvals, test numbers, limits
+- [`docs/PHASE4_REPORT_FA.md`](docs/PHASE4_REPORT_FA.md) — گزارش فارسی فاز ۴
+- [`docs/AGENT_MODE.md`](docs/AGENT_MODE.md) — Agent Mode guide: tools, approval, network setup
+- [`docs/AGENT_MODE_FA.md`](docs/AGENT_MODE_FA.md) — راهنمای حالت عامل (فارسی)
 - [`docs/INSTALL_FA.md`](docs/INSTALL_FA.md) — راهنمای نصب و اجرا (فارسی)
 - [`docs/TESTING.md`](docs/TESTING.md) — how to run and extend the tests
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — the five phases and their acceptance criteria

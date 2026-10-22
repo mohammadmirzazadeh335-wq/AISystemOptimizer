@@ -52,6 +52,12 @@ class SignalBus:
 class Events:
     """Namespaced event names used across the application."""
 
+    AGENT_STARTED = "agent.started"
+    AGENT_STEP = "agent.step"
+    AGENT_TOOL_STARTED = "agent.tool_started"
+    AGENT_TOOL_FINISHED = "agent.tool_finished"
+    AGENT_FINISHED = "agent.finished"
+
     APP_STARTED = "app.started"
     APP_SHUTDOWN = "app.shutdown"
     THEME_CHANGED = "theme.changed"

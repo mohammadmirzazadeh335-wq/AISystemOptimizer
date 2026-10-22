@@ -7,6 +7,7 @@ all rendered from the real application window. Output goes to ``artifacts/ui``.
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import sys
 import tempfile
@@ -21,7 +22,15 @@ from PySide6.QtGui import QPixmap  # noqa: E402
 from PySide6.QtWidgets import QApplication, QWidget  # noqa: E402
 
 from myai.context import build_context  # noqa: E402
+from myai.i18n import tr  # noqa: E402
 from myai.services.backup import BackupService  # noqa: E402
+from myai.services.openrouter import (  # noqa: E402
+    ChatResult,
+    StreamStats,
+    ToolCall,
+    model_to_dict,
+    parse_model,
+)
 from myai.ui.main_window import MainWindow  # noqa: E402
 from myai.ui.theme import runtime  # noqa: E402
 from myai.ui.theme.manager import ThemeManager  # noqa: E402
@@ -125,6 +134,35 @@ DEMO_FILES = {
     "notes.md": "# Project notes\n\n- run `hello.py` to see real stdout\n- C files compile into `.myai-build`\n",
     "app.js": "const values = [1, 2, 3];\nconsole.log(values.map((v) => v * 2).join(','));\n",
 }
+
+
+class CaptureAgentClient:
+    """Deterministic stand-in for the provider (no live key in this sandbox).
+
+    It answers with one real ``read_file`` call and a fixed summary so the
+    timeline can be captured from real tool execution. The capture is labelled
+    as a test double in the report; it is never presented as a live model reply.
+    """
+
+    def __init__(self, path: str = "hello.py") -> None:
+        self.path = path
+        self.calls = 0
+
+    def stream_chat(self, **_kwargs):  # noqa: ANN003, ANN201
+        self.calls += 1
+        if self.calls % 2 == 1:
+            return ChatResult(
+                stats=StreamStats(finish_reason="tool_calls", total_tokens=21),
+                tool_calls=[ToolCall(id=f"capture-{self.calls}", name="read_file",
+                                     arguments=json.dumps({"path": self.path}))],
+            )
+        return ChatResult(
+            text=(
+                "hello.py prints a Persian and an English greeting, then exits with "
+                "code 0. No other file was touched."
+            ),
+            stats=StreamStats(total_tokens=48, completion_tokens=26),
+        )
 
 
 def build_demo_project(ctx) -> Path:  # noqa: ANN001
@@ -326,6 +364,99 @@ def main() -> int:
     step(run_demo)
     step(lambda: shot("p3_code_unavailable_midnight_fa"))
 
+    # 7e. Agent Mode (Phase 4). The workspace gets a placeholder key and a
+    # deterministic client so the page can be captured mid-run; the report says
+    # plainly that no live model call happened here.
+    agent_page = window.agent_page
+    original_factory = ctx.chat._client_factory  # noqa: SLF001 - capture-only seam
+    tool_models = [
+        parse_model({"id": "capture/tool-model", "name": "Capture Tool Model",
+                     "supported_parameters": ["tools", "temperature"]}),
+    ]
+    ctx.settings.update({
+        "ai.openrouter_cache": [model_to_dict(model) for model in tool_models],
+        "ai.default_model": "capture/tool-model",
+    })
+    ctx.secrets.set_api_key("sk-or-v1-capture-placeholder")
+
+    def install_capture_client() -> None:
+        client = CaptureAgentClient()
+        ctx.chat._client_factory = lambda: client  # noqa: SLF001
+        agent_page.task_edit.setPlainText("Read hello.py and summarise what it does.")
+        agent_page._update_controls()
+
+    def run_agent() -> None:
+        install_capture_client()
+        agent_page.start()
+        deadline = time.monotonic() + 20
+        while agent_page._thread is not None and time.monotonic() < deadline:
+            app.processEvents()
+            time.sleep(0.02)
+        app.processEvents()
+
+    def reset_agent_view() -> None:
+        """Start each language/theme frame from an empty timeline."""
+        agent_page._run = None
+        agent_page._clear_timeline()
+        ctx.agent._history.clear()  # noqa: SLF001 - capture-only reset
+        agent_page._refresh_runs()
+        agent_page.status_badge.setText(tr("agent.status_idle"))
+        agent_page.status_badge.set_tone("muted")
+        agent_page._update_controls()
+
+    for language in ("fa", "en"):
+        for theme_key in ("midnight", "dawn"):
+            step(lambda lang=language, t=theme_key: ctx.settings.update(
+                {"ui.language": lang, "ui.theme": t}))
+            step(lambda: window._navigate("agent"))
+            step(reset_agent_view)
+            step(lambda: app.processEvents())
+            step(lambda lang=language, t=theme_key: shot(f"p4_agent_idle_{t}_{lang}"))
+            step(run_agent)
+            step(lambda lang=language, t=theme_key: shot(f"p4_agent_run_{t}_{lang}"))
+
+    def agent_approval() -> None:
+        ctx.settings.update({"ui.language": "en", "ui.theme": "dawn"})
+        theme.apply()
+        window._navigate("agent")
+        window.repaint()
+        app.processEvents()
+        dialog = ConfirmDialog(
+            window,
+            tr("agent.approve_title"),
+            tr("agent.approve_body").format(
+                tool=tr("agent.tool_write_file"),
+                arguments=json.dumps({"path": "hello.py", "content": "print('hi')\\n"},
+                                     ensure_ascii=False, indent=2),
+            ),
+            confirm_text=tr("agent.approve"),
+            cancel_text=tr("agent.deny"),
+            danger=True,
+            icon="shield",
+        )
+        dialog_shot(dialog, "p4_agent_approve_dawn_en")
+
+    step(agent_approval)
+
+    def agent_settings() -> None:
+        ctx.settings.update({"ui.language": "fa", "ui.theme": "midnight"})
+        app.processEvents()
+        dialog = SettingsDialog(
+            window, ctx.settings, theme, ctx.paths, ctx.db, ctx.secrets,
+            BackupService(ctx.paths, ctx.db, ctx.settings), initial="agent",
+        )
+        dialog_shot(dialog, "10b_settings_agent_fa")
+
+    step(agent_settings)
+
+    def drop_capture_credentials() -> None:
+        ctx.secrets.set_api_key("")
+        ctx.chat._client_factory = original_factory  # noqa: SLF001
+        window._navigate("agent")
+        app.processEvents()
+
+    step(drop_capture_credentials)
+
     # 8. DPI / minimum-window stress: 1.25x and 1.5x font scale at 1120x720.
     for scale in (1.25, 1.5):
         step(lambda sc=scale: ctx.settings.update({"ui.font_scale": sc}))
@@ -343,6 +474,9 @@ def main() -> int:
         step(lambda: open_demo("hello.py"))
         step(run_demo)
         step(lambda sc=scale: shot(f"p3_scale_{str(sc).replace('.', '_')}_code_en"))
+        step(lambda: window._navigate("agent"))
+        step(lambda: app.processEvents())
+        step(lambda sc=scale: shot(f"p4_agent_scale_{str(sc).replace('.', '_')}_en"))
     step(lambda: ctx.settings.update({"ui.font_scale": 1.0}))
     step(lambda: window.resize(1440, 900))
     step(lambda: ctx.settings.update({"ui.theme": "midnight", "ui.language": "fa"}))

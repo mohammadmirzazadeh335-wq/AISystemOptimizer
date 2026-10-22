@@ -25,12 +25,14 @@ from .data import (
 from .i18n import set_language
 from .security.secrets import SecretStore
 from .services.activity import ActivityService
+from .services.agent import AgentService
 from .services.chat import ChatService, build_chat_service
 from .services.conversations import ConversationService
 from .services.memory import MemoryService
 from .services.outputs import OutputService
 from .services.persona import PersonaService
 from .services.settings import SettingsService
+from .services.tools import registry as tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +50,7 @@ class AppContext:
     persona: PersonaService
     outputs: OutputService
     chat: ChatService
+    agent: AgentService
     _booted: bool = field(default=False, repr=False)
 
     @property
@@ -108,6 +111,13 @@ def build_context(home: str | Path | None = None, *, log: bool = True) -> AppCon
         persona=persona,
         api_key_reader=secrets.get_api_key,
     )
+    agent = AgentService(
+        chat=chat,
+        tools=tool_registry(),
+        settings=settings,
+        bus=bus,
+        activity=activity,
+    )
     return AppContext(
         paths=paths,
         bus=bus,
@@ -120,4 +130,5 @@ def build_context(home: str | Path | None = None, *, log: bool = True) -> AppCon
         persona=persona,
         outputs=outputs,
         chat=chat,
+        agent=agent,
     )

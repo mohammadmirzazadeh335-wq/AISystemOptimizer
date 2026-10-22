@@ -65,6 +65,7 @@ DEFAULTS: dict[str, Any] = {
     "agent.max_steps": 12,
     "agent.allow_network": False,
     "web.search_provider": "duckduckgo",
+    "web.search_url": "",
     "web.safe_search": True,
     # Data
     "data.backup_on_exit": False,
@@ -231,6 +232,12 @@ class SettingsService:
             if key == "code.timeout_seconds" and not 1.0 <= number <= 120.0:
                 raise ValidationError("code timeout out of range", message_key="error.settings")
             return number
+        if key == "web.search_url":
+            text = str(value or "").strip()
+            if text and not text.startswith(("https://", "http://")):
+                raise ValidationError("Search endpoint must be an http(s) URL",
+                                      message_key="error.settings")
+            return text
         if key in {"ui.language"}:
             if value not in {"fa", "en"}:
                 raise ValidationError("Unsupported language", message_key="error.settings")

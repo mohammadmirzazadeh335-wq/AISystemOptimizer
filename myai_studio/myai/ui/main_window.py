@@ -35,6 +35,7 @@ from .brand import app_icon
 from .bridge import QtBridge
 from .theme import runtime
 from .theme.manager import ThemeManager
+from .views.agent_page import AgentPage
 from .views.api_page import ApiPage
 from .views.chat_view import ChatView
 from .views.code_page import CodePage
@@ -52,7 +53,7 @@ from .widgets.feedback import ToastManager
 
 logger = logging.getLogger(__name__)
 
-AI_ROUTES = {"api", "memory", "persona", "studio", "code"}
+AI_ROUTES = {"api", "memory", "persona", "studio", "code", "agent"}
 #: One source of truth for a page's header/window title (route -> title, subtitle).
 PAGE_TITLES = {
     "api": ("api.title", "api.subtitle"),
@@ -60,6 +61,7 @@ PAGE_TITLES = {
     "persona": ("persona.title", "persona.subtitle"),
     "studio": ("studio.title", "studio.subtitle"),
     "code": ("code.title", "code.subtitle"),
+    "agent": ("agent.title", "agent.subtitle"),
 }
 
 
@@ -152,12 +154,14 @@ class MainWindow(QMainWindow):
         self.persona_page = PersonaPage(self.context)
         self.studio_page = OutputPage(self.context)
         self.code_page = CodePage(self.context)
+        self.agent_page = AgentPage(self.context)
         self._pages = {
             "api": self.api_page,
             "memory": self.memory_page,
             "persona": self.persona_page,
             "studio": self.studio_page,
             "code": self.code_page,
+            "agent": self.agent_page,
         }
         for page in self._pages.values():
             self.stack.addWidget(page)
@@ -168,6 +172,8 @@ class MainWindow(QMainWindow):
         self.persona_page.notify.connect(self._show_toast)
         self.studio_page.notify.connect(self._show_toast)
         self.code_page.notify.connect(self._show_toast)
+        self.agent_page.notify.connect(self._show_toast)
+        self.agent_page.open_api_page.connect(lambda: self._navigate("api"))
 
     def _shortcuts(self) -> None:
         self.shortcut_new = QShortcut(QKeySequence("Ctrl+N"), self)
@@ -358,6 +364,8 @@ class MainWindow(QMainWindow):
             self.api_page.refresh()
         elif route == "studio":
             self.studio_page.refresh()
+        elif route == "agent":
+            self.agent_page.refresh()
         elif route == "code":
             self.code_page.refresh()
         else:  # pragma: no cover - defensive
@@ -932,5 +940,12 @@ class MainWindow(QMainWindow):
                     )
                 except Exception:
                     logger.exception("window_state_save_failed")
+            for page in (self.code_page, self.agent_page, self.studio_page):
+                shutdown = getattr(page, "shutdown", None)
+                if callable(shutdown):
+                    try:
+                        shutdown()
+                    except Exception:  # pragma: no cover - closing must never fail
+                        logger.exception("page_shutdown_failed page=%s", type(page).__name__)
             self.context.shutdown()
         super().closeEvent(event)

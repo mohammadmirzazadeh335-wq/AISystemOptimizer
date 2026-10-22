@@ -77,8 +77,8 @@ def test_dynamic_key_patterns_resolve() -> None:
             f"chat.suggestion_{index}_prompt",
         ]
     # The counts must match ROUTES in myai/ui/views/placeholder.py.
-    # "code" is no longer a placeholder: Phase 3 replaced it with the real page.
-    for route, count in (("agent", 3), ("images", 3), ("web", 3),
+    # "code" (Phase 3) and "agent" (Phase 4) are real pages, not placeholders.
+    for route, count in (("images", 3), ("web", 3),
                          ("prompts", 3), ("tasks", 3), ("performance", 3)):
         generated += [f"placeholder.{route}.f{i}" for i in range(1, count + 1)]
     generated += ["chat.trust_local", "chat.trust_secret", "chat.trust_real"]

@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -121,6 +122,9 @@ class Inspector(QFrame):
         self.body_layout = QVBoxLayout(self.body)
         self.body_layout.setContentsMargins(runtime.px(14), runtime.px(12), runtime.px(14), runtime.px(16))
         self.body_layout.setSpacing(runtime.px(11))
+        # Shrinkable cards collapse to ~zero height on a short window instead of
+        # scrolling; pinning the layout minimum makes the scroll area scroll.
+        self.body_layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         self.body_layout.addStretch(1)
         self.scroll.setWidget(self.body)
         layout.addWidget(self.scroll, 1)

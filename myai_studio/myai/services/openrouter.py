@@ -155,15 +155,45 @@ class StreamStats:
 
 
 @dataclass
+class ToolCall:
+    """One function call requested by the model."""
+
+    id: str
+    name: str
+    arguments: str = ""
+
+    def parsed(self) -> dict[str, Any]:
+        """Arguments as a dict; malformed JSON is surfaced, never guessed."""
+        try:
+            data = json.loads(self.arguments or "{}")
+        except json.JSONDecodeError as exc:
+            raise ValidationError(
+                f"Tool arguments are not valid JSON: {exc.msg}",
+                message_key="agent.bad_arguments",
+            ) from exc
+        if not isinstance(data, dict):
+            raise ValidationError(
+                "Tool arguments must be a JSON object",
+                message_key="agent.bad_arguments",
+            )
+        return data
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"id": self.id, "name": self.name, "arguments": self.arguments}
+
+
+@dataclass
 class ChatResult:
     text: str = ""
     stats: StreamStats = field(default_factory=StreamStats)
     cancelled: bool = False
     model_id: str = ""
+    tool_calls: list[ToolCall] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {"text": self.text, "stats": self.stats.to_dict(), "cancelled": self.cancelled,
-                "model_id": self.model_id}
+                "model_id": self.model_id,
+                "tool_calls": [call.to_dict() for call in self.tool_calls]}
 
 
 @dataclass
@@ -384,6 +414,8 @@ class OpenRouterClient:
         on_delta: Callable[[str], None] | None = None,
         on_reasoning: Callable[[str], None] | None = None,
         extra: dict[str, Any] | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | None = None,
     ) -> ChatResult:
         """Stream a chat completion.
 
@@ -401,11 +433,16 @@ class OpenRouterClient:
         }
         if top_p is not None:
             payload["top_p"] = float(top_p)
+        if tools:
+            payload["tools"] = list(tools)
+            if tool_choice:
+                payload["tool_choice"] = tool_choice
         if extra:
             payload.update(extra)
 
         stats = StreamStats(model_id=model)
         text_parts: list[str] = []
+        calls: dict[int, ToolCall] = {}
         cancel = cancel or threading.Event()
         started = time.perf_counter()
         first_at: float | None = None
@@ -446,6 +483,18 @@ class OpenRouterClient:
                             stats.chunk_count += 1
                             if on_delta is not None:
                                 on_delta(content)
+                        for raw in delta.get("tool_calls") or []:
+                            if not isinstance(raw, dict):
+                                continue
+                            index = int(raw.get("index") or 0)
+                            call = calls.setdefault(index, ToolCall(id="", name=""))
+                            if raw.get("id"):
+                                call.id = str(raw["id"])
+                            function = raw.get("function") or {}
+                            if function.get("name"):
+                                call.name = str(function["name"])
+                            if function.get("arguments"):
+                                call.arguments += str(function["arguments"])
                         reasoning = delta.get("reasoning")
                         if reasoning and on_reasoning is not None:
                             on_reasoning(reasoning)
@@ -462,7 +511,13 @@ class OpenRouterClient:
         except CancelledProviderError:
             stats.total_ms = int((time.perf_counter() - started) * 1000)
             logger.info("openrouter_cancelled model=%s chunks=%s", model, stats.chunk_count)
-            return ChatResult(text="".join(text_parts), stats=stats, cancelled=True, model_id=model)
+            return ChatResult(
+                text="".join(text_parts),
+                stats=stats,
+                cancelled=True,
+                model_id=model,
+                tool_calls=[calls[index] for index in sorted(calls)],
+            )
         except Exception as exc:  # noqa: BLE001
             stats.total_ms = int((time.perf_counter() - started) * 1000)
             raise self._wrap_transport_error(exc) from exc
@@ -476,4 +531,9 @@ class OpenRouterClient:
             "openrouter_stream_done model=%s first_ms=%s total_ms=%s chunks=%s",
             model, stats.first_token_ms, stats.total_ms, stats.chunk_count,
         )
-        return ChatResult(text="".join(text_parts), stats=stats, model_id=model)
+        return ChatResult(
+            text="".join(text_parts),
+            stats=stats,
+            model_id=model,
+            tool_calls=[calls[index] for index in sorted(calls)],
+        )

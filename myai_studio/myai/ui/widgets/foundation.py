@@ -186,6 +186,7 @@ class EmptyState(QWidget):
         layout.setSpacing(runtime.px(10))
         layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         circle = IconCircle(icon, tone, 46 if not compact else 38)
+        self.circle = circle
         layout.addWidget(circle, 0, Qt.AlignmentFlag.AlignHCenter)
         self.title_label = QLabel(title)
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)

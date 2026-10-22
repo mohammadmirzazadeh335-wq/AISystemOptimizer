@@ -8,9 +8,9 @@ APP_TAGLINE_FA = "طراحی، ساخت و اجرا با عامل‌های هو�
 APP_ID = "com.myaistudio.ultimate"
 
 # Phase-by-phase release train.  Bumped at the end of every completed phase.
-VERSION = "0.3.0"
-PHASE = 3
-BUILD_CHANNEL = "Phase 3 - Code Studio"
+VERSION = "0.4.0"
+PHASE = 4
+BUILD_CHANNEL = "Phase 4 - Agent Mode"
 
 __all__ = [
     "APP_NAME",
