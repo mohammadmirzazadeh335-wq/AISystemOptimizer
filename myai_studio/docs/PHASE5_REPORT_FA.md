@@ -179,10 +179,15 @@ cd myai_studio && QT_QPA_PLATFORM=offscreen LD_LIBRARY_PATH=../tools/headless_li
    (دست‌دهی TLS شکست می‌خورد) و کلیدی پیکربندی نشده. همهٔ آزمون‌های سرویس‌دهنده با
    کلاینت برنامه‌ریزی‌شده اجرا می‌شوند و همین‌طور برچسب خورده‌اند.
 2. **فایل EXE و نصب‌کننده ویندوز** — اینجا ساخته نشد. اسکریپت
-   `scripts/build_windows.ps1` (PyInstaller onedir و به‌صورت اختیاری Inno Setup) و
-   `installer/AISystemOptimizer.iss` وجود دارند، اما این محیط لینوکسی نه PowerShell
-   دارد نه می‌تواند باینری ویندوز بسازد؛ پس **هیچ EXE تحویل داده نشده** و اسکریپت
-   روی ویندوز هنوز تأیید نشده است.
+   `scripts/build_windows.ps1` (PyInstaller onedir و به‌صورت اختیاری Inno Setup)،
+   `packaging/launcher.py` و `packaging/myai_studio.iss` وجود دارند و مسیرهایشان
+   هم‌خوان است، اما این محیط نه PowerShell دارد و نه ویندوز است؛ پس **هیچ EXE تحویل
+   داده نشده**. یک تلاش بسته‌بندی روی لینوکس به‌عنوان بررسی پیکربندی انجام شد و به
+   دلیل محیط شکست خورد، نه به دلیل پروژه:
+   `PyInstaller.exceptions.PythonLibraryNotFoundError: Python library not found:
+   libpython3.11.so` (پایتون میزبان بدون `--enable-shared` ساخته شده است). بنابراین
+   اسکریپت ویندوز هنوز **تأیید نشده** است و پیش از هر ادعای `.exe` باید روی ویندوز ۱۱
+   اجرا شود.
 3. **جست‌وجوی وب** — سرویس‌دهنده ندارد، پس غیرفعال است. خواندن نشانی چسبانده‌شده کار
    می‌کند.
 4. **تولید تصویر و ویدیو** — سرویس‌دهنده ندارد، پس در دسترس نیست؛ فقط کتابخانه واقعی است.
@@ -254,3 +259,4 @@ cd myai_studio && QT_QPA_PLATFORM=offscreen LD_LIBRARY_PATH=../tools/headless_li
 | لینت | `ruff check myai tests scripts` → پاک |
 | تصاویر | ۸۴ PNG، ۲۹ مربوط به فاز ۵، فارسی و انگلیسی در هر دو پوسته |
 | بدون ادعای زنده | آزمون زندهٔ سرویس‌دهنده رد شد و همان‌طور گزارش شده |
+| صداقت بسته‌بندی | تلاش PyInstaller با `PythonLibraryNotFoundError` شکست خورد (پایتون میزبان کتابخانهٔ مشترک ندارد)؛ هیچ EXE ادعا نمی‌شود |

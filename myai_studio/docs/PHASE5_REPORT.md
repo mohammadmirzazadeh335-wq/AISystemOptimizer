@@ -195,10 +195,14 @@ editor dialog.
    this sandbox (TLS handshake fails) and no key is configured. All provider tests
    use scripted clients and are labelled as such.
 2. **Windows EXE and installer** — not built here. `scripts/build_windows.ps1`
-   (PyInstaller onedir + optional Inno Setup) and `installer/AISystemOptimizer.iss`
-   exist and were updated in earlier phases, but this Linux sandbox cannot run
-   PowerShell or produce a Windows binary, so **no EXE is delivered** and the
-   script remains unverified on Windows.
+   (PyInstaller onedir + optional Inno Setup), `packaging/launcher.py` and
+   `packaging/myai_studio.iss` exist and agree on their paths, but this sandbox has
+   no PowerShell and is not Windows, so **no EXE is delivered**. A packaging attempt
+   was made on Linux as a configuration check and failed for an environment reason,
+   not a project one: `PyInstaller.exceptions.PythonLibraryNotFoundError: Python
+   library not found: libpython3.11.so` (the host Python is built without
+   `--enable-shared`). The Windows script therefore remains **unverified**; it must
+   be run on Windows 11 before any `.exe` is claimed.
 3. **Web search** — no provider, therefore disabled. Reading a pasted URL works.
 4. **Image and video generation** — no provider, therefore unavailable; only the
    library is real.
@@ -271,3 +275,4 @@ Deleted: `myai/ui/views/placeholder.py`.
 | Lint | `ruff check myai tests scripts` → clean |
 | Screenshots | 84 PNGs, 29 from Phase 5, fa+en × both themes |
 | No live claims | Live provider test skipped and reported as such |
+| Packaging honesty | PyInstaller attempt failed with `PythonLibraryNotFoundError` (host Python lacks a shared libpython); no EXE is claimed |
