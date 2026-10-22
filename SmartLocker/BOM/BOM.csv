@@ -1,0 +1,77 @@
+No,Part Name (EN),File,Quantity,Material,Dimensions/Spec,Weight Each (kg),Weight Total (kg),Source,Notes
+1,Main Frame,Main_Frame.SLDPRT,1,Al 6063-T5 40x40x2mm,950x700x2400mm frame,18.5,18.5,Custom,"4 verticals + 12 horizontals via Sweep"
+2,Vertical Support,Vertical_Support.SLDPRT,4,Al 6063-T5 40x40x2mm,40x40x2400mm,1.2,4.8,Custom,Component of Main_Frame assembly
+3,Horizontal Beam,Horizontal_Beam.SLDPRT,12,Al 40x40x2mm,Varies 870mm avg,0.45,5.4,Custom,"Top/bottom/middle beams"
+4,Side Panel Left,Side_Panel_Left.SLDPRT,1,Steel ST12 1.5mm,700x2400x1.5mm sheet metal,14.0,14.0,Custom,With vent slots
+5,Side Panel Right,Side_Panel_Right.SLDPRT,1,Steel ST12 1.5mm,700x2400x1.5mm,14.0,14.0,Custom,With 400x600 service cutout
+6,Rear Panel,Rear_Panel.SLDPRT,1,Steel ST12 1.5mm,950x2400x1.5mm sheet metal,19.0,19.0,Custom,2-piece for service access
+7,Front Panel Frame,Front_Panel_Frame.SLDPRT,1,Steel ST12 1.5mm,950x500x1.5mm,4.0,4.0,Custom,UI cutouts parametric
+8,Top Cover,Top_Cover.SLDPRT,1,Steel ST12 1.5mm,950x700x1.5mm,5.5,5.5,Custom,Hinged to rear
+9,Bottom Plate,Bottom_Plate.SLDPRT,1,Steel ST12 2.0mm,950x700x2mm,7.4,7.4,Custom,Frame + conveyor mounting
+10,Compartment Divider Vertical,Compartment_Divider_Vertical.SLDPRT,1,Galvanized 1.5mm,500x2000x1.5mm,4.2,4.2,Custom,Slots for H dividers
+11,Compartment Divider Horizontal,Compartment_Divider_Horizontal.SLDPRT,4,Galvanized 1.5mm,400x500x1.5mm,1.7,6.8,Custom,Between 5 rows
+12,Compartment Floor,Compartment_Floor.SLDPRT,10,Galvanized 1.5mm,400x500x1.5mm,1.7,17.0,Custom,One per compartment
+13,Compartment Door,Compartment_Door.SLDPRT,10,Steel ST12 2.0mm,398x398x2mm,2.5,25.0,Custom,Hinged with EM lock bracket
+14,Hinge Concealed,Hinge_Concealed.SLDPRT,20,Steel ST12,30x20x15mm,0.04,0.8,Standard,270deg concealed
+15,Linear Rail X - MGN15,Linear_Rail_X.SLDPRT,2,Steel hardened,MGN15 L=900mm,0.35,0.7,HIWIN/Misumi,Top+bottom
+16,Linear Guide Block X - MGN15H,Linear_Guide_Block_X.SLDPRT,4,Steel,"MGN15H 60x45x25mm",0.08,0.32,HIWIN,2 per rail
+17,Linear Rail Z - MGN15,Linear_Rail_Z.SLDPRT,2,Steel hardened,MGN15 L=2400mm,0.93,1.86,HIWIN,Vertical on X carriage
+18,Linear Guide Block Z - MGN15H,Linear_Guide_Block_Z.SLDPRT,4,Steel,MGN15H 60x45x25mm,0.08,0.32,HIWIN,2 per rail
+19,Linear Rail Y - MGN12,Linear_Rail_Y.SLDPRT,1,Steel hardened,MGN12 L=500mm,0.15,0.15,HIWIN,On Z carriage for tray
+20,Linear Guide Block Y - MGN12H,Linear_Guide_Block_Y.SLDPRT,2,Steel,MGN12H 45x35x20mm,0.04,0.08,HIWIN,For tray
+21,X Carriage Plate,X_Carriage.SLDPRT,1,Al 6061 5mm,500x200x5mm,1.35,1.35,Custom,Mounts for Z rails + blocks
+22,Z Carriage Plate,Z_Carriage.SLDPRT,1,Al 6061 5mm,900x200x5mm,2.43,2.43,Custom,Mounts for Y rail + lead nuts
+23,Transfer Tray,Transfer_Tray.SLDPRT,1,Al 6061 3mm,380x400x30mm with L-lip,1.8,1.8,Custom,Silicone anti-slip + ribs
+24,Rack Y - Module 1,Rack_Y.SLDPRT,1,Steel C45,450x10x8mm M1,0.28,0.28,Standard,143 teeth
+25,Pinion Y - 20T M1,Pinion_Y.SLDPRT,1,Steel C45,20T M1 OD 22mm face 8mm,0.03,0.03,Standard,Bore Ø5mm on Y motor
+26,Tray Guide,Tray_Guide.SLDPRT,2,UHMW,400x10x10mm,0.02,0.04,Custom,Side parcel guides
+27,Roller Drive,Conveyor_Belt.SLDPRT,1,PVC belt,350x600mm loop,0.4,0.4,Standard,Input/output
+28,Roller Drive,Roller_Drive.SLDPRT,1,Al anodized,Ø40x380mm with Ø12 shaft,0.6,0.6,Custom,Drive
+29,Roller Idler,Roller_Idler.SLDPRT,1,Al anodized,Ø40x380mm with Ø12 shaft,0.6,0.6,Custom,Idler with slot
+30,Conveyor Frame,Conveyor_Frame.SLDPRT,2,Steel ST12 3mm,600x50x3mm side plate,0.7,1.4,Custom,Left+right
+31,Shaft Drive X,Shaft_Drive_X.SLDPRT,1,Steel CK45,Ø8x920mm with keyway,0.36,0.36,Custom,Across frame
+32,Lead Screw T8x8,Lead_Screw_T8x8.SLDPRT,2,Steel C45,T8x8 Ø8x2150mm,0.85,1.7,Standard,Left+right vertical
+33,Lead Screw Nut T8,Lead_Screw_Nut_T8.SLDPRT,2,Brass,Flange Ø22mm 38x8mm,0.05,0.1,Standard,Nuts on Z carriage
+34,Pulley GT2 20T,Pulley_GT2_20T.SLDPRT,6,Al 6061,GT2 20T OD 13mm bore Ø8mm width 10mm,0.02,0.12,Standard,"2x X axis + 4x Z sync"
+35,Pulley Idler X,Pulley_Idler_X.SLDPRT,1,Al 6061+625ZZ,Idler 20T with bearing,0.02,0.02,Standard,X tensioner
+36,Belt GT2 X,Belt_GT2_X.SLDPRT,1,Rubber GT2,GT2 10mm width loop 2200mm,0.08,0.08,Standard,X drive
+37,Belt GT2 Z Sync,Belt_GT2_Z_Sync.SLDPRT,1,Rubber GT2,GT2 10mm sync belt loop ~2400mm,0.09,0.09,Standard,Sync 2 lead screws
+38,Bearing Block SK8,Bearing_Block_X.SLDPRT,2,Al+608ZZ,SK8 42x32x14mm,0.03,0.06,Standard,X shaft bearings
+39,Bearing Block KP08,Bearing_Block_Z.SLDPRT,4,Al+608ZZ,KP08 40x40x20mm,0.04,0.16,Standard,Lead screw bearings
+40,Belt Tensioner X,Belt_Tensioner_X.SLDPRT,1,Al 6061,50x30x5mm with slot+screw,0.05,0.05,Custom,M5x30 + spring
+41,Motor Mount X,Motor_Mount_X.SLDPRT,1,Al 6061 5mm,L 80x60x5mm for NEMA23,0.12,0.12,Custom,
+42,Motor Mount Z,Motor_Mount_Z.SLDPRT,1,Al 6061 8mm,L 100x80x8mm for NEMA23,0.25,0.25,Custom,Heavy duty
+43,Motor Mount Y,Motor_Mount_Y.SLDPRT,1,Al 6061 3mm,L 40x40x3mm for NEMA17,0.02,0.02,Custom,
+44,Motor NEMA23 X,Motor_NEMA23_X.SLDPRT,1,NEMA23,56x56x56mm placeholder 1.2Nm,0.7,0.7,StepperOnline,2.8A for X
+45,Motor NEMA23 Z (same part),Motor_NEMA23_X.SLDPRT,1,NEMA23,56x56x56mm placeholder 2.2Nm,0.7,0.7,StepperOnline,3.0A for Z (use same SLDPRT with different config)
+46,Motor NEMA17 Y,Motor_NEMA17_Y.SLDPRT,1,NEMA17,42x42x34mm placeholder 0.5Nm,0.28,0.28,StepperOnline,For Y
+47,Motor DC Conveyor,Motor_Conveyor placeholder,1,DC Gear,JGB37-520 12V,0.15,0.15,Standard,Conveyor
+48,Sensor Placeholder,Sensor_Placeholder.SLDPRT,8,PCB+plastic,15x15x10mm,0.01,0.08,Standard,"2x X endstops + 2x Y + 1x Z bottom + 1x Z top + 1x conveyor + 1x hub"
+49,Sensor Presence (Compartment),Sensor_Presence.SLDPRT,10,PCB,15x15x10mm ceiling mount,0.01,0.1,Standard,One per compartment
+50,Mechanical Stop,Mechanical_Stop.SLDPRT,4,Al+rubber,20x20x15mm with Ø12 bumper,0.02,0.08,Custom,2x X + 2x Z
+51,Display Placeholder,Display_Placeholder.SLDPRT,1,PCB+glass,26x26x8mm 1 inch,0.02,0.02,Standard,Generic 1 inch OLED
+52,Display Mount,Display_Mount.SLDPRT,1,Al 3mm,40x40x10mm frame,0.02,0.02,Custom,4x M3
+53,Button Placeholder,Button_Placeholder.SLDPRT,2,Plastic+metal,Ø16x12mm tactile,0.01,0.02,Standard,16mm mounting
+54,Button Mount,Button_Mount.SLDPRT,2,Plastic,Ø20x6mm holder,0.005,0.01,Custom,Panel clamp
+55,Keypad Placeholder,Keypad_Placeholder.SLDPRT,1,PCB+silicone,100x80x10mm 12-key,0.05,0.05,Standard,4x3 numeric
+56,Keypad Mount,Keypad_Mount.SLDPRT,1,Al 3mm,110x90x12mm frame,0.04,0.04,Custom,4x M3
+57,Front Panel Frame,Front_Panel_Frame.SLDPRT,1,Steel 1.5mm,950x500x1.5mm,4.0,4.0,Custom,All UI cutouts
+58,Electronics Mounting Plate,Electronics_Mounting_Plate.SLDPRT,1,Al 6061 3mm,800x500x3mm,3.24,3.24,Custom,Standoffs + holes
+59,Standoff M3x20,Standoff_M3x20.SLDPRT,4,Brass,M3x20mm hex 5.5mm,0.005,0.02,Standard,Plate to frame
+60,Arduino Placeholder,Arduino_Placeholder.SLDPRT,1,PCB,75x55x15mm Uno,0.03,0.03,Standard,Uno
+61,Motor Driver Placeholder,Motor_Driver_Placeholder.SLDPRT,3,PCB+heatsink,80x50x25mm DM542,0.08,0.24,Standard,One per axis
+62,Power Supply Placeholder,Power_Supply_Placeholder.SLDPRT,1,Metal case,200x110x50mm 24V 15A,0.8,0.8,Standard,Meanwell 24V
+63,Terminal Block Placeholder,Terminal_Block_Placeholder.SLDPRT,1,Plastic+DIN rail,100x40x30mm,0.08,0.08,Standard,DIN 35mm
+64,Cable Tray,Cable_Tray.SLDPRT,1,Steel 2mm,U 40x30x2000mm,2.1,2.1,Standard,Vertical
+65,Cable Tray Horizontal,Cable_Tray_Horizontal.SLDPRT,1,Steel 2mm,U 40x30x800mm,0.85,0.85,Standard,Top
+66,Cable Clip,Cable_Clip.SLDPRT,10,PA66 nylon,Clip Ø10mm,0.005,0.05,Standard,Every 200mm
+67,Cable Chain Z (Energy Chain),Cable_Chain_Z.SLDPRT,1,PA66,30x20x2200mm IGUS E2.10 placeholder,0.4,0.4,Standard,30x20mm chain 140 links
+68,Mounting Bracket Corner,Mounting_Bracket_Corner.SLDPRT,24,Steel 3mm,L 60x60x40mm,0.08,1.92,Custom,Frame joints
+69,Mounting Bracket Rail,Mounting_Bracket_Rail.SLDPRT,8,Steel 3mm,50x30x15mm,0.04,0.32,Custom,Rail to frame
+70,Foot Adjustable,Foot_Adjustable.SLDPRT,4,Steel+rubber,M10x50mm Ø50mm base,0.15,0.6,Standard,M10 adjustable
+71,Service Access Panel,Service_Access_Panel.SLDPRT,2,Steel 1.5mm,400x600x1.5mm,2.0,4.0,Custom,Side+rear doors
+72,Fastener M5x12,Fastener_M5x12.SLDPRT,120,Steel A2,M5x12,0.003,0.36,Standard,Panel screws
+73,Fastener M8x20,Fastener_M8x20.SLDPRT,48,Steel A2,M8x20,0.012,0.576,Standard,Frame
+74,Fastener M3x8,Fastener_M3x8.SLDPRT,32,Steel A2,M3x8,0.002,0.064,Standard,Electronics
+,,,,,,TOTAL,~165,~165,,"Without parcel load: ~180kg with frame tolerances"
+,,,,,,TOTAL with 10x15kg load,,~315,,,"10x15kg parcels + 165kg structure"

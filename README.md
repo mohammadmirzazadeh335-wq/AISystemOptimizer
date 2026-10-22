@@ -1,3 +1,7 @@
+# AI System Optimizer + Smart Locker
+
+> 🆕 **Smart Locker Project:** طراحی کامل دستگاه امانتداری هوشمند ۱۰خانه‌ای با SolidWorks 2025 → [SmartLocker/README.md](SmartLocker/README.md) | چک‌لیست تحویل: [SmartLocker/DELIVERABLE_CHECK.md](SmartLocker/DELIVERABLE_CHECK.md)
+
 # AI System Optimizer
 
 **A real Windows 11 / Windows 10 system optimiser — not a fake RAM booster.**

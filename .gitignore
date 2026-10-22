@@ -29,6 +29,12 @@ desktop.ini
 *.nupkg
 packages/
 
+# SmartLocker output (generated CAD files - binary SLDPRT/SLDASM/SLDDRW belong in releases, not Git)
+SmartLocker_Out_Sample/
+SmartLocker/API_Generator/src/SmartLockerGenerator/bin/
+SmartLocker/API_Generator/src/SmartLockerGenerator/obj/
+SmartLocker/CAD_Output/
+
 # The portable build is published as a GitHub release asset (see README → Download).
 # It is a 66 MB self-contained binary; committing it would bloat every clone.
 portable/*.exe
