@@ -305,12 +305,16 @@ class ApiPage(PageShell):
         self.show_key.setText(tr("api.hide_key") if visible else tr("api.show_key"))
 
     def _save_key(self) -> None:
+        from ...services.openrouter import api_key_problem
+
         value = self.key_input.text().strip()
         if not value:
             self._set_key_error(tr("api.key_empty"))
             return
-        if not value.startswith("sk-or-"):
-            self._set_key_error(tr("api.key_format"))
+        problem = api_key_problem(value)
+        if problem is not None:
+            # The message never echoes the key back into the window or the log.
+            self._set_key_error(tr(problem))
             return
         try:
             self.context.secrets.set_api_key(value)

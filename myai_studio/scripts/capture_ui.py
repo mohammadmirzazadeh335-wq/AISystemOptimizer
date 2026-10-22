@@ -219,7 +219,13 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", default=str(ROOT / "artifacts" / "ui"))
     parser.add_argument("--keep", action="store_true")
+    parser.add_argument(
+        "--only",
+        default="",
+        help="write only screenshots whose name contains this text (e.g. p4_agent)",
+    )
     args = parser.parse_args()
+    only = args.only.strip()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
@@ -256,12 +262,16 @@ def main() -> int:
         written.append(str(path))
 
     def shot(name: str) -> None:
+        if only and only not in name:
+            return
         # Toasts are transient; keep them out of the evidence frames.
         window.toasts.clear()
         app.processEvents()
         render(window, out / f"{name}.png")
 
     def dialog_shot(dialog: QWidget, name: str) -> None:
+        if only and only not in name:
+            return
         dialog.show()
         app.processEvents()
         pixmap = QPixmap(dialog.size())

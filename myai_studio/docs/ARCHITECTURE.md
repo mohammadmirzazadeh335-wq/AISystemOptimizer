@@ -109,6 +109,15 @@ reads configuration files directly.
 - **Other OS:** Fernet with a 0600 key file.
 - Atomic writes, `0600` permissions, no secrets in logs/exports/backups,
   name validation to prevent path/format injection.
+- **Shape check before use** (`openrouter.api_key_problem`): prefix `sk-or-`,
+  printable characters, no whitespace or control characters. A key with `\r\n`
+  can therefore never be spliced into the `Authorization` header, and the error
+  shown to the user never echoes the value.
+- **Redaction at the handler** (`core/redaction.py` + `RedactFilter`): every
+  handler (JSON file, console, inspector ring buffer) masks OpenRouter, GitHub
+  and `Bearer` tokens, so a mistaken `logger.info("…%s", key)` cannot leak.
+- **Proven absent** from the SQLite file, the settings export and the backup
+  archive by tests; the store keeps only an encrypted envelope on disk.
 
 ## 8. UI construction
 
@@ -255,3 +264,36 @@ focus sits. The search box keeps the focus, ↑/↓ move `_index` with clamping 
 scroll the row into view, and Enter runs the selected action (or the first one
 when nothing is selected). The list is rebuilt on every keystroke; an empty
 result shows the translated empty state instead of an empty box.
+
+## 18. Agent tool suite (`myai/services/tools.py`)
+
+A tool exists only if it has a JSON schema, a risk level, an availability rule
+and a real handler. `ToolRegistry` produces both the model-facing descriptions
+and the approvals; nothing in the UI invents a capability.
+
+| Group | Tools |
+| --- | --- |
+| Explore | `list_files`, `read_file`, `read_lines`, `search_files`, `find_files`, `project_map`, `scan_todos`, `diff_files` |
+| Edit | `write_file`, `apply_patch`, `make_folder`, `create_project`, `delete_file` |
+| Run | `run_file` |
+| Remember | `remember`, `recall`, `save_output` |
+| Network | `web_search`, `fetch_url`, `github_list_issues`, `github_comment`, `generate_image` (always unavailable) |
+
+`apply_patch` is deliberately all-or-nothing: `services/patches.py` parses the
+`@@` hunks, matches exact context (line numbers may drift), and raises before
+the caller writes anything. A half-applied file is impossible by construction.
+`fetch_url` reuses `WebService.fetch`, so the same URL validation, size cap and
+HTML-to-text pass apply on the page and in the agent.
+
+Availability is computed, never stored: a tool with no project, no network
+permission, no endpoint, no token or no image provider reports the exact reason
+in English (prompt) and in the UI language (`agent.reason_*` keys).
+
+## 19. Windows static gate (`scripts/check_windows_static.py`)
+
+A small AST scanner with one rule per Windows hazard: POSIX-only module at
+import time, `subprocess` without `creationflags`, `shell=True`, text I/O
+without `encoding`, unguarded `os.fork`/`killpg`/`SIGKILL`, `sys.executable`
+used to launch a child, hard-coded POSIX paths. `tests/unit/test_windows_static.py`
+feeds each rule a violating snippet and asserts the real `myai/` tree is clean,
+so the gate cannot silently turn green.

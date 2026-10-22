@@ -71,6 +71,21 @@ def main() -> int:
         check("cmd toolchain offered on Windows", any(item.id == "cmd" for item in toolchains.specs()))
         check("python interpreter resolvable", bool(toolchains.python_executable()))
 
+    # ------------------------------------------------- Windows static rules
+    sys.path.insert(0, str(ROOT / "scripts"))
+    try:
+        import check_windows_static
+
+        findings = check_windows_static.scan([ROOT / "myai"])
+        kinds = sorted({finding.rule for finding in findings})
+        check(
+            "source has no Windows hazards",
+            not findings,
+            "clean" if not findings else f"{len(findings)} finding(s): {', '.join(kinds)}",
+        )
+    except Exception as exc:  # noqa: BLE001 - the check itself must not crash the run
+        check("source has no Windows hazards", False, f"scanner failed: {exc}")
+
     # ------------------------------------------------------------- entry points
     check("launcher entry point", callable(__import__("myai.app", fromlist=["main"]).main))
     check("assets folder present", (ROOT / "assets").is_dir())

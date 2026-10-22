@@ -75,6 +75,12 @@ digit styles).
 
 ## Adding a test
 
+- New agent tool → `tests/unit/test_agent_ideas.py` (a real project folder, no HTTP).
+- New patch/format rule → `tests/unit/test_patches.py`.
+- Anything touching the platform or the API key → `test_windows_static.py` /
+  `test_api_key_safety.py`; both are gates, not spot checks.
+- Screenshots: `python scripts/capture_ui.py --out artifacts/ui` rewrites all of
+  them; add `--only p4_agent` to rewrite just the frames whose name matches.
 - New widget behaviour → `tests/ui/`, use the `ui` fixture (`window, context, theme`).
 - New service/repository rule → `tests/unit/` with the `ctx` or `db` fixture.
 - New cross-layer flow → `tests/integration/`.

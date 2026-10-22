@@ -7,7 +7,7 @@ phases.
 > **Current build: Phase 5 — Ecosystem** (`v0.5.0`)
 > Chat streams from OpenRouter, memory and personality are real and editable, the Output
 > Studio keeps every revision, Code Studio opens real folders and runs real files, and the
-> agent acts **only** through fifteen registered tools behind an approval gate. Phase 5
+> agent acts **only** through twenty-two registered tools behind an approval gate. Phase 5
 > added the prompt library, the task centre (every finished agent and program run is
 > persisted), a performance monitor sampled from the real process, plugin loading for
 > prompt packs, and full keyboard/screen-reader labelling. Image Studio, Video Studio and
@@ -50,7 +50,7 @@ phases.
 | User profile file + assistant persona, separate from memory | **Works** | `tests/unit/test_persona_outputs.py`, `tests/ui/test_phase2_pages.py` |
 | Output Studio: code/text/prompt/Markdown/JSON, revisions, diff, restore, export | **Works** | `tests/unit/test_persona_outputs.py`, UI tests |
 | Code Studio: open a real folder, browse/edit files, `Ctrl+S`, autosave, recent projects | **Works** | `tests/ui/test_code_studio.py`, `p3_code_*.png` |
-| Agent Mode: 15 registered tools with JSON schemas and risk levels | **Works** | `myai/services/tools.py`, `tests/unit/test_agent_tools.py` |
+| Agent Mode: 22 registered tools with JSON schemas and risk levels | **Works** | `myai/services/tools.py`, `tests/unit/test_agent_tools.py` |
 | Approval gate: writes, runs and network calls ask first; a denial never executes | **Works** | `tests/unit/test_agent.py`, `tests/ui/test_agent_page.py` |
 | Unavailable tools name the exact missing piece (key, folder, network, endpoint, token, image provider) | **Works** | `agent.reason_*` in fa/en, tool rows, Settings → Agent |
 | Bounded loop with step limit, cancel and per-step results fed back verbatim | **Works** | `tests/unit/test_agent.py` |
@@ -74,7 +74,12 @@ phases.
 | Honest gaps in attachments: images/PDFs are recorded by name, size and dimensions but no text (no OCR/PDF parser); the chip and preview say so | **Works** | `test_png_dimensions_are_read_from_the_header`, `test_pdf_is_recorded_without_fake_text` |
 | Agent file tools: `search_files`, `make_folder`, `create_project` (write tools behind the approval gate) | **Works** | `tests/unit/test_file_tools.py`, `tests/ui/test_agent_page.py` |
 | Command palette (`Ctrl+Shift+P`): 19 real actions, type-to-filter, ↑/↓ with a visible selection that does not depend on window focus | **Works** | `tests/ui/test_palette.py`, `palette_dawn_en.png` |
-| Windows 11 portability: frozen-build interpreter, hidden-console flags, encoding-safe decoding, reserved-name/path rules, `cmd` toolchain for `.bat` | **Rules verified on Linux**; runtime needs one Windows run | `tests/unit/test_windows_platform.py` (37), `scripts/check_portability.py` (16/16), `scripts/windows11_smoke.ps1` |
+| Windows 11 portability: frozen-build interpreter, hidden-console flags, encoding-safe decoding, reserved-name/path rules, `cmd` toolchain for `.bat` | **Rules verified on Linux**; runtime needs one Windows run | `tests/unit/test_windows_platform.py` (37), `scripts/check_portability.py` (17/17), `scripts/windows11_smoke.ps1` |
+| Agent exploration tools: `project_map`, `find_files`, `read_lines`, `scan_todos`, `diff_files` | **Works** | `tests/unit/test_agent_ideas.py` |
+| Atomic patch editor: `apply_patch` applies real `@@` hunks, tolerates line drift, writes nothing if a hunk fails | **Works** | `tests/unit/test_patches.py`, `tests/unit/test_agent_ideas.py` |
+| Agent page reader: `fetch_url` reads one public page through the Web Research reader (network gate) | **Works** | `tests/unit/test_agent_ideas.py` |
+| Windows static gate: no POSIX import at import time, no unmasked child console, no locale-encoded text I/O, no unguarded POSIX API | **Verified here (17/17 portability checks)** | `scripts/check_windows_static.py`, `tests/unit/test_windows_static.py` (13) |
+| API-key hygiene: shape check before any request (blocks header injection), encrypted store, redaction in every log handler, key absent from DB and backups | **Works** | `tests/unit/test_api_key_safety.py` (19) |
 | Settings has no mock pages: the AI page writes a real temperature used on the next send, the Memory page shows the live row count and opens Memory | **Works** | `tests/ui/test_settings_dialog.py::test_temperature_slider_writes_the_real_setting`, `::test_memory_toggle_is_written_and_used` |
 
 The complete, honest matrix lives in [`docs/PHASE4_REPORT.md`](docs/PHASE4_REPORT.md) §3
@@ -142,6 +147,11 @@ powershell -ExecutionPolicy Bypass -File scripts\windows11_smoke.ps1
 It checks the OS and Python, builds a throwaway venv, runs the portability
 checks and the whole test suite, starts the real GUI with a temporary
 workspace, and prints PASS/FAIL per step. `-SkipTests` skips the suite.
+The portability script also runs the static source gate (`scripts/check_windows_static.py`):
+POSIX-only imports at import time, missing `creationflags`, locale-encoded text I/O,
+unguarded POSIX process calls, `sys.executable` as a child command and hard-coded
+POSIX paths are all rejected with file and line.
+
 Details, including the eight Windows defects that were fixed:
 [`docs/POST_PHASE5_UPGRADE.md`](docs/POST_PHASE5_UPGRADE.md).
 
@@ -170,15 +180,15 @@ with `-Installer`, requiring Inno Setup 6).
 ./scripts/run_tests.sh -q
 ```
 
-Last measured run (final code, after the last change of the Post-Phase-5 round):
+Last measured run (final code, after the last change of the second hardening round):
 
 ```
-628 passed, 1 skipped in 362.18s (0:06:02)
+682 passed, 1 skipped in 302.73s (0:05:02)
 ```
 
 The skip is the opt-in live OpenRouter test, which needs a real key and network
 access this build host does not have. Per-layer numbers and the exact command
-are in [`docs/POST_PHASE5_UPGRADE.md`](docs/POST_PHASE5_UPGRADE.md) §6; the
+are in [`docs/POST_PHASE5_UPGRADE.md`](docs/POST_PHASE5_UPGRADE.md) §6 and §9.4; the
 Phase 5 report keeps its own historical figures in
 [`docs/PHASE5_REPORT.md`](docs/PHASE5_REPORT.md) §1.
 

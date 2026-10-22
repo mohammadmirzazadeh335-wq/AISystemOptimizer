@@ -241,6 +241,44 @@ def model_from_dict(data: dict) -> ModelInfo | None:
 
 
 # ---------------------------------------------------------------------- client
+#: OpenRouter keys look like ``sk-or-v1-<64 hex>``. The app checks only what it
+#: can know offline: the prefix, printable characters and no embedded newline.
+#: Anything else is the server's verdict, and pretending otherwise would block a
+#: valid key or accept a header-injection attempt.
+API_KEY_PREFIX = "sk-or-"
+API_KEY_MAX = 200
+
+
+def api_key_problem(value: str | None) -> str | None:
+    """Return a translation key describing a malformed key, or ``None``.
+
+    This runs before any request is built, so a key with ``\r\n`` can never be
+    spliced into the ``Authorization`` header.
+    """
+    key = (value or "").strip()
+    if not key:
+        return "error.api_key_missing"
+    if not key.startswith(API_KEY_PREFIX):
+        return "api.key_format"
+    if len(key) > API_KEY_MAX:
+        return "api.key_too_long"
+    if any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in key):
+        return "api.key_invalid_chars"
+    return None
+
+
+def validate_api_key(value: str | None) -> str:
+    """Return the cleaned key or raise :class:`ConfigurationError`."""
+    problem = api_key_problem(value)
+    if problem is not None:
+        raise ConfigurationError(
+            "The stored OpenRouter API key is not usable",
+            message_key=problem,
+            hint_key="settings.ai_key_hint",
+        )
+    return (value or "").strip()
+
+
 class OpenRouterClient:
     """Thin, synchronous OpenRouter client with streaming support."""
 
@@ -261,13 +299,7 @@ class OpenRouterClient:
 
     # ------------------------------------------------------------- plumbing
     def _headers(self) -> dict[str, str]:
-        key = (self._api_key_provider() or "").strip()
-        if not key:
-            raise ConfigurationError(
-                "No OpenRouter API key configured",
-                message_key="error.api_key_missing",
-                hint_key="settings.ai_key_hint",
-            )
+        key = validate_api_key(self._api_key_provider())
         return {
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",

@@ -8,8 +8,11 @@ is reported as unavailable with the exact reason instead of being simulated.
 
 from __future__ import annotations
 
+import difflib
+import fnmatch
 import json
 import logging
+import os
 import re
 import threading
 import time
@@ -19,10 +22,11 @@ from typing import Any
 
 import httpx
 
-from ..core.errors import NotFoundError, SandboxError, ToolError, ValidationError
+from ..core.errors import AppError, NotFoundError, SandboxError, ToolError, ValidationError
 from .memory import MemoryService
 from .outputs import OutputService
-from .projects import Project, ProjectService
+from .patches import apply_unified
+from .projects import MAX_TREE_ENTRIES, Project, ProjectService
 from .runner import Runner
 from .settings import SettingsService
 from .toolchains import ToolchainUnavailable
@@ -49,6 +53,7 @@ REASON_TEXT = {
     "agent.reason_network_off": "Network access is disabled (Settings → Agent → Allow network tools).",
     "agent.reason_no_endpoint": "No search endpoint is configured (web.search_url).",
     "agent.reason_no_token": "No GitHub token is stored (Settings → Agent → GitHub token).",
+    "agent.reason_no_web": "No page reader is available in this build.",
     "agent.reason_no_image": (
         "No image provider is configured. OpenRouter text models cannot create images, "
         "so this tool is unavailable rather than simulated."
@@ -118,6 +123,8 @@ class ToolContext:
     secrets: Any = None  # SecretStore; typed loosely to keep the module import-light
     conversation_id: str | None = None
     cancel: threading.Event | None = None
+    #: ``myai.services.web.WebService``; only ``fetch()`` is used here.
+    web: Any = None
     http_transport: httpx.BaseTransport | None = None
     timeout_seconds: float = 20.0
 
@@ -556,6 +563,314 @@ def _tool_generate_image(ctx: ToolContext, args: dict[str, Any]) -> ToolResult: 
     raise ToolUnavailable(REASON_TEXT["agent.reason_no_image"])
 
 
+
+
+# ---------------------------------------------------------- new agent tools
+_TEXT_SKIP = {"", "binary"}
+
+
+def _text_files(ctx: ToolContext, project: Project, *, limit: int = 600) -> list:
+    """Text files in tree order, skipping obvious binaries."""
+    rows = []
+    for entry in ctx.projects.tree(project, limit=MAX_TREE_ENTRIES):  # type: ignore[union-attr]
+        if entry.is_dir or not entry.language or entry.language in _TEXT_SKIP:
+            continue
+        rows.append(entry)
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def _tool_project_map(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:  # noqa: ARG001
+    project = _need_project(ctx)
+    entries = ctx.projects.tree(project)  # type: ignore[union-attr]
+    files = [entry for entry in entries if not entry.is_dir]
+    folders = [entry for entry in entries if entry.is_dir]
+    total_bytes = sum(entry.size for entry in files)
+
+    by_language: dict[str, list[int]] = {}
+    for entry in files:
+        language = entry.language or "other"
+        bucket = by_language.setdefault(language, [0, 0])
+        bucket[0] += 1
+        bucket[1] += entry.size
+
+    # Real line counts, bounded: a project with a 50 MB log file must not stall
+    # the agent thread.
+    lines_by_language: dict[str, int] = {}
+    counted = 0
+    for entry in _text_files(ctx, project, limit=300):
+        if entry.size > 400_000:
+            continue
+        try:
+            content = ctx.projects.read(project, entry.relative)  # type: ignore[union-attr]
+        except (ToolError, OSError, ValidationError):
+            continue
+        lines_by_language[entry.language] = lines_by_language.get(entry.language, 0) + len(
+            content.text.splitlines()
+        )
+        counted += 1
+
+    order = sorted(by_language.items(), key=lambda item: (-item[1][0], item[0]))
+    language_rows = []
+    for language, (count, size) in order[:12]:
+        lines = lines_by_language.get(language)
+        suffix = f", {lines:,} lines" if lines is not None else ""
+        language_rows.append(f"- {language}: {count} files, {format_bytes(size)}{suffix}")
+
+    largest = sorted(files, key=lambda entry: entry.size, reverse=True)[:5]
+    largest_rows = [f"- {entry.relative} ({format_bytes(entry.size)})" for entry in largest]
+
+    known_entry_points = {
+        "main.py", "__main__.py", "app.py", "cli.py", "manage.py", "server.py",
+        "index.js", "server.js", "main.ts", "package.json", "pyproject.toml",
+        "requirements.txt", "README.md",
+    }
+    entry_points = [entry.relative for entry in files if entry.name in known_entry_points][:12]
+
+    body = [
+        f"# {project.name}",
+        f"{len(files)} files in {len(folders)} folders, {format_bytes(total_bytes)}"
+        f" (line counts from {counted} text files).",
+        "",
+        "## Languages",
+        *(language_rows or ["- (no text files)"]),
+        "",
+        "## Largest files",
+        *(largest_rows or ["- (empty project)"]),
+        "",
+        "## Entry points / manifests",
+        *([f"- {path}" for path in entry_points] or ["- none of the usual names were found"]),
+    ]
+    return ToolResult(
+        True,
+        "\n".join(body)[:MAX_TOOL_OUTPUT],
+        {
+            "files": len(files),
+            "folders": len(folders),
+            "bytes": total_bytes,
+            "languages": {key: value[0] for key, value in by_language.items()},
+        },
+    )
+
+
+def _clean_pattern(raw: str) -> str:
+    pattern = (raw or "").strip().replace("\\", "/")
+    if not pattern:
+        raise ValidationError("A file pattern is required.", message_key="agent.missing_argument")
+    if pattern.startswith("/") or re.match(r"^[A-Za-z]:/", pattern):
+        raise ValidationError("Absolute patterns are not allowed.", message_key="error.absolute_path")
+    if ".." in pattern.split("/"):
+        raise ValidationError("Patterns cannot leave the project.", message_key="error.path_traversal")
+    return pattern
+
+
+def _tool_find_files(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+    project = _need_project(ctx)
+    pattern = _clean_pattern(str(args["pattern"]))
+    limit = max(1, min(int(args.get("limit") or 40), 200))
+    matched: list[tuple[str, int, float]] = []
+    for entry in ctx.projects.tree(project):  # type: ignore[union-attr]
+        if entry.is_dir:
+            continue
+        relative = entry.relative
+        if not (fnmatch.fnmatch(relative.lower(), pattern.lower())
+                or fnmatch.fnmatch(entry.name.lower(), pattern.lower())):
+            continue
+        try:
+            modified = os.stat(ctx.projects.resolve(project, relative)).st_mtime  # type: ignore[union-attr]
+        except OSError:
+            modified = 0.0
+        matched.append((relative, entry.size, modified))
+    if not matched:
+        return ToolResult(True, f"No files match {pattern}.", {"count": 0, "pattern": pattern})
+    matched.sort(key=lambda row: (-row[2], row[0].lower()))
+    shown = matched[:limit]
+    body = "\n".join(
+        f"{path}  ({format_bytes(size)})" for path, size, _modified in shown
+    )
+    if len(matched) > len(shown):
+        body += f"\n… {len(matched) - len(shown)} more"
+    return ToolResult(
+        True,
+        body[:MAX_TOOL_OUTPUT],
+        {"count": len(matched), "pattern": pattern, "shown": len(shown)},
+    )
+
+
+def _tool_read_lines(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+    project = _need_project(ctx)
+    relative = str(args["path"]).strip()
+    start = max(1, int(args.get("start") or 1))
+    end = int(args.get("end") or 0)
+    content = ctx.projects.read(project, relative)  # type: ignore[union-attr]
+    if content.binary:
+        raise ToolError(
+            f"{relative} is a binary file and cannot be read as text.",
+            message_key="agent.binary_file",
+        )
+    lines = content.text.splitlines()
+    total = len(lines)
+    if end <= 0 or end < start:
+        end = min(total, start + 119)  # 120 lines by default
+    end = min(end, total, start + 399)
+    if start > total:
+        return ToolResult(
+            True,
+            f"{relative} has {total} lines; line {start} does not exist.",
+            {"path": relative, "lines": total, "start": start, "end": end},
+        )
+    width = len(str(end))
+    body = "\n".join(
+        f"{number:>{width}} | {lines[number - 1]}" for number in range(start, end + 1)
+    )
+    return ToolResult(
+        True,
+        f"# {relative} lines {start}-{end} of {total}\n{body}"[:MAX_TOOL_OUTPUT],
+        {"path": relative, "total_lines": total, "start": start, "end": end},
+    )
+
+
+_TODO_RE = re.compile(r"\b(TODO|FIXME|HACK|XXX|BUG)\b[\s:,-]*(.*)")
+
+
+def _tool_scan_todos(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+    project = _need_project(ctx)
+    limit = max(1, min(int(args.get("limit") or 60), 200))
+    found: list[tuple[str, int, str, str]] = []
+    counts: dict[str, int] = {}
+    for entry in _text_files(ctx, project, limit=500):
+        if entry.size > 512_000:
+            continue
+        try:
+            text = ctx.projects.read(project, entry.relative).text  # type: ignore[union-attr]
+        except (ToolError, OSError, ValidationError):
+            continue
+        for number, line in enumerate(text.splitlines(), start=1):
+            match = _TODO_RE.search(line)
+            if match is None:
+                continue
+            tag = match.group(1)
+            counts[tag] = counts.get(tag, 0) + 1
+            if len(found) < limit:
+                note = match.group(2).strip()[:160]
+                found.append((entry.relative, number, tag, note))
+    if not found:
+        return ToolResult(True, "No TODO/FIXME/HACK/XXX/BUG markers were found.", {"count": 0})
+    summary = ", ".join(f"{tag} {count}" for tag, count in sorted(counts.items()))
+    body = "\n".join(f"{path}:{line}: {tag} {note}".strip() for path, line, tag, note in found)
+    return ToolResult(
+        True,
+        f"{sum(counts.values())} markers ({summary})\n{body}"[:MAX_TOOL_OUTPUT],
+        {"count": sum(counts.values()), "by_tag": counts},
+    )
+
+
+def _tool_diff_files(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+    project = _need_project(ctx)
+    left = str(args["path_a"]).strip()
+    right = str(args["path_b"]).strip()
+    first = ctx.projects.read(project, left)  # type: ignore[union-attr]
+    second = ctx.projects.read(project, right)  # type: ignore[union-attr]
+    if first.binary or second.binary:
+        raise ToolError(
+            "One of the files is binary; a text diff is not meaningful.",
+            message_key="agent.binary_file",
+        )
+    diff = list(
+        difflib.unified_diff(
+            first.text.splitlines(),
+            second.text.splitlines(),
+            fromfile=left,
+            tofile=right,
+            lineterm="",
+        )
+    )
+    if not diff:
+        return ToolResult(True, f"{left} and {right} are identical.", {"identical": True})
+    body = "\n".join(diff)
+    added = sum(1 for line in diff if line.startswith("+") and not line.startswith("+++"))
+    removed = sum(1 for line in diff if line.startswith("-") and not line.startswith("---"))
+    return ToolResult(
+        True,
+        body[:MAX_TOOL_OUTPUT],
+        {"identical": False, "added": added, "removed": removed, "truncated": len(body) > MAX_TOOL_OUTPUT},
+    )
+
+
+def _tool_apply_patch(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+    project = _need_project(ctx)
+    relative = str(args["path"]).strip()
+    patch = str(args["patch"])
+    current = ctx.projects.read(project, relative)  # type: ignore[union-attr]
+    if current.binary:
+        raise ToolError(
+            f"{relative} is a binary file.", message_key="agent.binary_file"
+        )
+    # A failed patch raises before anything is written: the file is untouched.
+    updated, applied = apply_unified(current.text, patch)
+    written = ctx.projects.write(project, relative, updated)  # type: ignore[union-attr]
+    return ToolResult(
+        True,
+        f"Applied {applied} hunk(s) to {relative}; the file is now {written.size} bytes.",
+        {"path": relative, "hunks": applied, "bytes": written.size},
+    )
+
+
+def _web_reason(ctx: ToolContext) -> tuple[str, dict[str, Any]] | None:
+    reason = _network_reason(ctx)
+    if reason:
+        return reason
+    if ctx.web is None:
+        return "agent.reason_no_web", {}
+    return None
+
+
+def _tool_fetch_url(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+    reason = _web_reason(ctx)
+    if reason:
+        raise ToolUnavailable(REASON_TEXT.get(reason[0], reason[0]))
+    url = str(args["url"]).strip()
+    try:
+        page = ctx.web.fetch(url)
+    except AppError:
+        # A rejected URL or an HTTP status error already carries a translated
+        # message; do not flatten it into a generic tool failure.
+        raise
+    except Exception as exc:  # noqa: BLE001 - sockets raise many types
+        raise ToolError(
+            f"Could not read {url}: {type(exc).__name__}.",
+            message_key="agent.web_failed",
+            details=type(exc).__name__,
+        ) from exc
+    text = page.text[:MAX_TOOL_OUTPUT]
+    header = (
+        f"# {page.title}\n{page.final_url} · HTTP {page.status} · "
+        f"{format_bytes(page.bytes_received)} · {page.elapsed_ms} ms"
+    )
+    note = "\n… truncated for the model" if len(page.text) > len(text) else ""
+    return ToolResult(
+        True,
+        f"{header}\n\n{text}{note}",
+        {
+            "url": page.final_url,
+            "status": page.status,
+            "chars": len(page.text),
+            "truncated": len(page.text) > len(text),
+        },
+    )
+
+
+def format_bytes(size: int) -> str:
+    """Compact, locale-independent size for tool output."""
+    value = float(max(0, int(size)))
+    for unit in ("B", "KB", "MB", "GB"):
+        if value < 1024 or unit == "GB":
+            return f"{value:.0f} {unit}" if unit == "B" else f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} GB"
+
+
 def default_specs() -> list[ToolSpec]:
     return [
         ToolSpec(
@@ -784,6 +1099,126 @@ def default_specs() -> list[ToolSpec]:
             risk=NETWORK,
             handler=_tool_github_comment,
             availability=_github_reason,
+        ),
+        ToolSpec(
+            id="project_map",
+            label_key="agent.tool_project_map",
+            description=(
+                "Give a structural map of the open project: file and folder counts, languages "
+                "with real line counts, the largest files and the usual entry points. Call it "
+                "once before exploring so you do not read files blindly."
+            ),
+            parameters={"type": "object", "properties": {}},
+            risk=READ,
+            handler=_tool_project_map,
+            requires_project=True,
+        ),
+        ToolSpec(
+            id="find_files",
+            label_key="agent.tool_find_files",
+            description=(
+                "Find files by a glob pattern such as **/*.py or *.md, newest first, with sizes."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "pattern": {"type": "string", "maxLength": 200},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 200},
+                },
+                "required": ["pattern"],
+            },
+            risk=READ,
+            handler=_tool_find_files,
+            requires_project=True,
+        ),
+        ToolSpec(
+            id="read_lines",
+            label_key="agent.tool_read_lines",
+            description=(
+                "Read a numbered line range of one file. Use it for large files instead of "
+                "reading everything."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "maxLength": 400},
+                    "start": {"type": "integer", "minimum": 1},
+                    "end": {"type": "integer", "minimum": 1},
+                },
+                "required": ["path"],
+            },
+            risk=READ,
+            handler=_tool_read_lines,
+            requires_project=True,
+        ),
+        ToolSpec(
+            id="scan_todos",
+            label_key="agent.tool_scan_todos",
+            description=(
+                "List TODO / FIXME / HACK / XXX / BUG markers across the project with file, "
+                "line and the note next to them."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 200}},
+            },
+            risk=READ,
+            handler=_tool_scan_todos,
+            requires_project=True,
+        ),
+        ToolSpec(
+            id="diff_files",
+            label_key="agent.tool_diff_files",
+            description=(
+                "Show the real unified diff between two files of the project (or confirm that "
+                "they are identical)."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path_a": {"type": "string", "maxLength": 400},
+                    "path_b": {"type": "string", "maxLength": 400},
+                },
+                "required": ["path_a", "path_b"],
+            },
+            risk=READ,
+            handler=_tool_diff_files,
+            requires_project=True,
+        ),
+        ToolSpec(
+            id="apply_patch",
+            label_key="agent.tool_apply_patch",
+            description=(
+                "Apply a unified diff (---/+++ and @@ hunks) to one existing file. Context must "
+                "match; line numbers may drift. Nothing is written if any hunk fails."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "maxLength": 400},
+                    "patch": {"type": "string", "maxLength": 120_000},
+                },
+                "required": ["path", "patch"],
+            },
+            risk=WRITE,
+            handler=_tool_apply_patch,
+            requires_project=True,
+        ),
+        ToolSpec(
+            id="fetch_url",
+            label_key="agent.tool_fetch_url",
+            description=(
+                "Fetch one public http(s) page and return its readable text, title and status. "
+                "This is page reading, not a web search."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {"url": {"type": "string", "maxLength": 2000}},
+                "required": ["url"],
+            },
+            risk=NETWORK,
+            handler=_tool_fetch_url,
+            availability=_web_reason,
         ),
         ToolSpec(
             id="generate_image",

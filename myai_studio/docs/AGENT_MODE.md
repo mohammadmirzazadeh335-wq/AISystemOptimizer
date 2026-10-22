@@ -3,7 +3,7 @@
 Agent Mode lets the model **do** things instead of only answering: list and read files in
 the project you opened, write or delete a file, run it with the toolchain installed on your
 machine, search the web, read GitHub issues, and store facts in memory. It is deliberately
-narrow: the model may only use the fifteen registered tools, every sensitive call needs your
+narrow: the model may only use the twenty-two registered tools, every sensitive call needs your
 approval, and a tool that cannot work says exactly why.
 
 ---
@@ -21,7 +21,7 @@ approval, and a tool that cannot work says exactly why.
 
 ## 2. The tools card
 
-The left column lists all fifteen tools with their risk level and live availability:
+The left column lists all twenty-two tools with their risk level and live availability:
 
 | Tool | What it does | Risk |
 | --- | --- | --- |
@@ -38,11 +38,41 @@ The left column lists all fifteen tools with their risk level and live availabil
 | `web_search` | query a SearxNG-compatible endpoint | network |
 | `github_list_issues` | list open issues of a repo | network |
 | `github_comment` | post a comment on an issue | network |
+| `project_map` | structural map: languages with real line counts, largest files, entry points | read |
+| `find_files` | glob search (`**/*.py`) with sizes, newest first | read |
+| `read_lines` | numbered line window of one file (large files) | read |
+| `scan_todos` | every TODO / FIXME / HACK / XXX / BUG with location | read |
+| `diff_files` | real unified diff between two project files | read |
+| `apply_patch` | apply `@@` hunks; all-or-nothing, line drift tolerated | write |
+| `fetch_url` | read one public page as text (page reading, not search) | network |
 | `generate_image` | **always unavailable** — no image provider exists | network |
 
-“N of 15 ready” is computed from the real gates. A row marked *Unavailable* carries the
+“N of 22 ready” is computed from the real gates. A row marked *Unavailable* carries the
 exact reason (no project folder, network off, no endpoint, no token, no image provider).
 Hover a row to see the full text; the reason is also repeated in Settings → Agent.
+
+### 2.1 The seven exploration and editing tools
+
+These were added after Phase 5 to make the agent genuinely useful on a real
+project, not only able to overwrite whole files:
+
+* **`project_map`** is the suggested first call. It returns languages, real line
+  counts, the five largest files and the usual entry points, so the model stops
+  guessing file names.
+* **`find_files`** answers "where is this?" with a glob, including `**/` patterns,
+  and refuses patterns that leave the project.
+* **`read_lines`** reads a numbered window instead of a 4 000-line file; the
+  model can ask for lines 120–180 after seeing a traceback.
+* **`scan_todos`** lists the markers a maintainer would grep for, with counts.
+* **`diff_files`** shows a real `difflib` unified diff, or says the files are
+  identical.
+* **`apply_patch`** applies a unified diff to one file. Context must match
+  exactly; line numbers may have drifted. If any hunk fails, **nothing is
+  written** — there is no half-applied file. It is a `write` tool, so the
+  approval dialog shows the exact patch first.
+* **`fetch_url`** reads one public http(s) page through the same reader the Web
+  Research page uses. It is a `network` tool: it needs *Allow network tools* and
+  the normal approval.
 
 ## 3. Approval
 

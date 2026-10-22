@@ -18,7 +18,7 @@ a guess, so it is not written anywhere in this repository. What *is* written is:
 
 | Level | Meaning | Status |
 | --- | --- | --- |
-| **Rules** | Platform decisions are pure functions with tests that run on any OS | **Verified** — `tests/unit/test_windows_platform.py` (37 tests), `scripts/check_portability.py` (16/16) |
+| **Rules** | Platform decisions are pure functions with tests that run on any OS | **Verified** — `tests/unit/test_windows_platform.py` (37 tests), `scripts/check_portability.py` (16/16 at the time; 17/17 after §9.2) |
 | **Static compatibility** | No POSIX-only import or assumption on a Windows code path; paths, encodings, process flags and file names handled | **Verified by code review + tests** — see §2 |
 | **Runtime on Windows 11** | The window opens, a reply streams, a file compiles and runs | **NOT RUN** — this host cannot execute it |
 
@@ -56,7 +56,7 @@ each now has a regression test that runs on Linux.
 ### 1.2 What was measured on this Linux host
 
 ```
-scripts/check_portability.py                    16/16 checks passed
+scripts/check_portability.py                    16/16 checks passed (17/17 once the static gate of §9.2 was added)
 python -m pytest -q                             (see §6)
 ```
 
@@ -194,3 +194,102 @@ New test files added in this round:
 
 No file under `artifacts/logs/` is committed (the folder is git-ignored); every log
 cited here can be reproduced with the command shown next to it.
+
+---
+
+## 9. Second round (latest): seven new agent tools, a Windows source gate, key hygiene
+
+This is a second, separate round of work after `v0.5.0-post-phase5`. The user
+asked for three things and no compilation: prove the Windows path is sound,
+prove the API key is handled safely **without calling OpenRouter**, and add
+exactly seven new agent capabilities. All three are below.
+
+### 9.1 Seven new tools (15 → 22)
+
+| Tool | Risk | What it actually does |
+| --- | --- | --- |
+| `project_map` | read | Walks the open project: file/folder counts, bytes and real line counts per language, the five largest files and the entry points it recognises. Gives the model structure before it reads anything. |
+| `find_files` | read | Glob search (`**/*.py`, `*.md`) with sizes and modification times, newest first, capped and ordered deterministically. |
+| `read_lines` | read | Numbered line range (`start`, `end`) from one file, 120 lines by default and 400 per call, so a 5 000-line file costs a window instead of the whole file. |
+| `scan_todos` | read | Every `TODO` / `FIXME` / `HACK` / `XXX` / `BUG` marker with file, line and the comment text. |
+| `diff_files` | read | Real unified diff between two project files, or an explicit "identical" answer. |
+| `apply_patch` | **write** | Applies a unified diff with `@@` hunks to an existing file. All-or-nothing: if any hunk fails, nothing is written and the error says which hunk and why (`patch.context_mismatch`, `patch.ambiguous`). Line numbers may drift; context must match exactly. |
+| `fetch_url` | **network** | Reads one public http(s) page through the same `WebService` path the Web Research page uses: URL validation, a 2 MB read cap, HTML-to-text. Refuses without the network permission. |
+
+`apply_patch` is the reason `myai/services/patches.py` exists as a separate,
+Qt-free module: the parser is unit-tested against hunks with shifted line
+numbers, blank lines, trailing whitespace, missing files and ambiguous context,
+and it can never write a half-applied file.
+
+Approval behaviour is unchanged and still one dialog per risky call: `read`
+tools run directly, `write`/`execute`/`network` tools go through the existing
+approval gate and are refused when the setting is off. The agent page shows all
+22 tools with their real availability reason.
+
+### 9.2 Windows: a static gate that fails the build
+
+`scripts/check_windows_static.py` parses every file under `myai/` with `ast` and
+reports, with file and line:
+
+| Rule | What it rejects |
+| --- | --- |
+| `posix-import` | top-level import of `fcntl`, `termios`, `pwd`, `grp`, `resource`, `pty`, `tty` … |
+| `console-window` | `subprocess` calls without `creationflags` |
+| `shell` | `shell=True` in any `subprocess` call |
+| `encoding` | text-mode `open()` without `encoding=` |
+| `posix-api` | unguarded `os.fork` / `os.killpg` / `signal.SIGKILL` |
+| `frozen-interpreter` | `sys.executable` used as a child process command |
+| `posix-path` | literal `/usr/`, `/bin/`, `/etc/` paths |
+
+The scanner also fails on any file it cannot parse (`syntax`), so a broken file
+cannot hide behind a green run. `tests/unit/test_windows_static.py` (13 tests)
+feeds every rule a violating snippet and asserts it is caught, then asserts the
+real `myai/` tree is clean — so the gate cannot go green by accident.
+`scripts/check_portability.py` runs the scanner as its seventeenth check:
+**17/17 passed** on this tree.
+
+This does not prove Windows runs the app. It proves the source contains none of
+the constructs that break it there. The runtime proof is still
+`scripts/windows11_smoke.ps1` on a real Windows 11 machine, and it is still
+**not run** here.
+
+### 9.3 API key: proven sound without a live call
+
+The user asked that the key not be tested live. So nothing here contacts
+OpenRouter; every statement below is enforced by
+`tests/unit/test_api_key_safety.py` (19 tests) and by code inspection.
+
+| Property | How it is enforced |
+| --- | --- |
+| Wrong shape never leaves the machine | `openrouter.api_key_problem()` checks the `sk-or-` prefix, length (≤ 200) and the absence of whitespace, control characters and DEL **before** a request object is built. A transport stub asserts it was never called for each bad key. |
+| No header injection | A key with `\r\n` or a space is rejected; it can never be spliced into `Authorization`. |
+| Not echoed in errors | Every failure is an i18n key — `error.api_key_missing`, `api.key_format`, `api.key_too_long`, `api.key_invalid_chars` (the settings page maps the empty case to `api.key_empty`) — and the value is never interpolated. A test asserts a rejected key appears in neither the message nor `to_dict()`. |
+| Not in logs | `core/redaction.py` masks `sk-or-*`, `sk-*`, `ghp_*`, `github_pat_*` and `Bearer …`; `RedactFilter` is installed on the file, console and inspector handlers, so even a mistaken `logger.info("…%s", key)` writes `sk-or-…abcd`. |
+| Not on disk in clear | The store keeps an encrypted envelope (`secrets.bin` + `secret.key`, 0600; DPAPI on Windows). Tests scan `secrets.bin`, `secret.key`, every `*.db`/`*.sqlite`/`*.json` under the data folder and the backup archive for the key bytes: none found. |
+| Not in backups or exports | Same test: the key appears in neither the zip nor the settings export. |
+
+What is **not** proven: that a valid key actually authenticates — that needs a
+live call, which the user reserved for themselves. The mocked provider tests
+remain labelled mocked.
+
+### 9.4 Tests in this round
+
+New files: `test_patches.py` (8), `test_agent_ideas.py` (14),
+`test_windows_static.py` (13), `test_api_key_safety.py` (19) — 54 new tests.
+
+```
+full suite            682 passed, 1 skipped in 302.73s (0:05:02)
+tests/unit            384 passed, 1 skipped
+tests/ui + tests/integration  298 passed in 297.57s (0:04:57)
+```
+
+The single skip is the live OpenRouter test that requires `MYAI_LIVE_API_KEY`;
+it skips by design and is never reported as a pass.
+
+### 9.5 Still not done
+
+* **No Windows 11 execution here.** The static gate is not a substitute; the
+  PowerShell smoke script is.
+* **No live OpenRouter request.** By explicit instruction. The key path is
+  validated offline only.
+* **No packaging.** Deferred to the very end, by explicit instruction.

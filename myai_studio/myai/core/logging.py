@@ -11,9 +11,38 @@ from collections import deque
 from datetime import datetime, timezone
 from typing import Any
 
+from .redaction import redact
+
 _CONFIGURED = False
 _RING: deque[dict[str, Any]] = deque(maxlen=1000)
 _RING_LOCK = threading.Lock()
+
+
+class RedactFilter(logging.Filter):
+    """Last line of defence: no handler ever sees a raw credential.
+
+    A filter (rather than a formatter concern) means the JSON file, the console
+    and the inspector ring buffer all get the same redacted record, including
+    messages produced by third-party libraries we do not control.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            if isinstance(record.msg, str):
+                record.msg = redact(record.msg)
+            if record.args:
+                record.args = tuple(
+                    redact(arg) if isinstance(arg, str) else arg for arg in record.args
+                )
+            fields = getattr(record, "fields", None)
+            if isinstance(fields, dict):
+                record.fields = {
+                    key: redact(value) if isinstance(value, str) else value
+                    for key, value in fields.items()
+                }
+        except Exception:  # noqa: BLE001 - redaction must never drop a log line
+            pass
+        return True
 
 
 class JsonFormatter(logging.Formatter):
@@ -90,14 +119,18 @@ def setup_logging(log_dir=None, level: int = logging.INFO, console: bool = True)
             log_dir / "myai_studio.jsonl", maxBytes=2_000_000, backupCount=4, encoding="utf-8"
         )
         file_handler.setFormatter(formatter)
+        file_handler.addFilter(RedactFilter())
         root.addHandler(file_handler)
 
     if console and sys.stderr is not None:
         stream = SafeStreamHandler()
         stream.setFormatter(logging.Formatter("%(levelname)-7s %(name)s: %(message)s"))
+        stream.addFilter(RedactFilter())
         root.addHandler(stream)
 
-    root.addHandler(RingBufferHandler())
+    ring = RingBufferHandler()
+    ring.addFilter(RedactFilter())
+    root.addHandler(ring)
     _CONFIGURED = True
     return root
 
