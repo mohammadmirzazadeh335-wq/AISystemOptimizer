@@ -1,0 +1,8 @@
+SolidWorks Part: Motor_Mount_X.SLDPRT
+Category: Mechanism | Material: AL 6061 5mm
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  L-Bracket 80x60x5 + Motor M5x4 PCD47.14 + ShaftHole Ø10 + Frame M6x2 + Fillet R3
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

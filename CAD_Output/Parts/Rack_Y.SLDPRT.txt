@@ -1,0 +1,8 @@
+SolidWorks Part: Rack_Y.SLDPRT
+Category: Mechanism | Material: Steel C45 M1
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Body 450x10x8 + Teeth M1 x143 H2.25 pitch3.14 + M3x4
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

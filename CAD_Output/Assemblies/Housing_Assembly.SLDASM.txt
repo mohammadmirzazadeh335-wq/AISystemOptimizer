@@ -1,0 +1,7 @@
+SolidWorks Assembly: Housing_Assembly.SLDASM
+Units: MMGS
+Components:
+  Side_Left x1, Side_Right x1, Rear_Panel 2-piece, Top_Cover hinged, Divider_V x1, Divider_H x4, Floor x10, Door x10 398x398, Hinge x20, ServicePanel x2
+Mates:
+  Side_To_Frame Coincident, Rear_To_Frame, Top_To_Frame, Divider_V MidPlane, Divider_H dist401.5, Floors ToDividers, Doors Hinged+Clearance 1mm
+Generated v1.0.0

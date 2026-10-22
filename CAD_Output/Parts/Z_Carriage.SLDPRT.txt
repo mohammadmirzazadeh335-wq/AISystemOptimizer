@@ -1,0 +1,8 @@
+SolidWorks Part: Z_Carriage.SLDPRT
+Category: Transfer | Material: AL 6061 5mm
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Plate 900x200x5 + Block M5x8 + LeadNut M5x8 + YRail M4x8 + YMotor M3x4 + Ejector 380x10x30 + Sensors + Fillet R5
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

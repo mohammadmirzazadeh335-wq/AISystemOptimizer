@@ -1,0 +1,8 @@
+SolidWorks Part: Compartment_Divider_Vertical.SLDPRT
+Category: Housing | Material: Galv 1.5mm
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Plate 500x2000x1.5 + M5x8 + HSlots 4x + Fillet
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

@@ -1,0 +1,8 @@
+SolidWorks Part: Transfer_Tray.SLDPRT
+Category: Transfer | Material: AL 6061 3mm
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Floor 380x400x3 + FrontLip L30mm + SideEdges 10mm + Ribs 380x10x8 + SiliconeGrooves 5x + Block M4x4 + Rack M3x4 + SensorØ8 + Fillet R3
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

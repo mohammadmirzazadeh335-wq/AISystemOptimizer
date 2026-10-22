@@ -1,0 +1,7 @@
+SolidWorks Assembly: Main_Assembly.SLDASM
+Units: MMGS
+Components:
+  Frame Fix, Housing, X_Axis MOVING, Z_Axis MOVING on X, Tray MOVING on Z, Conveyor, UI, Electronics, Cable
+Mates:
+  Frame Fix Origin, Housing Inside Frame, X Rails Front, Z Rails On XCarriage-Nested, Y On ZCarriage-TripleNested, Conveyor Bottom Front, UI Front Upper, Electronics Top, Cables Side, MOTION X0-480 Z0-2120 Y0-450
+Generated v1.0.0

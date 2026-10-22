@@ -1,0 +1,8 @@
+SolidWorks Part: Motor_Mount_Z.SLDPRT
+Category: Mechanism | Material: AL 6061 8mm
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  L-Bracket 100x80x8 + Motor M5x4 + Frame M6x4 + Fillet R3
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

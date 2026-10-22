@@ -1,0 +1,8 @@
+SolidWorks Part: Cable_Chain_Z.SLDPRT
+Category: Cable | Material: PA66 IGUS E2.10
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Link 30x20 inner20x10 L2100 140links + Bend R50 + TopMount 40x30x5 + BottomMount 40x30x5 + M4x4
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

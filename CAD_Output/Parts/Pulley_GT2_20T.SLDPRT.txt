@@ -1,0 +1,8 @@
+SolidWorks Part: Pulley_GT2_20T.SLDPRT
+Category: Mechanism | Material: AL 6061 GT2 20T
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Body pitchD12.73 OD14 BoreØ8 W10 + Teeth 20x GT2 + Flanges Ø16x1 + Bore Ø8 + Grub M3x2 + Fillet R0.3
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

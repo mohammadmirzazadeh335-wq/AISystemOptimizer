@@ -1,0 +1,7 @@
+SolidWorks Assembly: Conveyor_Assembly.SLDASM
+Units: MMGS
+Components:
+  Frame x2, RollerDrive Ø40x380, RollerIdler Ø40x380, Belt 350x600, Bearing x4 SK8, Tensioner, Sensor
+Mates:
+  Frames_To_Bottom Coincident, Centered X, Height400, Rollers Concentric, Belt_On_Rollers, Sensor
+Generated v1.0.0

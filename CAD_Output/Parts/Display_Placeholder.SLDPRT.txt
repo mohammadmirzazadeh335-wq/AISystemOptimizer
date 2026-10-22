@@ -1,0 +1,8 @@
+SolidWorks Part: Display_Placeholder.SLDPRT
+Category: UI | Material: PCB+Glass 26x26x8
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Body 26x26x8 + Screen 22x22x1 + Connector 10x3
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

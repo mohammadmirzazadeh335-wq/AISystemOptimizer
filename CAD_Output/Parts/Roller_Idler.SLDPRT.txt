@@ -1,0 +1,8 @@
+SolidWorks Part: Roller_Idler.SLDPRT
+Category: Conveyor | Material: AL anodized
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Body Ø40x380 + Shaft Ø12x20 + Fillet R1
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

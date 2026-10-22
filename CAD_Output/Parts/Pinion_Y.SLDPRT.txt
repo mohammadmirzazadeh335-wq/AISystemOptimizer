@@ -1,0 +1,8 @@
+SolidWorks Part: Pinion_Y.SLDPRT
+Category: Mechanism | Material: Steel C45
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Body OD22x8 20T M1 + Teeth 20x + Bore Ø5 + SetScrew M3 + AxisRef
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

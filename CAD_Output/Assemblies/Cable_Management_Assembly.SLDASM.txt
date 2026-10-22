@@ -1,0 +1,7 @@
+SolidWorks Assembly: Cable_Management_Assembly.SLDASM
+Units: MMGS
+Components:
+  CableTray 40x30x2000, CableTray_H 40x30x800, CableChain 30x20x2200, Clip x10, Presence Sensor x10
+Mates:
+  Tray_To_Frame 25mm from Z Rail, Tray_H_To_Plate, Chain_Top Fixed, Chain_Bottom Moving 30mm from Belt, Presence Sensors Ceiling
+Generated v1.0.0

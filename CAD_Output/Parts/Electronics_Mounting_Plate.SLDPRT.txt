@@ -1,0 +1,8 @@
+SolidWorks Part: Electronics_Mounting_Plate.SLDPRT
+Category: Electronics | Material: AL 6061 3mm
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Plate 800x500x3 + Standoff M3x4 + Arduino M3x4 Uno + Driver M4x12 + PSU M5x4 + Vent Slots 20x5x6 + CableEntry 2x30x20 + Terminal M3x4 + Fillet R3
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

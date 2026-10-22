@@ -1,0 +1,8 @@
+SolidWorks Part: Motor_NEMA17_Y.SLDPRT
+Category: Electronics | Material: NEMA17 0.5Nm
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Body 42x42x34 + Shaft Ø5x24 + AxisRef
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

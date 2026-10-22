@@ -1,0 +1,8 @@
+SolidWorks Part: Bearing_Block_Z.SLDPRT
+Category: Mechanism | Material: AL+608ZZ KP08
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Body 40x40x20 + Bore Ø8 + M5x2 + Fillet R1
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

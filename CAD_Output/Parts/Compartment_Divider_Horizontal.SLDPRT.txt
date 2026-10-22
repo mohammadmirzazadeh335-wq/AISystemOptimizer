@@ -1,0 +1,8 @@
+SolidWorks Part: Compartment_Divider_Horizontal.SLDPRT
+Category: Housing | Material: Galv 1.5mm
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Plate 400x500x1.5 + M5x6 + CablePass 20x15
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

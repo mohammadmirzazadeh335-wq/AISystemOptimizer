@@ -1,0 +1,8 @@
+SolidWorks Part: Motor_NEMA23_X.SLDPRT
+Category: Electronics | Material: NEMA23 1.2Nm
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Body 56x56x56 + Shaft Ø6.35x21 + M5x4 PCD47.14 + AxisRef
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

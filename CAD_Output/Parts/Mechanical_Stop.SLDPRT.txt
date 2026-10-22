@@ -1,0 +1,8 @@
+SolidWorks Part: Mechanical_Stop.SLDPRT
+Category: Mechanism | Material: AL+Rubber 20x20x15
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Block 20x20x15 + Bumper Ø12x5 Rubber + M5x2 + Fillet R2
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

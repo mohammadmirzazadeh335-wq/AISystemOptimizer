@@ -1,0 +1,8 @@
+SolidWorks Part: Bottom_Plate.SLDPRT
+Category: Structure | Material: Steel ST12 2.0mm
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Plate 950x700x2 + Frame M8x8 + Foot M10x4 + CableEntry 2x30x20 + Conveyor M8x4 + Fillet R3
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

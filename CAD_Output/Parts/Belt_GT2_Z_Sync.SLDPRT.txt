@@ -1,0 +1,8 @@
+SolidWorks Part: Belt_GT2_Z_Sync.SLDPRT
+Category: Mechanism | Material: Rubber GT2 10mm
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Sync Loop 870+pi*D + Thin Sweep 10mm
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

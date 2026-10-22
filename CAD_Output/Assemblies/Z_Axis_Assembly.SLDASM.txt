@@ -1,0 +1,7 @@
+SolidWorks Assembly: Z_Axis_Assembly.SLDASM
+Units: MMGS
+Components:
+  Rail_Z x2 L2400, Block_Z x4, Z_Carriage MOVING, LeadScrew T8x8 x2 L2150, Nut x2, Bearing KP08 x4, BeltSync, Pulley x4, MotorMount Z, Motor NEMA23 Z, Sensor x2, Stop x2
+Mates:
+  Rails_To_XCarriage, Blocks_On_Rails, Carriage_To_Blocks, ⭐Z_LimitDistance 0-2120, LeadScrews Concentric+Bearings, Nuts To_Carriage, Sync BeltChain 1:1, Motor_To_Lead, Sensors+Stops
+Generated v1.0.0

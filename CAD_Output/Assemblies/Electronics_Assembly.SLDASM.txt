@@ -1,0 +1,7 @@
+SolidWorks Assembly: Electronics_Assembly.SLDASM
+Units: MMGS
+Components:
+  Plate 800x500x3, Standoff M3x20 x4, Arduino Uno, MotorDriver x3 DM542, PSU 24V 15A, TerminalBlock, SensorHub
+Mates:
+  Standoffs_To_TopFrame, Plate_To_Standoffs, Arduino_To_Plate, Drivers_To_Plate, PSU Centered, Terminal Front, Clearance 30mm TopCover
+Generated v1.0.0

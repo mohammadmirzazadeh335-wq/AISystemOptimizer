@@ -1,0 +1,8 @@
+SolidWorks Part: Belt_Tensioner_X.SLDPRT
+Category: Mechanism | Material: AL 6061
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Base 50x30x5 + Slot 5.5x20 M5 + Screw M5x30+Spring + Idler Bore Ø5 + Fillet R1
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

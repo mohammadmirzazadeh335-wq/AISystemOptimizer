@@ -1,0 +1,7 @@
+SolidWorks Assembly: Frame_Assembly.SLDASM
+Units: MMGS
+Components:
+  Main_Frame x1 Fix, Vertical_Support x4, Horizontal_Beam x8, Bottom_Plate x1, Bracket_Corner x24, Foot x4
+Mates:
+  Bottom_To_Frame Coincident, Vertical_To_Frame Coincident, Horizontal_To_Vertical, Feet M10 Concentric, Brackets Coincident
+Generated v1.0.0

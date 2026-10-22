@@ -1,0 +1,7 @@
+SolidWorks Assembly: X_Axis_Assembly.SLDASM
+Units: MMGS
+Components:
+  Rail_X x2 L900, Block_X x4, X_Carriage MOVING, Shaft Ø8x920, Bearing SK8 x2, Pulley GT2 20T x2, Belt ~2200, Tensioner, MotorMount X, Motor NEMA23 X, Sensor x2, Stop x2
+Mates:
+  Rails_To_Frame Coincident+Parallel, Blocks_On_Rails, Carriage_To_Blocks, ⭐X_LimitDistance 0-480, Shaft_To_Bearings Concentric, Pulleys Concentric, Belt_To_Pulleys, BeltClamp, BeltChain 1:1, Motor, Sensors+Stops
+Generated v1.0.0

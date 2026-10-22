@@ -1,0 +1,8 @@
+SolidWorks Part: Conveyor_Frame.SLDPRT
+Category: Conveyor | Material: Steel ST12 3mm
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Plate 600x50x3 + Bearing Holes 2xØ12 dist500 + TensionSlot 12x20 + M6x4 + Fillet R2
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

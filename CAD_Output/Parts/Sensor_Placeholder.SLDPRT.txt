@@ -1,0 +1,8 @@
+SolidWorks Part: Sensor_Placeholder.SLDPRT
+Category: Electronics | Material: PCB+Plastic 15x15x10
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Body 15x15x10 + M3x2 + Cable Ø4
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

@@ -1,0 +1,8 @@
+SolidWorks Part: Belt_GT2_X.SLDPRT
+Category: Mechanism | Material: Rubber GT2 10mm
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Path Loop 850+pi*D loop~1750 + Section 10x1.5 Thin Sweep + Teeth pitch2 H0.75 + AxisRef
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

@@ -1,0 +1,8 @@
+SolidWorks Part: Horizontal_Beam.SLDPRT
+Category: Structure | Material: AL 40x40x2
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Profile 40x40 + Extrude 870 + Hollow + M8x4
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

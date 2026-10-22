@@ -1,0 +1,8 @@
+SolidWorks Part: Vertical_Support.SLDPRT
+Category: Structure | Material: AL 6063-T5 40x40x2
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Profile 40x40 + Extrude 2400 + Hollow 36x36 + M8x12
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

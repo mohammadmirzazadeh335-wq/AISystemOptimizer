@@ -1,0 +1,8 @@
+SolidWorks Part: Front_Panel_Frame.SLDPRT
+Category: UI | Material: Steel ST12 1.5mm
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  BaseFlange 950x500x1.5 + DisplayCutout 28x28 + Button Holes 2xØ16.5 + KeypadCutout 102x82 + IOSlot 400x50 R25 + M5x8
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

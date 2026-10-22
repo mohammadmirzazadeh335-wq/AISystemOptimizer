@@ -1,0 +1,8 @@
+SolidWorks Part: Display_Mount.SLDPRT
+Category: UI | Material: AL 3mm
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Frame 40x40x10 + Cutout 26x26 + Display M3x4 + Panel M3x4 + Cable 10x8
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

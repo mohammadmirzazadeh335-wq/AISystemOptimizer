@@ -1,0 +1,8 @@
+SolidWorks Part: Main_Frame.SLDPRT
+Category: Structure | Material: AL 6063-T5 40x40x2
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Sweep_Vertical x4 + Horizontal x8 + HoleWizard M8x48 + Rail M5x64 + Fillet R2
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

@@ -1,0 +1,8 @@
+SolidWorks Part: Roller_Drive.SLDPRT
+Category: Conveyor | Material: AL anodized
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Body Ø40x380 Revolve + Shaft Ø12x20 + DFlat + SetScrew M5 + Journal Ø12 + Fillet R1
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

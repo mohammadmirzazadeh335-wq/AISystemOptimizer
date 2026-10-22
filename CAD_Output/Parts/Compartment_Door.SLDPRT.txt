@@ -1,0 +1,8 @@
+SolidWorks Part: Compartment_Door.SLDPRT
+Category: Housing | Material: Steel ST12 2.0mm
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Plate 398x398x2 + HingeBosses 2xØ10x5 + M4x4 + LockMount + HandleLabel 60x20 + Fillet R2
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

@@ -1,0 +1,8 @@
+SolidWorks Part: Side_Panel_Right.SLDPRT
+Category: Housing | Material: Steel ST12 1.5mm
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  BaseFlange 700x2400 + ServiceCutout 400x600 + HingeCutouts + Vent + M5
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

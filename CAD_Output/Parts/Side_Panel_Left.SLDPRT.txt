@@ -1,0 +1,8 @@
+SolidWorks Part: Side_Panel_Left.SLDPRT
+Category: Housing | Material: Steel ST12 1.5mm
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  BaseFlange 700x2400x1.5 + EdgeFlange 15mm + M5x20 + VentSlots 20x5 x10 + CableEntry 30x20
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

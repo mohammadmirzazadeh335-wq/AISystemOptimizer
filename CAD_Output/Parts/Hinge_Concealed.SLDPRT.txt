@@ -1,0 +1,8 @@
+SolidWorks Part: Hinge_Concealed.SLDPRT
+Category: Housing | Material: Steel
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Base 30x15x3 + Knuckle Ø6x20 Revolve + M4x2 + Fillet R1
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

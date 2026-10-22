@@ -1,0 +1,8 @@
+SolidWorks Part: Rear_Panel.SLDPRT
+Category: Housing | Material: Steel ST12 1.5mm
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  BaseFlange 950x2400 + Split mid-height 2-piece + M5x24 + Vent
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

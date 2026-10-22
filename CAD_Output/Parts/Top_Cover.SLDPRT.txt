@@ -1,0 +1,8 @@
+SolidWorks Part: Top_Cover.SLDPRT
+Category: Housing | Material: Steel ST12 1.5mm
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Plate 950x700x1.5 + EdgeFlanges + HingeBosses Ø6x5 + ElectronicsAccess 600x400 + Vent + M5x8
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

@@ -1,0 +1,8 @@
+SolidWorks Part: Shaft_Drive_X.SLDPRT
+Category: Mechanism | Material: Steel CK45
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Shaft Ø8x920 Revolve + Shoulders Ø12x5 + Keyway 3x3 L20 + Chamfer 0.5x45 + AxisRef
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

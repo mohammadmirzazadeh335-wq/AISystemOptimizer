@@ -1,0 +1,36 @@
+' SmartLocker - Global Variables & Equations (MMGS)
+' SolidWorks 2025 Compatible
+' Generated: 2026-10-22 08:57:02
+' Generator v1.0.0
+
+"Compartment_Width"= 400
+"Compartment_Length"= 500
+"Compartment_Height"= 400
+"Number_Of_Columns"= 2
+"Number_Of_Rows"= 5
+"Number_Of_Compartments"= 10
+"Frame_Profile"= 40
+"Panel_Thickness"= 1.5
+"Divider_Thickness"= 1.5
+"Door_Thickness"= 2
+"Door_Clearance"= 1
+"External_Width"= 950
+"External_Depth"= 700
+"External_Height"= 2400
+"X_Travel"= 480
+"Z_Travel"= 2120
+"Y_Travel"= 450
+"Maximum_Design_Load"= 15
+"Roller_Diameter"= 40
+"Belt_Width"= 10
+"Belt_Length_X"= 2200
+"Linear_Rail_X_Length"= 900
+"Linear_Rail_Z_Length"= 2400
+"Linear_Rail_Y_Length"= 500
+"Display_Width"= 26
+"Display_Height"= 26
+"Keypad_Width"= 100
+"Keypad_Height"= 80
+"Pulley_Teeth"= 20
+"Pulley_Pitch"= 2
+"Lead_Screw_Pitch"= 8

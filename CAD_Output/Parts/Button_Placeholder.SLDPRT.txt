@@ -1,0 +1,8 @@
+SolidWorks Part: Button_Placeholder.SLDPRT
+Category: UI | Material: Plastic+Metal Ø16x12
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Body Ø16x12 + Cap Ø14x3 + Key 2x1
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

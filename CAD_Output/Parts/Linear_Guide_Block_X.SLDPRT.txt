@@ -1,0 +1,8 @@
+SolidWorks Part: Linear_Guide_Block_X.SLDPRT
+Category: Mechanism | Material: Steel MGN15H
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Body 60x45x25 + Groove R1.5 + M5x4 + BallChannels + Fillet R1
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

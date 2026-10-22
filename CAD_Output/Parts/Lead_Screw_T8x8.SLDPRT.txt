@@ -1,0 +1,8 @@
+SolidWorks Part: Lead_Screw_T8x8.SLDPRT
+Category: Mechanism | Material: Steel C45 T8x8
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Core Ø8x2150 Revolve + Helix Pitch8 Rev268 H2150 + Thread Sweep Trapezoid + Journals Ø8x20 + Shoulders + AxisRef
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

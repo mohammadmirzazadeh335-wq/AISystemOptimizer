@@ -1,0 +1,8 @@
+SolidWorks Part: Lead_Screw_Nut_T8.SLDPRT
+Category: Mechanism | Material: Brass
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Flange Ø22 38x8 + Bore Ø8 + Flange M5x4 + Fillet R1
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

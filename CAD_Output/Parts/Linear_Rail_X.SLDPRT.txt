@@ -1,0 +1,8 @@
+SolidWorks Part: Linear_Rail_X.SLDPRT
+Category: Mechanism | Material: Steel MGN15
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Profile MGN15 15x10 + Extrude 900 + M4x16 pitch60 + AxisRef
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

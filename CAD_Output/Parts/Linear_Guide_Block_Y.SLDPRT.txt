@@ -1,0 +1,8 @@
+SolidWorks Part: Linear_Guide_Block_Y.SLDPRT
+Category: Mechanism | Material: Steel MGN12H
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Body 45x35x20 + Groove R1.2 + M4x4 + Fillet R1
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

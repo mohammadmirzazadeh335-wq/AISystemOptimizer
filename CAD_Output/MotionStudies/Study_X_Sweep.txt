@@ -1,0 +1,2 @@
+Motion Study: Study_X_Sweep
+Study_X_Sweep Animation 4s X 0->480->0

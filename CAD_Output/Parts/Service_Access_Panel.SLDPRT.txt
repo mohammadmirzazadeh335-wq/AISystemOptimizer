@@ -1,0 +1,8 @@
+SolidWorks Part: Service_Access_Panel.SLDPRT
+Category: Housing | Material: Steel 1.5mm
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Door 400x600x1.5 + HingeCutouts 2x + CamLock Ø19 + M5x6
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

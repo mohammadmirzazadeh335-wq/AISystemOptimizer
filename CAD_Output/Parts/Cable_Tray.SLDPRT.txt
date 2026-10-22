@@ -1,0 +1,8 @@
+SolidWorks Part: Cable_Tray.SLDPRT
+Category: Cable | Material: Steel 2mm U40x30
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Profile U40x30x2 L2000 + M5x6 pitch300 + TieSlots 10x5x10 pitch200 + Fillet R1
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

@@ -1,0 +1,8 @@
+SolidWorks Part: Linear_Rail_Y.SLDPRT
+Category: Mechanism | Material: Steel MGN12
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Profile MGN12 12x8 + Extrude 500 + M3x9
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

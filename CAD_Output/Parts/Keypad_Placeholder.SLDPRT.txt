@@ -1,0 +1,8 @@
+SolidWorks Part: Keypad_Placeholder.SLDPRT
+Category: UI | Material: PCB+Silicone 100x80x10
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Body 100x80x10 + Keys 12x 18x18x3 Pattern 3x4 + Connector 12x3
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

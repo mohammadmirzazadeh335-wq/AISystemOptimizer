@@ -1,0 +1,8 @@
+SolidWorks Part: Button_Mount.SLDPRT
+Category: UI | Material: Plastic
+Units: MMGS | SolidWorks 2025
+─────────────────────────────────
+FeatureManager:
+  Hole Ø16.5 + Flange Ø20x2 + Nut M16x1
+─────────────────────────────────
+Generated 2026-10-22 by v1.0.0

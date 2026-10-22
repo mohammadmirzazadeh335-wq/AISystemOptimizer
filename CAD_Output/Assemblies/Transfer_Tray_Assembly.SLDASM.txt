@@ -1,0 +1,7 @@
+SolidWorks Assembly: Transfer_Tray_Assembly.SLDASM
+Units: MMGS
+Components:
+  Tray 380x400x30 MOVING, Rail_Y MGN12 L500, Block_Y x2, Rack 450 M1, Pinion 20T, MotorMount Y, Motor NEMA17 Y, Guide x2, Sensor Y x2
+Mates:
+  Rail_To_ZCarriage, Blocks_On_Rail, Tray_To_Blocks, ⭐Y_LimitDistance 0-450, Rack_To_Tray, Pinion_To_Motor Concentric, Pinion_Rack Distance 0 Tangent, Motor+Sensors
+Generated v1.0.0

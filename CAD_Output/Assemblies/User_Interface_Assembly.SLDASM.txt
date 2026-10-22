@@ -1,0 +1,7 @@
+SolidWorks Assembly: User_Interface_Assembly.SLDASM
+Units: MMGS
+Components:
+  FrontPanel 950x500, Display 26x26x8, DisplayMount 40x40, Button x2 Ø16, ButtonMount x2, Keypad 100x80, KeypadMount 110x90
+Mates:
+  Panel_To_Frame, DisplayMount_To_Panel, Display_To_Mount, Buttons Concentric Ø16.5, KeypadMount+P
+Generated v1.0.0
