@@ -12,7 +12,7 @@ import logging
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..core.errors import AppError, ValidationError
 from ..core.events import Events, SignalBus
@@ -24,6 +24,9 @@ from .memory import MemoryService, estimate_tokens
 from .openrouter import ChatResult, ModelInfo, OpenRouterClient
 from .persona import PersonaService
 from .settings import SettingsService
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from .attachments import AttachmentRecord, AttachmentService
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +83,7 @@ class ChatService:
         settings: SettingsService,
         memory: MemoryService,
         persona: PersonaService,
+        attachments: "AttachmentService | None" = None,
         client_factory: Callable[[], OpenRouterClient] | None = None,
     ) -> None:
         self._db = db
@@ -88,6 +92,7 @@ class ChatService:
         self._settings = settings
         self._memory = memory
         self._persona = persona
+        self._attachments = attachments
         self._client_factory = client_factory or (lambda: OpenRouterClient(self._api_key))
         self._cancel = threading.Event()
         self._lock = threading.Lock()
@@ -134,7 +139,11 @@ class ChatService:
 
     # ----------------------------------------------------------------- prompt
     def build_messages(
-        self, conversation: Conversation, *, history_limit: int = DEFAULT_HISTORY_LIMIT
+        self,
+        conversation: Conversation,
+        *,
+        history_limit: int = DEFAULT_HISTORY_LIMIT,
+        attachments: list["AttachmentRecord"] | None = None,
     ) -> tuple[list[dict[str, str]], PromptDiagnostics]:
         system_blocks: list[str] = [
             "You are MyAI Studio, a precise desktop assistant. "
@@ -151,12 +160,32 @@ class ChatService:
         history = self._conversations.messages(conversation.id)
         trimmed = history[-history_limit:] if history_limit else history
         messages: list[dict[str, str]] = [{"role": "system", "content": "\n\n".join(system_blocks)}]
-        for message in trimmed:
+        last_index = len(trimmed) - 1
+        for index, message in enumerate(trimmed):
             if message.role not in {"user", "assistant"}:
                 continue
             if message.status == "error" or not (message.content or "").strip():
                 continue
-            messages.append({"role": message.role, "content": message.content})
+            content = message.content
+            names = [
+                str(item.get("name"))
+                for item in ((message.meta or {}).get("attachments") or [])
+                if item.get("name")
+            ]
+            # The current turn gets the full extracted text below; older turns
+            # only keep a reminder so the context is not re-sent every time.
+            if names and not (attachments and index == last_index):
+                content = f"{content}\n\n[Attached files: {', '.join(names)}]"
+            messages.append({"role": message.role, "content": content})
+
+        if attachments:
+            block = self._attachments.context_block(attachments) if self._attachments else ""
+            if block:
+                last = messages[-1] if len(messages) > 1 else None
+                if last is None or last["role"] != "user":
+                    messages.append({"role": "user", "content": block})
+                else:
+                    last["content"] = f"{last['content']}\n\n{block}".strip()
 
         window = self.context_window(conversation.model_id or str(self._settings.get("ai.default_model", "")))
         system_tokens = estimate_tokens(messages[0]["content"])
@@ -194,12 +223,20 @@ class ChatService:
         text: str,
         *,
         model_id: str = "",
+        attachments: list[dict] | None = None,
         on_delta: Callable[[str], None] | None = None,
         on_status: Callable[[str, dict], None] | None = None,
     ) -> SendOutcome:
-        """Persist the user message, stream the reply and store the result."""
+        """Persist the user message, stream the reply and store the result.
+
+        ``attachments`` are the UI chips (name + original path). They are read,
+        copied and extracted here, on the caller's worker thread, so a large
+        file never blocks the window. The extracted text is sent with this one
+        message; the stored message keeps only the plain text and the chips.
+        """
         content = (text or "").strip()
-        if not content:
+        prepared = self.prepare_attachments(attachments or [])
+        if not content and not prepared:
             raise ValidationError("Message is empty", message_key="error.empty_message")
         conversation = self._conversations.get(conversation_id)
         chosen_model = (model_id or conversation.model_id or str(self._settings.get("ai.default_model", ""))).strip()
@@ -216,9 +253,19 @@ class ChatService:
 
         outcome = SendOutcome()
         try:
-            user_message = self._conversations.add_message(conversation_id, "user", content)
+            user_message = self._conversations.add_message(
+                conversation_id,
+                "user",
+                content,
+                meta={"attachments": [record.to_meta() for record in prepared]} if prepared else {},
+            )
             outcome.user_message = user_message
-            messages, diagnostics = self.build_messages(conversation)
+            if prepared and self._attachments is not None:
+                try:
+                    self._attachments.remember(user_message.id, prepared)
+                except Exception:  # noqa: BLE001 - a chip must not break a reply
+                    logger.exception("attachment_rows_failed")
+            messages, diagnostics = self.build_messages(conversation, attachments=prepared)
             outcome.diagnostics = diagnostics
             self._bus.emit(Events.STREAM_STARTED, conversation_id=conversation_id, diagnostics=diagnostics.to_dict())
 
@@ -292,6 +339,24 @@ class ChatService:
             self._cancel.clear()
         return outcome
 
+    # -------------------------------------------------------------- attachments
+    def prepare_attachments(self, attachments: list[dict]) -> list[AttachmentRecord]:
+        """Ingest the UI chips; a bad file raises a translated error."""
+        if not attachments:
+            return []
+        if self._attachments is None:
+            raise ValidationError(
+                "Attachments are not available in this build",
+                message_key="attachments.unsupported",
+            )
+        records: list[AttachmentRecord] = []
+        for item in attachments:
+            path = item.get("path") if isinstance(item, dict) else None
+            if not path:
+                continue
+            records.append(self._attachments.ingest(path))
+        return records
+
     # ---------------------------------------------------------------- helpers
     def _finalize(
         self,
@@ -350,6 +415,7 @@ def build_chat_service(
     settings: SettingsService,
     memory: MemoryService,
     persona: PersonaService,
+    attachments: "AttachmentService | None" = None,
     api_key_reader: Callable[[], str | None],
 ) -> ChatService:
     service = ChatService(
@@ -359,6 +425,7 @@ def build_chat_service(
         settings=settings,
         memory=memory,
         persona=persona,
+        attachments=attachments,
     )
     service.set_api_key_reader(api_key_reader)
     return service

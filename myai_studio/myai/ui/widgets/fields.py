@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...i18n import tr
 from ..theme import runtime
 from ..theme.icons import draw as draw_icon
 from .buttons import IconButton, ToggleSwitch
@@ -99,9 +100,21 @@ class SearchField(QFrame):
 
 class AttachmentChip(QFrame):
     removed = Signal(str)
+    opened = Signal(str)
 
-    def __init__(self, name: str, subtitle: str, icon_name: str = "file", parent=None) -> None:  # noqa: ANN001
+    def __init__(
+        self,
+        name: str,
+        subtitle: str,
+        icon_name: str = "file",
+        parent=None,  # noqa: ANN001
+        *,
+        ident: str = "",
+        previewable: bool = False,
+    ) -> None:
         super().__init__(parent)
+        #: Stable identity for remove/preview (a path, so duplicate names work).
+        self.ident = ident or name
         self.setObjectName("AttachmentChip")
         self.attachment_name = name
         layout = QHBoxLayout(self)
@@ -127,8 +140,12 @@ class AttachmentChip(QFrame):
             sub.setStyleSheet(f"font-size: {runtime.px(9)}px;")
             text_layout.addWidget(sub)
         layout.addWidget(text_wrap)
-        remove = IconButton("close", "Remove", 20, icon_size=11)
-        remove.clicked.connect(lambda: self.removed.emit(name))
+        if previewable:
+            preview = IconButton("eye", tr("composer.preview_file"), 20, icon_size=12)
+            preview.clicked.connect(lambda: self.opened.emit(self.ident))
+            layout.addWidget(preview)
+        remove = IconButton("close", tr("common.remove"), 20, icon_size=11)
+        remove.clicked.connect(lambda: self.removed.emit(self.ident))
         layout.addWidget(remove)
 
 
@@ -297,8 +314,20 @@ class SelectField(QAbstractButton):
 class SliderRow(QWidget):
     value_changed = Signal(float)
 
-    def __init__(self, minimum: float, maximum: float, value: float, step: float = 0.05, parent=None) -> None:  # noqa: ANN001
+    def __init__(
+        self,
+        minimum: float,
+        maximum: float,
+        value: float,
+        step: float = 0.05,
+        parent=None,  # noqa: ANN001
+        *,
+        suffix: str = "×",
+        decimals: int = 2,
+    ) -> None:
         super().__init__(parent)
+        self._suffix = suffix
+        self._decimals = decimals
         self._scale = 100
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -310,16 +339,16 @@ class SliderRow(QWidget):
         self.slider.setValue(int(value * self._scale))
         self.slider.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         layout.addWidget(self.slider, 1)
-        self._label = QLabel(f"{value:.2f}×")
+        self._label = QLabel(f"{value:.{decimals}f}{suffix}")
         self._label.setProperty("role", "mono")
-        self._label.setFixedWidth(runtime.px(46))
+        self._label.setFixedWidth(runtime.px(46 if suffix else 34))
         self._label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         layout.addWidget(self._label)
         self.slider.valueChanged.connect(self._on_change)
 
     def _on_change(self, raw: int) -> None:
         value = raw / self._scale
-        self._label.setText(f"{value:.2f}×")
+        self._label.setText(f"{value:.{self._decimals}f}{self._suffix}")
         self.value_changed.emit(value)
 
     def value(self) -> float:

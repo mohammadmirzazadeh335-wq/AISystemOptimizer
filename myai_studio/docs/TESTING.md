@@ -36,13 +36,13 @@ On Windows:
 
 | Directory | Scope | Examples |
 | --- | --- | --- |
-| `tests/unit` | pure logic, no widgets | token completeness, i18n catalogue parity, markdown escaping, SQLite CRUD/cascades, settings validation, DPAPI/Fernet secrets, zip backups, toolchain detection, real `python`/`gcc`/`node` runs, timeout and cancel, project path guards |
-| `tests/ui` | real widgets on the offscreen platform | window bootstrap, typing + Enter to send, conversation switching, theme switch repaint, RTL flip, inspector animation, settings dialog pages, accent change, Code Studio with real folders/files/processes, compile errors, missing toolchains, DPI rebuilds, the seven Phase-5 pages, keyboard traversal and accessible names |
+| `tests/unit` | pure logic, no widgets | token completeness, i18n catalogue parity, markdown escaping, SQLite CRUD/cascades, settings validation, DPAPI/Fernet secrets, zip backups, toolchain detection, real `python`/`gcc`/`node` runs, timeout and cancel, project path guards, Windows name/path rules and decoding, attachment extraction and context budget |
+| `tests/ui` | real widgets on the offscreen platform | window bootstrap, typing + Enter to send, conversation switching, theme switch repaint, RTL flip, inspector animation, settings dialog pages (including the real temperature slider and memory toggle), accent change, Code Studio with real folders/files/processes, compile errors, missing toolchains, DPI rebuilds, the seven Phase-5 pages, attachment chips/preview, the command palette, keyboard traversal and accessible names |
 | `tests/integration` | multiple layers together | restart persistence, architecture layering guard, backup/restore, export |
 
 ## Visual verification
 
-`scripts/capture_ui.py` drives the real window and captures the current matrix (84 PNGs)
+`scripts/capture_ui.py` drives the real window and captures the current matrix (89 PNGs)
 into `artifacts/ui/`, including every page of every phase in fa RTL and en LTR, both
 themes and two DPI scales. The Phase-5 block (`p5_*`) seeds real prompt/task rows, the
 example plugin with two imported prompts, and one image plus one video file, so the
@@ -58,6 +58,11 @@ library pages show real state rather than an empty scaffold:
 | `p5_prompts_midnight_fa.png` | prompt library with a plugin pack imported (RTL) |
 | `07b_confirm_dialog_only.png` | destructive confirmation dialog |
 | `08_settings_appearance.png` | settings dialog, theme and accent pickers |
+| `11_settings_ai_p5_en.png` | AI settings page: provider status plus a working temperature slider |
+| `12_settings_memory_p5_fa.png` | memory settings page: real enable toggle, live count, open-Memory button |
+| `attach_chips_midnight_fa.png` | two real attachments queued in the composer (RTL) |
+| `attach_preview_dawn_en.png` | the extracted text of a real attachment, with copy |
+| `palette_dawn_en.png` | command palette with the keyboard selection visible |
 | `p5_tasks_dawn_en.png` | task centre with real persisted runs |
 | `p5_performance_midnight_fa.png` | measured CPU/RAM/disk/workspace tiles |
 | `p5_images_dawn_en.png` | Image Studio: honest unavailable state + real library |

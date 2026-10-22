@@ -36,3 +36,20 @@ real process or workspace; media and web-search surfaces state unavailability in
 faking output; every page and control is keyboard reachable and named. Gaps, both stated
 in the report: no `.exe`/installer was built because this host is Linux (the PowerShell
 build script remains unvalidated), and no live provider call was possible.
+
+## After Phase 5 (same version line)
+
+The five phases above are closed. A later hardening pass adds, without moving
+any tag:
+
+* Windows 11 rules in `core/platform.py` (reserved names, long paths, hidden
+  child consoles, tolerant decoding, frozen-build interpreter) plus
+  `scripts/windows11_smoke.ps1` for a one-command verification on a real machine;
+* real file attachments (copy → extract → send → persist, schema v4);
+* `search_files`, `make_folder` and `create_project` agent tools;
+* a command palette on `Ctrl+Shift+P`, with a selection that stays visible
+  regardless of window focus;
+* real controls on Settings → AI (temperature) and Settings → Memory (enable
+  toggle, live count, navigation), replacing the last phase-placeholder pages.
+
+Details and honest limits: [`POST_PHASE5_UPGRADE.md`](POST_PHASE5_UPGRADE.md).

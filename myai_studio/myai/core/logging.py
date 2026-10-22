@@ -32,6 +32,30 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False)
 
 
+class SafeStreamHandler(logging.StreamHandler):
+    """A console handler that cannot crash on a legacy Windows code page.
+
+    ``StreamHandler`` writes to ``sys.stderr``, which on a Windows console is
+    encoded with the active code page (often cp1252/cp437). A Persian message
+    would raise ``UnicodeEncodeError`` from inside logging; this handler
+    re-encodes the line with ``errors="replace"`` instead.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            message = self.format(record)
+            stream = self.stream
+            try:
+                stream.write(message + self.terminator)
+            except UnicodeEncodeError:
+                encoding = getattr(stream, "encoding", None) or "utf-8"
+                safe = message.encode(encoding, "replace").decode(encoding, "replace")
+                stream.write(safe + self.terminator)
+            self.flush()
+        except Exception:  # noqa: BLE001 - logging must never raise
+            self.handleError(record)
+
+
 class RingBufferHandler(logging.Handler):
     """Keep the most recent records available to the UI inspector."""
 
@@ -69,7 +93,7 @@ def setup_logging(log_dir=None, level: int = logging.INFO, console: bool = True)
         root.addHandler(file_handler)
 
     if console and sys.stderr is not None:
-        stream = logging.StreamHandler()
+        stream = SafeStreamHandler()
         stream.setFormatter(logging.Formatter("%(levelname)-7s %(name)s: %(message)s"))
         root.addHandler(stream)
 

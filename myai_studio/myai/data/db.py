@@ -22,7 +22,7 @@ from .models import Base
 
 logger = logging.getLogger(__name__)
 
-LATEST_SCHEMA = 3
+LATEST_SCHEMA = 4
 
 # Future schema changes are appended here: version -> list of SQL statements.
 # v2 adds the memory, output and output-revision tables; ``create_all`` already
@@ -42,6 +42,10 @@ MIGRATIONS: dict[int, list[str]] = {
         "CREATE INDEX IF NOT EXISTS ix_prompts_source ON prompts(source)",
         "CREATE INDEX IF NOT EXISTS ix_task_runs_created ON task_runs(created_at)",
         "CREATE INDEX IF NOT EXISTS ix_task_runs_kind ON task_runs(kind)",
+    ],
+    # v4 adds real file attachments (Phase 6 / post-5 upgrade).
+    4: [
+        "CREATE INDEX IF NOT EXISTS ix_attachments_message ON attachments(message_id)",
     ],
 }
 
@@ -154,7 +158,17 @@ class Database:
             return 0
 
     def counts(self) -> dict[str, int]:
-        from .models import Conversation, Folder, Memory, Message, OutputFile, Project, Prompt, TaskRun
+        from .models import (
+            Attachment,
+            Conversation,
+            Folder,
+            Memory,
+            Message,
+            OutputFile,
+            Project,
+            Prompt,
+            TaskRun,
+        )
 
         with self.session() as session:
             return {
@@ -166,6 +180,7 @@ class Database:
                 "outputs": _count(session, OutputFile),
                 "prompts": _count(session, Prompt),
                 "task_runs": _count(session, TaskRun),
+                "attachments": _count(session, Attachment),
             }
 
     def close(self) -> None:

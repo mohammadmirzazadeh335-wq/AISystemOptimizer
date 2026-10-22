@@ -17,6 +17,8 @@ import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..core.platform import IS_FROZEN, IS_WINDOWS, creation_flags, decode_output
+
 logger = logging.getLogger(__name__)
 
 #: How long a version probe may take. A tool that hangs is treated as unavailable.
@@ -80,18 +82,23 @@ class ToolchainUnavailable(RuntimeError):
 
 
 def _probe(argv: list[str]) -> tuple[bool, str]:
-    """Run a version probe; return (ok, first non-empty line)."""
+    """Run a version probe; return (ok, first non-empty line).
+
+    Output is captured as bytes and decoded tolerantly: a compiler that prints
+    in the Windows console code page must not turn a working toolchain into a
+    crash (``UnicodeDecodeError`` is not a ``SubprocessError``).
+    """
     try:
         completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
             argv,
             capture_output=True,
-            text=True,
             timeout=PROBE_TIMEOUT,
             stdin=subprocess.DEVNULL,
+            creationflags=creation_flags(),
         )
     except (OSError, subprocess.SubprocessError):
         return False, ""
-    output = (completed.stdout or "") + (completed.stderr or "")
+    output = decode_output(completed.stdout or b"") + decode_output(completed.stderr or b"")
     text = next((line.strip() for line in output.splitlines() if line.strip()), "")
     return completed.returncode == 0, text
 
@@ -104,9 +111,29 @@ def _find(candidates: list[str]) -> str:
     return ""
 
 
+def _find_working(candidates: list[str], version_args: list[str]) -> tuple[str, bool, str]:
+    """First candidate that is on PATH *and* answers its version probe.
+
+    Windows ships ``python3.exe`` as a Store stub that exists on PATH but exits
+    without printing a version; probing one candidate was enough to report
+    Python as unavailable even when ``py`` worked. Every candidate is tried.
+    """
+    saw_any = ""
+    for name in candidates:
+        path = shutil.which(name)
+        if not path:
+            continue
+        saw_any = saw_any or path
+        ok, version = _probe([path, *version_args])
+        if ok:
+            return path, True, version
+    return saw_any, False, ""
+
+
 #: (id, label, candidates, version argv suffix, extensions)
 SPECS = (
-    ("python", "Python", ["python3", "python"], ["--version"], (".py",)),
+    # ``py`` is the Windows launcher; ``python3`` may be a Store stub there.
+    ("python", "Python", ["python3", "python", "py"], ["--version"], (".py", ".pyw")),
     ("node", "Node.js", ["node"], ["--version"], (".js", ".mjs", ".cjs")),
     ("c", "C", ["gcc", "clang", "cc"], ["--version"], (".c",)),
     ("cpp", "C++", ["g++", "clang++", "c++"], ["--version"], (".cpp", ".cc", ".cxx")),
@@ -116,7 +143,19 @@ SPECS = (
     ("rust", "Rust", ["rustc"], ["--version"], (".rs",)),
     ("bash", "Bash", ["bash"], ["--version"], (".sh",)),
     ("powershell", "PowerShell", ["pwsh", "powershell"], ["-Version"], (".ps1",)),
+    # Batch files are not executables on Windows: they need ``cmd /c``.
+    ("cmd", "Command Prompt", ["cmd"], ["/c", "ver"], (".bat", ".cmd")),
 )
+
+#: Toolchains that only make sense on Windows.
+WINDOWS_ONLY = {"cmd"}
+
+
+def specs() -> tuple[tuple, ...]:
+    """The specs that apply to the running platform."""
+    if IS_WINDOWS:
+        return SPECS
+    return tuple(item for item in SPECS if item[0] not in WINDOWS_ONLY)
 
 
 class ToolchainRegistry:
@@ -162,7 +201,7 @@ class ToolchainRegistry:
     # ----------------------------------------------------------------- internal
     def _detect_all(self) -> list[Toolchain]:
         results: list[Toolchain] = []
-        for toolchain_id, label, candidates, version_args, extensions in SPECS:
+        for toolchain_id, label, candidates, version_args, extensions in specs():
             found = _find(candidates)
             if not found:
                 results.append(
@@ -175,7 +214,18 @@ class ToolchainRegistry:
                     )
                 )
                 continue
-            ok, version = _probe([found, *version_args])
+            found, ok, version = _find_working(candidates, version_args)
+            if not found:
+                results.append(
+                    Toolchain(
+                        id=toolchain_id,
+                        label=label,
+                        available=False,
+                        detail=f"{candidates[0]} was not found on PATH",
+                        extensions=extensions,
+                    )
+                )
+                continue
             if not ok:
                 results.append(
                     Toolchain(
@@ -217,16 +267,24 @@ def registry() -> ToolchainRegistry:
 
 
 def python_executable() -> str:
-    """The interpreter running the app — preferred over ``python`` on PATH.
+    """The interpreter that should run a ``.py`` file, or ``""``.
 
     ``sys.executable`` keeps whatever spelling launched the app (often
     ``.venv/bin/python`` behind ``../``), which then appears verbatim in the
     command line shown to the user; the real path is the same interpreter and
     reads as a real command.
+
+    A frozen build is the exception: there ``sys.executable`` is
+    ``MyAIStudio.exe`` — running it with a script argument would just start the
+    app again.  In that case the interpreter has to come from PATH, and when
+    none exists the caller must report the toolchain as unavailable.
     """
-    if sys.executable:
+    if not IS_FROZEN and sys.executable:
         return os.path.realpath(sys.executable)
-    return _find(["python3", "python"])
+    item = registry().get("python")
+    if item is not None and item.available and item.executables:
+        return item.executables[0]
+    return ""
 
 
 def build_plan(source: Path, *, cwd: Path, timeout_seconds: float = 10.0) -> RunPlan:
@@ -263,8 +321,13 @@ def build_plan(source: Path, *, cwd: Path, timeout_seconds: float = 10.0) -> Run
     artifacts: list[Path] = []
 
     if toolchain.id == "python":
-        argv = [python_executable(), "-u", name]
-        steps = [RunStep("run", argv)]
+        interpreter = python_executable() or exe
+        if not interpreter:
+            raise ToolchainUnavailable(
+                "python",
+                "No Python interpreter is available to run this file",
+            )
+        steps = [RunStep("run", [interpreter, "-u", name])]
     elif toolchain.id == "node":
         steps = [RunStep("run", [exe, name])]
     elif toolchain.id in {"c", "cpp"}:
@@ -305,6 +368,8 @@ def build_plan(source: Path, *, cwd: Path, timeout_seconds: float = 10.0) -> Run
         steps = [RunStep("run", [exe, name])]
     elif toolchain.id == "powershell":
         steps = [RunStep("run", [exe, "-NoProfile", "-File", name])]
+    elif toolchain.id == "cmd":
+        steps = [RunStep("run", [exe, "/c", name])]
     else:  # pragma: no cover - defensive
         raise ToolchainUnavailable(toolchain.id, f"No runner for {toolchain.label}")
 

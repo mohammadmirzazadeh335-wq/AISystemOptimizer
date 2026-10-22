@@ -26,19 +26,18 @@ from PySide6.QtWidgets import (
 )
 
 from ...i18n import tr
+from ...services.attachments import MAX_FILE_BYTES as ATTACHMENT_MAX_BYTES
+from ...services.attachments import SUPPORTED_EXTENSIONS
 from ..theme import runtime
 from ..widgets.buttons import IconButton, SendButton
 from ..widgets.fields import AttachmentChip, PillToggle, SelectField
 from ..widgets.foundation import Kbd, repolish
 
-ALLOWED_EXTENSIONS = {
-    ".txt", ".md", ".markdown", ".rst", ".log", ".csv", ".tsv", ".json", ".jsonl", ".yaml", ".yml",
-    ".ini", ".cfg", ".toml", ".xml", ".html", ".htm", ".css", ".scss", ".js", ".jsx", ".ts", ".tsx",
-    ".py", ".pyi", ".c", ".h", ".hpp", ".cc", ".cpp", ".cs", ".java", ".kt", ".rs", ".go", ".rb",
-    ".php", ".sh", ".ps1", ".bat", ".sql", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg",
-}
-IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"}
-MAX_FILE_BYTES = 20 * 1024 * 1024
+#: One list, shared with the extraction service, so the picker can never offer a
+#: file the sender will refuse.
+ALLOWED_EXTENSIONS = SUPPORTED_EXTENSIONS
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".ico"}
+MAX_FILE_BYTES = ATTACHMENT_MAX_BYTES
 MAX_ATTACHMENTS = 8
 
 
@@ -67,6 +66,8 @@ class Composer(QWidget):
     stop_requested = Signal()
     settings_requested = Signal()
     prompt_library_requested = Signal()
+    preview_requested = Signal(str)
+    agent_mode_requested = Signal()
     notify = Signal(str, str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -74,6 +75,7 @@ class Composer(QWidget):
         self._attachments: list[Attachment] = []
         self._generating = False
         self._pending = False
+        self.setAcceptDrops(True)
         self._build()
         self._update_send_state()
 
@@ -138,7 +140,9 @@ class Composer(QWidget):
         self.input.setAcceptRichText(False)
         self.input.setPlaceholderText(tr("chat.placeholder"))
         self.input.setFixedHeight(runtime.px(56))
-        self.input.setTabChangesFocus(False)
+        # Tab must leave the composer: a keyboard user cannot otherwise reach
+        # the send button or the rest of the window.
+        self.input.setTabChangesFocus(True)
         self.input.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.input.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.input.textChanged.connect(self._on_text_changed)
@@ -154,12 +158,14 @@ class Composer(QWidget):
         self.prompt_button = IconButton("book", tr("composer.prompt_library"), 30, icon_size=16)
         self.prompt_button.clicked.connect(self.prompt_library_requested)
         toolbar.addWidget(self.prompt_button)
-        self.web_toggle = PillToggle("globe", tr("chat.web_search"), tooltip=tr("chat.phase_lock_hint"))
+        # Web search has no provider in this build; the pill says why instead of
+        # pretending to switch something on.
+        self.web_toggle = PillToggle("globe", tr("chat.web_search"), tooltip=tr("web.search_blocked"))
         self.web_toggle.setEnabled(True)
-        self.web_toggle.clicked.connect(lambda: self.notify.emit(tr("settings.available_phase", phase=4), "info"))
+        self.web_toggle.clicked.connect(self._on_web_toggled)
         toolbar.addWidget(self.web_toggle)
-        self.agent_toggle = PillToggle("sparkles", tr("chat.agent_mode"), tooltip=tr("settings.available_phase", phase=4))
-        self.agent_toggle.clicked.connect(lambda: self.notify.emit(tr("settings.available_phase", phase=4), "info"))
+        self.agent_toggle = PillToggle("sparkles", tr("chat.agent_mode"), tooltip=tr("composer.agent_hint"))
+        self.agent_toggle.clicked.connect(self._on_agent_toggled)
         toolbar.addWidget(self.agent_toggle)
         toolbar.addStretch(1)
         self.model_chip = SelectField(
@@ -245,7 +251,7 @@ class Composer(QWidget):
         if self._generating:
             self.send_button.setEnabled(True)
             return
-        self.send_button.setEnabled(bool(text) and not self._pending)
+        self.send_button.setEnabled(bool(text or self._attachments) and not self._pending)
 
     def eventFilter(self, watched, event) -> bool:  # noqa: ANN001
         if watched is self.input:
@@ -265,6 +271,10 @@ class Composer(QWidget):
         return super().eventFilter(watched, event)
 
     # ------------------------------------------------------------- attachments
+    def pick_files(self) -> None:
+        """Public entry point used by the palette and keyboard shortcuts."""
+        self._pick_files()
+
     def _pick_files(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
             self.window(),
@@ -274,6 +284,29 @@ class Composer(QWidget):
         )
         for path in paths:
             self._add_attachment(path)
+
+    def _on_web_toggled(self, checked: bool) -> None:  # noqa: ARG002
+        self.web_toggle.setChecked(False)
+        self.notify.emit(tr("web.search_blocked"), "warning")
+
+    def _on_agent_toggled(self, checked: bool) -> None:  # noqa: ARG002
+        self.agent_toggle.setChecked(False)
+        self.agent_mode_requested.emit()
+
+    # ------------------------------------------------------------------- drops
+    def dragEnterEvent(self, event) -> None:  # noqa: ANN001
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event) -> None:  # noqa: ANN001
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event) -> None:  # noqa: ANN001
+        for url in event.mimeData().urls():
+            if url.isLocalFile():
+                self._add_attachment(url.toLocalFile())
+        event.acceptProposedAction()
 
     def _add_attachment(self, path: str) -> None:
         if len(self._attachments) >= MAX_ATTACHMENTS:
@@ -298,6 +331,7 @@ class Composer(QWidget):
         attachment = Attachment(name=file_path.name, path=str(file_path), size=size, kind=kind)
         self._attachments.append(attachment)
         self._rebuild_attachment_row()
+        self._update_send_state()  # a file alone is enough to send
         self.notify.emit(tr("composer.attachment_added", name=file_path.name), "success")
 
     def _rebuild_attachment_row(self) -> None:
@@ -312,14 +346,19 @@ class Composer(QWidget):
                 attachment.name,
                 human_size(attachment.size),
                 "image" if attachment.kind == "image" else "file",
+                ident=attachment.path,
+                previewable=True,
             )
             chip.removed.connect(self._remove_attachment)
+            chip.opened.connect(self.preview_requested.emit)
             self.attachment_row.insertWidget(self.attachment_row.count() - 1, chip)
         self.attachment_area.setVisible(bool(self._attachments))
 
-    def _remove_attachment(self, name: str) -> None:
-        self._attachments = [item for item in self._attachments if item.name != name]
+    def _remove_attachment(self, ident: str) -> None:
+        # Identify by path, not by name: two folders can both hold ``main.py``.
+        self._attachments = [item for item in self._attachments if item.path != ident]
         self._rebuild_attachment_row()
+        self._update_send_state()
 
     def attachments(self) -> list[Attachment]:
         return list(self._attachments)
@@ -333,7 +372,7 @@ class Composer(QWidget):
 
     def _submit(self) -> None:
         text = self.input.toPlainText().strip()
-        if not text or self._pending:
+        if (not text and not self._attachments) or self._pending:
             return
         self._pending = True
         self._update_send_state()
@@ -387,5 +426,5 @@ class Composer(QWidget):
         self.shift_label.setText(tr("composer.shift_newline"))
         self.web_toggle.set_text(tr("chat.web_search"))
         self.agent_toggle.set_text(tr("chat.agent_mode"))
-        self.web_toggle.setToolTip(tr("settings.available_phase", phase=4))
-        self.agent_toggle.setToolTip(tr("settings.available_phase", phase=4))
+        self.web_toggle.setToolTip(tr("web.search_blocked"))
+        self.agent_toggle.setToolTip(tr("composer.agent_hint"))

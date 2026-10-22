@@ -19,6 +19,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..core.platform import creation_flags
 from .toolchains import RunPlan, RunStep, ToolchainUnavailable, build_plan
 
 logger = logging.getLogger(__name__)
@@ -131,6 +132,7 @@ def _kill_tree(process: subprocess.Popen) -> None:
                 ["taskkill", "/F", "/T", "/PID", str(process.pid)],
                 capture_output=True,
                 timeout=5,
+                creationflags=creation_flags(),
             )
         else:
             os.killpg(os.getpgid(process.pid), signal.SIGKILL)
@@ -247,6 +249,8 @@ class Runner:
                 bufsize=1,
                 env=_child_env(),
                 start_new_session=(os.name != "nt"),
+                # Without this every run flashes a console window on Windows.
+                creationflags=creation_flags(),
             )
         except FileNotFoundError as exc:
             message = f"{step.argv[0]}: {exc.strerror or 'not found'}"

@@ -7,7 +7,7 @@ phases.
 > **Current build: Phase 5 — Ecosystem** (`v0.5.0`)
 > Chat streams from OpenRouter, memory and personality are real and editable, the Output
 > Studio keeps every revision, Code Studio opens real folders and runs real files, and the
-> agent acts **only** through twelve registered tools behind an approval gate. Phase 5
+> agent acts **only** through fifteen registered tools behind an approval gate. Phase 5
 > added the prompt library, the task centre (every finished agent and program run is
 > persisted), a performance monitor sampled from the real process, plugin loading for
 > prompt packs, and full keyboard/screen-reader labelling. Image Studio, Video Studio and
@@ -19,6 +19,10 @@ phases.
 ![Agent Mode after a real tool run](artifacts/ui/p4_agent_run_midnight_en.png)
 
 ![Prompt library with a plugin pack imported](artifacts/ui/p5_prompts_midnight_fa.png)
+
+![Attachments really sent to the model](artifacts/ui/attach_chips_midnight_fa.png)
+
+![Command palette with keyboard selection](artifacts/ui/palette_dawn_en.png)
 
 ---
 
@@ -46,7 +50,7 @@ phases.
 | User profile file + assistant persona, separate from memory | **Works** | `tests/unit/test_persona_outputs.py`, `tests/ui/test_phase2_pages.py` |
 | Output Studio: code/text/prompt/Markdown/JSON, revisions, diff, restore, export | **Works** | `tests/unit/test_persona_outputs.py`, UI tests |
 | Code Studio: open a real folder, browse/edit files, `Ctrl+S`, autosave, recent projects | **Works** | `tests/ui/test_code_studio.py`, `p3_code_*.png` |
-| Agent Mode: 12 registered tools with JSON schemas and risk levels | **Works** | `myai/services/tools.py`, `tests/unit/test_agent_tools.py` |
+| Agent Mode: 15 registered tools with JSON schemas and risk levels | **Works** | `myai/services/tools.py`, `tests/unit/test_agent_tools.py` |
 | Approval gate: writes, runs and network calls ask first; a denial never executes | **Works** | `tests/unit/test_agent.py`, `tests/ui/test_agent_page.py` |
 | Unavailable tools name the exact missing piece (key, folder, network, endpoint, token, image provider) | **Works** | `agent.reason_*` in fa/en, tool rows, Settings → Agent |
 | Bounded loop with step limit, cancel and per-step results fed back verbatim | **Works** | `tests/unit/test_agent.py` |
@@ -65,6 +69,13 @@ phases.
 | Web research: read a public page, extract text, copy, save as Markdown | **Works**; **search is unavailable** — no search provider, said on the page | `tests/unit/test_phase5_services.py::test_web_fetch_*`, `p5_web_*.png` |
 | Plugins: `plugin.json` discovery, permissions, prompt packs disabled by default, edited copies survive disable | **Works**; code plugins are rejected, never executed | `tests/unit/test_phase5_services.py`, `p5_plugins_*.png` |
 | Accessibility: named controls on every page, Tab/Shift-Tab containment, Escape closes modals | **Works** | `tests/ui/test_accessibility.py` (36 assertions) |
+| File attachments: text/code/Office text extracted, copied under `<home>/attachments`, and **appended to the message the model receives** | **Works** | `tests/unit/test_attachments.py`, `tests/ui/test_attachments_ui.py`, `attach_chips_midnight_fa.png` |
+| Attachments survive restart: chips re-appear from the `attachments` table (schema v4) and the stored copy can be re-read | **Works** | `tests/unit/test_attachments.py::test_rows_are_stored_per_message`, `tests/unit/test_database_repositories.py` |
+| Honest gaps in attachments: images/PDFs are recorded by name, size and dimensions but no text (no OCR/PDF parser); the chip and preview say so | **Works** | `test_png_dimensions_are_read_from_the_header`, `test_pdf_is_recorded_without_fake_text` |
+| Agent file tools: `search_files`, `make_folder`, `create_project` (write tools behind the approval gate) | **Works** | `tests/unit/test_file_tools.py`, `tests/ui/test_agent_page.py` |
+| Command palette (`Ctrl+Shift+P`): 19 real actions, type-to-filter, ↑/↓ with a visible selection that does not depend on window focus | **Works** | `tests/ui/test_palette.py`, `palette_dawn_en.png` |
+| Windows 11 portability: frozen-build interpreter, hidden-console flags, encoding-safe decoding, reserved-name/path rules, `cmd` toolchain for `.bat` | **Rules verified on Linux**; runtime needs one Windows run | `tests/unit/test_windows_platform.py` (37), `scripts/check_portability.py` (16/16), `scripts/windows11_smoke.ps1` |
+| Settings has no mock pages: the AI page writes a real temperature used on the next send, the Memory page shows the live row count and opens Memory | **Works** | `tests/ui/test_settings_dialog.py::test_temperature_slider_writes_the_real_setting`, `::test_memory_toggle_is_written_and_used` |
 
 The complete, honest matrix lives in [`docs/PHASE4_REPORT.md`](docs/PHASE4_REPORT.md) §3
 (Phase 3: [`docs/PHASE3_REPORT.md`](docs/PHASE3_REPORT.md) §2)
@@ -118,6 +129,22 @@ instead of Windows DPAPI.
 | `--screenshot <file>` | Render the window to a PNG and exit |
 | `--allow-multi` | Skip the single-instance lock |
 
+## 3.1 Verify it on Windows 11
+
+This repository was developed and tested on Linux; it has **not** been executed
+on a Windows machine yet. The Windows-specific rules are covered by tests, and
+one command performs the real check on a Windows 11 box:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\windows11_smoke.ps1
+```
+
+It checks the OS and Python, builds a throwaway venv, runs the portability
+checks and the whole test suite, starts the real GUI with a temporary
+workspace, and prints PASS/FAIL per step. `-SkipTests` skips the suite.
+Details, including the eight Windows defects that were fixed:
+[`docs/POST_PHASE5_UPGRADE.md`](docs/POST_PHASE5_UPGRADE.md).
+
 ## 4. Build the Windows executable
 
 ```powershell
@@ -143,15 +170,16 @@ with `-Installer`, requiring Inno Setup 6).
 ./scripts/run_tests.sh -q
 ```
 
-Last measured run (final code, after the last change):
+Last measured run (final code, after the last change of the Post-Phase-5 round):
 
 ```
-531 passed, 1 skipped in 338.01s (0:05:38)
+628 passed, 1 skipped in 362.18s (0:06:02)
 ```
 
-Per layer: `tests/unit` 258 passed + 1 skipped, `tests/integration` 14 passed,
-`tests/ui` 259 passed. The skip is the opt-in live OpenRouter test, which needs a real key and network
-access this build host does not have. Details are in
+The skip is the opt-in live OpenRouter test, which needs a real key and network
+access this build host does not have. Per-layer numbers and the exact command
+are in [`docs/POST_PHASE5_UPGRADE.md`](docs/POST_PHASE5_UPGRADE.md) §6; the
+Phase 5 report keeps its own historical figures in
 [`docs/PHASE5_REPORT.md`](docs/PHASE5_REPORT.md) §1.
 
 Test layout:

@@ -39,7 +39,7 @@ from .views.agent_page import AgentPage
 from .views.api_page import ApiPage
 from .views.chat_view import ChatView
 from .views.code_page import CodePage
-from .views.composer import Composer
+from .views.composer import Composer, human_size
 from .views.header import Header
 from .views.inspector import Inspector
 from .views.media_page import ImagesPage, VideoPage
@@ -53,8 +53,9 @@ from .views.settings_dialog import SettingsDialog
 from .views.sidebar import Sidebar
 from .views.tasks_page import TasksPage
 from .views.web_page import WebPageView
-from .widgets.dialogs import ConfirmDialog, PromptDialog
+from .widgets.dialogs import ConfirmDialog, PreviewDialog, PromptDialog
 from .widgets.feedback import ToastManager
+from .widgets.palette import CommandPalette, PaletteAction
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +214,8 @@ class MainWindow(QMainWindow):
         self.shortcut_new.activated.connect(self.new_chat)
         self.shortcut_search = QShortcut(QKeySequence("Ctrl+K"), self)
         self.shortcut_search.activated.connect(self.sidebar.focus_search)
+        self.shortcut_palette = QShortcut(QKeySequence("Ctrl+Shift+P"), self)
+        self.shortcut_palette.activated.connect(self.open_palette)
         self.shortcut_code = QShortcut(QKeySequence("Ctrl+Shift+C"), self)
         self.shortcut_code.activated.connect(lambda: self._navigate("code"))
         self.shortcut_settings = QShortcut(QKeySequence("Ctrl+,"), self)
@@ -256,6 +259,8 @@ class MainWindow(QMainWindow):
         self.composer.settings_requested.connect(lambda: self.open_settings("ai"))
         self.composer.prompt_library_requested.connect(lambda: self._navigate("prompts"))
         self.composer.notify.connect(self._show_toast)
+        self.composer.preview_requested.connect(self._preview_attachment)
+        self.composer.agent_mode_requested.connect(lambda: self._navigate("agent"))
 
         self.chat_view.prompt_chosen.connect(self._use_suggestion)
         self.chat_view.notify.connect(self._show_toast)
@@ -454,6 +459,94 @@ class MainWindow(QMainWindow):
         self.composer.set_text(prompt)
         self.composer.focus_input()
 
+    # ----------------------------------------------------------------- palette
+    def _palette_actions(self) -> list[PaletteAction]:
+        actions: list[PaletteAction] = [
+            PaletteAction(
+                id="chat.new",
+                title=tr("nav.new_chat"),
+                hint="Ctrl+N",
+                icon="plus",
+                keywords=("new", "chat", "conversation"),
+                run=self.new_chat,
+            ),
+            PaletteAction(
+                id="chat.search",
+                title=tr("settings.shortcut_search"),
+                hint="Ctrl+K",
+                icon="search",
+                keywords=("find", "conversation"),
+                run=self.sidebar.focus_search,
+            ),
+        ]
+        route_icons = {key: icon for key, icon, _label in Sidebar.LIBRARY}
+        route_icons.update({key: icon for key, icon, _label in Sidebar.AI_PAGES})
+        for route in PAGE_TITLES:
+            title_key, subtitle_key = PAGE_TITLES[route]
+            actions.append(
+                PaletteAction(
+                    id=f"go.{route}",
+                    title=tr(title_key),
+                    hint=tr(subtitle_key),
+                    icon=route_icons.get(route, "arrow-right"),
+                    keywords=(route,),
+                    run=lambda r=route: self._navigate(r),
+                )
+            )
+        actions.extend(
+            [
+                PaletteAction(
+                    id="settings.open",
+                    title=tr("nav.settings"),
+                    hint="Ctrl+,",
+                    icon="sliders",
+                    keywords=("preferences", "theme", "language"),
+                    run=self.open_settings,
+                ),
+                PaletteAction(
+                    id="theme.cycle",
+                    title=tr("palette.cycle_theme"),
+                    hint=tr("palette.cycle_theme_hint"),
+                    icon="moon",
+                    keywords=("dark", "light", "appearance"),
+                    run=self.cycle_theme,
+                ),
+                PaletteAction(
+                    id="chat.attach",
+                    title=tr("composer.attach_files"),
+                    hint=tr("palette.attach_hint"),
+                    icon="attach",
+                    keywords=("file", "upload", "document"),
+                    run=lambda: self.composer.pick_files(),
+                ),
+                PaletteAction(
+                    id="data.folder",
+                    title=tr("palette.open_data_folder"),
+                    hint=str(self.context.home),
+                    icon="folder",
+                    keywords=("workspace", "explorer", "files"),
+                    run=lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.context.home))),
+                ),
+            ]
+        )
+        return actions
+
+    def open_palette(self) -> None:
+        """Ctrl+Shift+P: run any navigation or window action from the keyboard."""
+        dialog = CommandPalette(self, self._palette_actions())
+        dialog.exec()
+
+    def cycle_theme(self) -> None:
+        order = ["midnight", "dawn", "aurora", "system"]
+        current = str(self.context.settings.get("ui.theme", "midnight"))
+        try:
+            following = order[(order.index(current) + 1) % len(order)]
+        except ValueError:
+            following = "midnight"
+        self.context.settings.set("ui.theme", following)
+        theme = self._theme_manager.apply()
+        self._show_toast(tr("palette.theme_toast", theme=tr(theme.name_key)), "info")
+
     # ------------------------------------------------------------------- send
     def _handle_send(self, text: str, attachments: list) -> None:
         if self._generating:
@@ -461,7 +554,7 @@ class MainWindow(QMainWindow):
             return
         try:
             conversation = self._current
-            title = plain_text(text, 58) or tr("chat.untitled")
+            title = plain_text(text, 58) or self._attachment_title(attachments) or tr("chat.untitled")
             if conversation is None:
                 conversation = self.context.conversations.create(title=title, select=False)
             elif not conversation.title.strip():
@@ -488,14 +581,52 @@ class MainWindow(QMainWindow):
                 self.open_conversation(conversation.id)
                 self._show_toast(tr("chat.needs_key"), "warning")
                 return
-            self._start_stream(conversation, text, model_id)
+            self._start_stream(conversation, text, model_id, attachments)
         except Exception as exc:  # noqa: BLE001
             logger.exception("send_failed")
             self.composer.restore_draft(text)
             message = exc.message if isinstance(exc, AppError) else tr("toast.error")
             self._show_toast(message, "error")
 
-    def _start_stream(self, conversation: Conversation, text: str, model_id: str) -> None:
+    @staticmethod
+    def _attachment_title(attachments: list) -> str:
+        """Name an attachment-only conversation after its first file."""
+        for item in attachments or []:
+            name = str(item.get("name", "")).strip()
+            if name:
+                return name
+        return ""
+
+    def _preview_attachment(self, path: str) -> None:
+        """Show the extracted text of a file before/after sending it."""
+        if not path:
+            return
+        try:
+            record = self.context.attachments.ingest(path)
+            text = record.text or self.context.attachments.preview(record)
+        except AppError as exc:
+            self._show_toast(self._explain_error(exc), "error")
+            return
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("attachment_preview_failed")
+            self._show_toast(str(exc), "error")
+            return
+        dialog = PreviewDialog(
+            self,
+            title=record.name,
+            subtitle=tr(
+                "composer.preview_meta",
+                size=human_size(record.size),
+                chars=record.chars,
+                kind=record.kind,
+            ),
+            text=text,
+        )
+        dialog.exec()
+
+    def _start_stream(
+        self, conversation: Conversation, text: str, model_id: str, attachments: list | None = None
+    ) -> None:
         self._stream_text = ""
         self._stream_started = False
         self._stream_t0 = time.monotonic()
@@ -518,6 +649,7 @@ class MainWindow(QMainWindow):
                     conversation_id,
                     text,
                     model_id=model_id,
+                    attachments=attachments or [],
                     on_delta=bridge.delta.emit,
                     on_status=bridge.status.emit,
                 )
@@ -569,8 +701,9 @@ class MainWindow(QMainWindow):
 
     def _on_stream_failed(self, exc: object) -> None:
         self.set_generating(False)
-        self.chat_view.end_stream(error=str(exc))
-        self._show_toast(tr("toast.error"), "error")
+        message = self._explain_error(exc) if isinstance(exc, AppError) else str(exc)
+        self.chat_view.end_stream(error=message)
+        self._show_toast(message, "error")
         logger.error("chat_worker_crashed: %s", exc)
         if self._current is not None:
             self.open_conversation(self._current.id)
@@ -813,7 +946,11 @@ class MainWindow(QMainWindow):
             self.backup,
             initial=initial,
         )
+        target = {"route": ""}
+        dialog.navigate.connect(lambda route: target.update(route=route))
         dialog.exec()
+        if target["route"]:
+            self._navigate(target["route"])
         self._retranslate()
         if self._current_route == "chat":
             if self._current:

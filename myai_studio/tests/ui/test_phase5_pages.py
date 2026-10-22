@@ -430,3 +430,20 @@ def test_plugins_page_rejects_a_code_plugin(ui) -> None:
     assert tr("plugins.error_code_plugins") in shown
     row = page.list_layout.itemAt(0).widget()
     assert not row.toggle.isEnabled()
+
+
+def test_prompt_editor_shows_the_body_verbatim(ui) -> None:  # noqa: ANN001
+    """A placeholder must be displayed as written, never doubled or escaped."""
+    from myai.ui.views.prompts_page import PromptEditor
+
+    window, ctx, _theme = ui
+    entry = ctx.prompts.create(
+        "Commit message", "Write a commit message for this diff:\n\n```diff\n{diff}\n```"
+    )
+
+    editor = PromptEditor(window, entry=entry)
+    text = editor._body_edit.toPlainText()
+    assert "{diff}" in text
+    assert "{{" not in text
+    assert "}}" not in text
+    editor.reject()

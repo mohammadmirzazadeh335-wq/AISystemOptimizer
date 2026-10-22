@@ -321,7 +321,11 @@ class AgentService:
             self._bus.emit(Events.AGENT_FINISHED, run=run.to_dict())
             if self._activity is not None:
                 self._activity.record(
-                    f"Agent run: {run.status} · {run.tool_count} tool calls",
+                    key="agent.activity_run",
+                    kwargs={
+                        "status_key": f"agent.status_{run.status}",
+                        "tools": run.tool_count,
+                    },
                     kind="agent",
                 )
             logger.info(

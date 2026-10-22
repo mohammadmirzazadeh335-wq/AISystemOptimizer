@@ -26,6 +26,7 @@ from .i18n import set_language
 from .security.secrets import SecretStore
 from .services.activity import ActivityService
 from .services.agent import AgentService
+from .services.attachments import AttachmentService
 from .services.chat import ChatService, build_chat_service
 from .services.conversations import ConversationService
 from .services.media import MediaService
@@ -55,6 +56,7 @@ class AppContext:
     memory: MemoryService
     persona: PersonaService
     outputs: OutputService
+    attachments: AttachmentService
     chat: ChatService
     agent: AgentService
     prompts: PromptService
@@ -117,6 +119,7 @@ def build_context(home: str | Path | None = None, *, log: bool = True) -> AppCon
     outputs = OutputService(db, paths, bus)
     prompts = PromptService(db, bus)
     tasks = TaskService(db, bus)
+    attachments = AttachmentService(paths, db)
     performance = PerformanceService(paths)
     media = MediaService(paths)
     plugins = PluginService(paths, settings, prompts, bus)
@@ -128,6 +131,7 @@ def build_context(home: str | Path | None = None, *, log: bool = True) -> AppCon
         settings=settings,
         memory=memory,
         persona=persona,
+        attachments=attachments,
         api_key_reader=secrets.get_api_key,
     )
     agent = AgentService(
@@ -151,6 +155,7 @@ def build_context(home: str | Path | None = None, *, log: bool = True) -> AppCon
         memory=memory,
         persona=persona,
         outputs=outputs,
+        attachments=attachments,
         chat=chat,
         agent=agent,
         prompts=prompts,

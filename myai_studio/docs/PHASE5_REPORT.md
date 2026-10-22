@@ -4,6 +4,11 @@ Phase 5 turned the last five "coming in phase 5" screens into working surfaces a
 removed the placeholder entirely: **every route in the sidebar is now a real page**
 that reads or writes real data.
 
+> **After this report:** a later hardening pass (Windows 11 rules, real file
+> attachments, three file tools, command palette) is documented in
+> [`POST_PHASE5_UPGRADE.md`](POST_PHASE5_UPGRADE.md). No phase was renumbered and
+> no tag moved.
+
 | Feature | What is real | What is not |
 | --- | --- | --- |
 | Prompt library | SQLite table, six built-in prompts, create/edit/duplicate/delete, search, categories, tags, use counter, "Use" pushes the body into the composer | No variable substitution engine |

@@ -1106,7 +1106,7 @@ class CodePage(PageShell):
         if result.stdout == "" and result.stderr == "":
             self._append_output("system", tr("code.no_output"))
         self.context.activity.record(
-            tr("code.activity_run", name=self.current_file or "?"), kind="code"
+            key="code.activity_run", kwargs={"name": self.current_file or "?"}, kind="code"
         )
         self._update_project_ui()
 

@@ -285,6 +285,45 @@ def _tool_delete_file(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
     return ToolResult(True, f"Deleted {relative}.", {"path": relative})
 
 
+def _tool_search_files(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+    project = _need_project(ctx)
+    query = str(args["query"]).strip()
+    pattern = str(args.get("glob") or "").strip()
+    limit = int(args.get("max_results") or 50)
+    matches = ctx.projects.search(  # type: ignore[union-attr]
+        project, query, pattern=pattern, limit=max(1, min(limit, 200))
+    )
+    if not matches:
+        where = f" in {pattern}" if pattern else ""
+        return ToolResult(True, f"No files{where} contain “{query}”.", {"count": 0})
+    lines = [f"{item['path']}:{item['line']}: {item['text']}" for item in matches]
+    body = "\n".join(lines)[:MAX_TOOL_OUTPUT]
+    return ToolResult(True, body, {"count": len(matches), "query": query, "glob": pattern})
+
+
+def _tool_make_folder(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+    project = _need_project(ctx)
+    relative = str(args["path"]).strip().replace("\\", "/").strip("/")
+    target = ctx.projects.make_folder(project, relative)  # type: ignore[union-attr]
+    return ToolResult(
+        True,
+        f"Created folder {relative or '.'} ({target}).",
+        {"path": relative, "absolute": str(target)},
+    )
+
+
+def _tool_create_project(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+    if ctx.projects is None:
+        raise ToolUnavailable("No project service is available.")
+    project = ctx.projects.create_project(str(args["name"]))
+    return ToolResult(
+        True,
+        f"Created project “{project.name}” at {project.path}. "
+        "Open it in Code Studio (or ask to write files here after opening it).",
+        {"name": project.name, "path": project.path},
+    )
+
+
 def _tool_run_file(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
     project = _need_project(ctx)
     relative = str(args["path"]).strip()
@@ -568,6 +607,55 @@ def default_specs() -> list[ToolSpec]:
             risk=WRITE,
             handler=_tool_write_file,
             requires_project=True,
+        ),
+        ToolSpec(
+            id="search_files",
+            label_key="agent.tool_search_files",
+            description=(
+                "Search the text of every file in the open project (case-insensitive) "
+                "and return matching lines with their file and line number."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "maxLength": 200},
+                    "glob": {"type": "string", "maxLength": 80,
+                             "description": "Optional file filter such as *.py."},
+                    "max_results": {"type": "integer", "minimum": 1, "maximum": 200},
+                },
+                "required": ["query"],
+            },
+            risk=READ,
+            handler=_tool_search_files,
+            requires_project=True,
+        ),
+        ToolSpec(
+            id="make_folder",
+            label_key="agent.tool_make_folder",
+            description="Create a folder (including parents) inside the open project.",
+            parameters={
+                "type": "object",
+                "properties": {"path": {"type": "string", "maxLength": 400}},
+                "required": ["path"],
+            },
+            risk=WRITE,
+            handler=_tool_make_folder,
+            requires_project=True,
+        ),
+        ToolSpec(
+            id="create_project",
+            label_key="agent.tool_create_project",
+            description=(
+                "Create a new empty project folder under the user's projects directory. "
+                "Use it when the user asks for a new project to be started."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {"name": {"type": "string", "maxLength": 120}},
+                "required": ["name"],
+            },
+            risk=WRITE,
+            handler=_tool_create_project,
         ),
         ToolSpec(
             id="delete_file",

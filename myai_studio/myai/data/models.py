@@ -240,6 +240,33 @@ class TaskRun(Base):
     )
 
 
+class Attachment(Base):
+    """A file the user attached to a message.
+
+    The bytes live in ``<home>/attachments`` (the copy, not the original path)
+    and the extracted text is sent with that one message.  The row is what makes
+    the chips survive a restart.
+    """
+
+    __tablename__ = "attachments"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    message_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("messages.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(Text, default="")
+    stored_path: Mapped[str] = mapped_column(Text, default="")
+    size: Mapped[int] = mapped_column(Integer, default=0)
+    kind: Mapped[str] = mapped_column(String(20), default="text")
+    mime: Mapped[str] = mapped_column(String(120), default="")
+    chars: Mapped[int] = mapped_column(Integer, default=0)
+    truncated: Mapped[bool] = mapped_column(Boolean, default=False)
+    note: Mapped[str] = mapped_column(String(60), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    __table_args__ = (Index("ix_attachments_message", "message_id"),)
+
+
 class SchemaInfo(Base):
     __tablename__ = "schema_info"
 

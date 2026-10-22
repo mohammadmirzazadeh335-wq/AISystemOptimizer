@@ -265,9 +265,9 @@ def main() -> int:
         dialog.show()
         app.processEvents()
         pixmap = QPixmap(dialog.size())
-        # The dialog window is translucent, so an empty fill renders as a black
-        # rectangle in the evidence frame; a dim wash reads as the real backdrop.
-        pixmap.fill(QColor(0, 0, 0, 130))
+        # Keep the dialog's own translucency: the card and its shadow are drawn
+        # over the dimmed window instead of a solid black slab.
+        pixmap.fill(QColor(0, 0, 0, 0))
         dialog.render(pixmap)
         combined = QPixmap(window.size())
         combined.fill(0)
@@ -275,6 +275,9 @@ def main() -> int:
         from PySide6.QtGui import QPainter
 
         painter = QPainter(combined)
+        # Dim the whole window, exactly like the real modal backdrop does; the
+        # dialog pixmap alone would leave a grey rectangle floating in the frame.
+        painter.fillRect(combined.rect(), QColor(0, 0, 0, 130))
         painter.drawPixmap(dialog.mapTo(window, dialog.rect().topLeft()), pixmap)
         painter.end()
         combined.save(str(out / f"{name}.png"))
@@ -489,6 +492,30 @@ def main() -> int:
 
     step(agent_settings)
 
+    def settings_ai() -> None:
+        """The AI page: provider status plus a temperature slider that is real."""
+        ctx.settings.update({"ui.language": "en", "ui.theme": "dawn"})
+        app.processEvents()
+        dialog = SettingsDialog(
+            window, ctx.settings, theme, ctx.paths, ctx.db, ctx.secrets,
+            BackupService(ctx.paths, ctx.db, ctx.settings), initial="ai",
+        )
+        dialog_shot(dialog, "11_settings_ai_p5_en")
+
+    def settings_memory() -> None:
+        """The memory page: a real count from the database, not a promise."""
+        ctx.memory.add("The user prefers short answers in Persian.", scope="global")
+        ctx.settings.update({"ui.language": "fa", "ui.theme": "midnight"})
+        app.processEvents()
+        dialog = SettingsDialog(
+            window, ctx.settings, theme, ctx.paths, ctx.db, ctx.secrets,
+            BackupService(ctx.paths, ctx.db, ctx.settings), initial="memory",
+        )
+        dialog_shot(dialog, "12_settings_memory_p5_fa")
+
+    step(settings_ai)
+    step(settings_memory)
+
     def drop_capture_credentials() -> None:
         ctx.secrets.set_api_key("")
         ctx.chat._client_factory = original_factory  # noqa: SLF001
@@ -531,6 +558,55 @@ def main() -> int:
     step(lambda: ctx.settings.update({"ui.language": "fa", "ui.theme": "midnight"}))
     step(lambda: window._navigate("prompts"))
     step(lambda: app.processEvents())
+
+    # 7g. After Phase 5: real attachment chips and the command palette.
+    demo_files = Path(ctx.paths.home) / "demo-files"
+
+    def attach_demo_files() -> None:
+        demo_files.mkdir(parents=True, exist_ok=True)
+        (demo_files / "release-notes.md").write_text(
+            "# Release 0.5\n\n- file attachments\n- command palette\n- Windows 11 rules\n",
+            encoding="utf-8",
+        )
+        (demo_files / "sandbox_policy.py").write_text(
+            "def run(path: str) -> int:\n    return 0\n", encoding="utf-8"
+        )
+        window.new_chat()
+        for name in ("release-notes.md", "sandbox_policy.py"):
+            window.composer._add_attachment(str(demo_files / name))
+        app.processEvents()
+
+    step(lambda: ctx.settings.update({"ui.language": "fa", "ui.theme": "midnight"}))
+    step(attach_demo_files)
+    step(lambda: shot("attach_chips_midnight_fa"))
+
+    def attachment_preview() -> None:
+        from myai.ui.widgets.dialogs import PreviewDialog
+
+        record = ctx.attachments.ingest(demo_files / "release-notes.md")
+        dialog = PreviewDialog(
+            window,
+            title=record.name,
+            subtitle=f"{record.kind} · {record.size} bytes · {record.chars} characters",
+            text=record.text,
+        )
+        dialog_shot(dialog, "attach_preview_dawn_en")
+
+    step(lambda: ctx.settings.update({"ui.language": "en", "ui.theme": "dawn"}))
+    step(attachment_preview)
+
+    def palette_dialog() -> None:
+        from myai.ui.widgets.palette import CommandPalette
+
+        dialog = CommandPalette(window, window._palette_actions())
+        dialog.show()
+        app.processEvents()
+        dialog_shot(dialog, "palette_dawn_en")
+
+    step(lambda: window._navigate("chat"))
+    step(lambda: app.processEvents())
+    step(palette_dialog)
+    step(lambda: ctx.settings.update({"ui.language": "fa", "ui.theme": "midnight"}))
 
     # 8. DPI / minimum-window stress / minimum-window stress: 1.25x and 1.5x font scale at 1120x720.
     for scale in (1.25, 1.5):

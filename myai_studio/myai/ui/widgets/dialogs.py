@@ -8,7 +8,7 @@ accessible focus order.
 from __future__ import annotations
 
 from PySide6.QtCore import QEasingCurve, QEvent, QPoint, Qt, QVariantAnimation
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtGui import QColor, QFontDatabase, QPainter
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
@@ -16,11 +16,13 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
+from ...i18n import tr
 from ..theme import runtime
 from .buttons import IconButton
 from .fields import InlineError
@@ -285,3 +287,38 @@ class PromptDialog(ModalDialog):
 
     def value(self) -> str:
         return self.input.text().strip()
+
+
+class PreviewDialog(ModalDialog):
+    """Read-only view of text extracted from an attachment."""
+
+    def __init__(
+        self,
+        parent: QWidget,
+        *,
+        title: str,
+        subtitle: str,
+        text: str,
+        width: int = 720,
+    ) -> None:
+        super().__init__(parent, title, subtitle, width=width)
+        self.editor = QPlainTextEdit()
+        self.editor.setReadOnly(True)
+        self.editor.setPlainText(text)
+        self.editor.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        self.editor.setMinimumHeight(runtime.px(360))
+        self.editor.setAccessibleName(title)
+        mono = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
+        self.editor.setFont(mono)
+        self.body.addWidget(self.editor)
+        self.editor.setFocus()
+        self.footer.addStretch(1)
+        copy = self.add_button(tr("composer.copy_text"), "secondary")
+        copy.clicked.connect(self._copy)
+        close = self.add_button(tr("common.close"), "ghost")
+        close.clicked.connect(self.accept)
+
+    def _copy(self) -> None:
+        from PySide6.QtWidgets import QApplication
+
+        QApplication.clipboard().setText(self.editor.toPlainText())

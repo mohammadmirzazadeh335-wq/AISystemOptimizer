@@ -72,7 +72,7 @@ CodePage ──plan_for()──> Runner ──> ToolchainRegistry (cached detect
 - The page only touches widgets on the GUI thread: the worker emits Qt signals through
   a small bridge object, so the interface stays responsive during a 20 s program.
 
-## 5. Data model (schema v3)
+## 5. Data model (schema v4)
 
 | Table | Purpose | Notes |
 | --- | --- | --- |
@@ -83,6 +83,7 @@ CodePage ──plan_for()──> Runner ──> ToolchainRegistry (cached detect
 | `settings` | validated key/value JSON registry | secrets never stored here |
 | `prompts` | prompt library: title, body, category, tags JSON, source (`builtin` / `user` / `plugin:<id>`), uses | indexed on `category`, `updated_at`, `source` (Phase 5) |
 | `task_runs` | one row per finished agent or program run: kind, title, status, detail, model, project, tool count, duration, steps JSON | indexed on `created_at`, `kind` (Phase 5) |
+| `attachments` | one row per attached file: name, stored copy, size, kind, mime, extracted characters, truncation and a note | cascade delete with the message, indexed on `message_id` (post-Phase-5) |
 | `schema_info` | schema version for migrations | `MIGRATIONS` map in `data/db.py` |
 
 SQLite runs in WAL mode with `foreign_keys=ON` and a busy timeout. Each operation uses
@@ -207,3 +208,50 @@ AppContext
   and close on Escape.
 - `tests/ui/test_accessibility.py` enforces names and Tab/Shift-Tab containment, so a
   new page without labels fails the suite.
+
+## 15. Platform rules (`myai/core/platform.py`)
+
+Everything that differs between Windows 11 and POSIX lives in one module so the
+rest of the code stays portable and the Windows **rules** can be tested from
+Linux:
+
+| Function | Contract |
+| --- | --- |
+| `creation_flags()` | `CREATE_NO_WINDOW` on Windows, `0` elsewhere — every child process uses it |
+| `decode_output(bytes)` | Never raises. UTF-8/BOM → preferred encoding → cp1252 → cp850 → Latin-1 |
+| `filename_problem(name)` | Rejects reserved device names, `<>:"|?*`, trailing dots/spaces and >120 characters on **every** OS, so a project copied to Windows behaves the same |
+| `path_problem(parts)` | The same per component, plus the 259-character limit |
+| `IS_FROZEN` | A PyInstaller build must take its Python interpreter from PATH, never `sys.executable` |
+
+`tests/unit/test_windows_platform.py` pins all of it; `scripts/check_portability.py`
+prints the same checks as a PASS/FAIL table on any machine.
+
+## 16. Attachments (`myai/services/attachments.py`)
+
+```
+Composer chip (name + original path)
+  → ChatService.prepare_attachments   (worker thread, never the GUI thread)
+      → AttachmentService.ingest      validate → copy to <home>/attachments/<hash>_<name>
+                                      → extract text (UTF-8/UTF-16/cp1256, docx/xlsx/pptx, image headers)
+  → ChatService.build_messages(attachments=…)
+      → one fenced block appended to that user turn, capped at 120k characters
+  → attachments table row per file, linked to the stored message
+```
+
+* The stored message keeps the plain text and the chip metadata, so the bubble
+  stays readable and later turns only see `[Attached files: …]`.
+* Files without extractable text (PDF, images) are recorded with real metadata
+  and an explicit note; nothing pretends the model saw pixels.
+* Budgets: 25 MB per file, 8 files per message (composer), 60k characters per file, 120k per message (service).
+
+## 17. Command palette (`myai/ui/widgets/palette.py`)
+
+`Ctrl+Shift+P` opens a modal list built from `MainWindow._palette_actions()`.
+Every action calls the same public method the sidebar or menu uses; the palette
+owns no state beyond the filter and the selected index. Rows are buttons, but the
+highlight is a `selected` dynamic property rather than Qt `:focus`, so it is
+visible before the window is activated and does not depend on where the keyboard
+focus sits. The search box keeps the focus, ↑/↓ move `_index` with clamping and
+scroll the row into view, and Enter runs the selected action (or the first one
+when nothing is selected). The list is rebuilt on every keystroke; an empty
+result shows the translated empty state instead of an empty box.

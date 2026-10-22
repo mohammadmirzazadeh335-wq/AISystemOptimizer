@@ -468,17 +468,25 @@ class MessageCard(QWidget):
             )
             bubble_layout = QVBoxLayout(bubble)
             bubble_layout.setContentsMargins(runtime.px(13), runtime.px(9), runtime.px(13), runtime.px(9))
-            text = QLabel(self.message.content)
-            text.setWordWrap(True)
-            text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            text.setStyleSheet(f"font-size: {runtime.px(13)}px;")
-            bubble_layout.addWidget(text)
+            if (self.message.content or "").strip():
+                text = QLabel(self.message.content)
+                text.setWordWrap(True)
+                text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+                text.setStyleSheet(f"font-size: {runtime.px(13)}px;")
+                bubble_layout.addWidget(text)
             attachments = (self.message.meta or {}).get("attachments") or []
             if attachments:
                 chips = QHBoxLayout()
                 chips.setSpacing(runtime.px(5))
                 for attachment in attachments:
-                    badge = Badge(f"{attachment.get('name', 'file')}", "muted")
+                    name = str(attachment.get("name", "file"))
+                    chars = int(attachment.get("chars") or 0)
+                    note = str(attachment.get("note") or "")
+                    badge = Badge(name, "muted" if chars else "outline")
+                    if chars:
+                        badge.setToolTip(tr("chat.attachment_chars", name=name, chars=chars))
+                    elif note:
+                        badge.setToolTip(tr(note.split("|", 1)[0]))
                     chips.addWidget(badge)
                 chips.addStretch(1)
                 bubble_layout.addLayout(chips)

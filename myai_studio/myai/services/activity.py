@@ -27,11 +27,20 @@ class ActivityItem:
     kwargs: dict = field(default_factory=dict)
 
     def display(self) -> str:
-        if self.key:
-            from ..i18n import tr
+        """Translate at render time, never at record time.
 
-            return tr(self.key, **self.kwargs)
-        return self.text
+        A kwarg whose name ends in ``_key`` is itself a translation key; this
+        keeps e.g. the agent status in the language the window is using now,
+        even for an event recorded before the language changed.
+        """
+        if not self.key:
+            return self.text
+        from ..i18n import tr
+
+        kwargs = dict(self.kwargs)
+        for name in [key for key in kwargs if key.endswith("_key")]:
+            kwargs[name[:-4]] = tr(str(kwargs.pop(name)))
+        return tr(self.key, **kwargs)
 
     def to_dict(self) -> dict:
         return {

@@ -23,7 +23,7 @@ def db(tmp_path: Path) -> Database:
 
 
 def test_schema_created_and_versioned(db: Database) -> None:
-    assert db.schema_version() == 3
+    assert db.schema_version() == 4
     assert db.integrity_check() == "ok"
     counts = db.counts()
     assert counts == {
@@ -35,6 +35,7 @@ def test_schema_created_and_versioned(db: Database) -> None:
         "outputs": 0,
         "prompts": 0,
         "task_runs": 0,
+        "attachments": 0,
     }
 
 

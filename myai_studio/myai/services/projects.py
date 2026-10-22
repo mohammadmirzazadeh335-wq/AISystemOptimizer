@@ -19,6 +19,7 @@ from pathlib import Path
 
 from ..core.errors import NotFoundError, ValidationError
 from ..core.paths import AppPaths
+from ..core.platform import filename_problem, path_problem
 from .settings import SettingsService
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,18 @@ BINARY_EXTENSIONS = {
 }
 
 _SAFE_NAME = re.compile(r"^[^/\\:*?\"<>|\x00]+$")
+
+#: Reason code -> translation key. Windows rejects these names (and silently
+#: rewrites trailing dots/spaces), so the app rejects them everywhere.
+NAME_ERROR_KEYS = {
+    "empty": "error.filename_invalid",
+    "relative": "error.filename_invalid",
+    "invalid_chars": "error.filename_invalid",
+    "trailing": "error.filename_trailing",
+    "reserved": "error.filename_reserved",
+    "too_long": "error.filename_too_long",
+    "path_too_long": "error.path_too_long",
+}
 
 
 @dataclass(frozen=True)
@@ -113,7 +126,16 @@ class ProjectService:
     def create_project(self, name: str) -> Project:
         clean = (name or "").strip()
         if not clean or not _SAFE_NAME.match(clean) or clean in {".", ".."}:
-            raise ValidationError("Project name contains unsupported characters")
+            raise ValidationError(
+                "Project name contains unsupported characters",
+                message_key="error.filename_invalid",
+            )
+        reason = filename_problem(clean)
+        if reason is not None:
+            raise ValidationError(
+                f"Project name is not usable on Windows ({reason})",
+                message_key=NAME_ERROR_KEYS.get(reason, "error.filename_invalid"),
+            )
         root = self._paths.projects_dir / clean
         root.mkdir(parents=True, exist_ok=True)
         project = Project(root=root.resolve(), name=clean)
@@ -198,6 +220,12 @@ class ProjectService:
             raise ValidationError("Absolute paths are not allowed inside a project")
         if any(part in {"..", ""} for part in candidate.parts):
             raise ValidationError("Path traversal is not allowed inside a project")
+        reason = path_problem(candidate.parts, base_length=len(str(project.root.resolve())))
+        if reason is not None:
+            raise ValidationError(
+                f"Path is not usable on Windows ({reason})",
+                message_key=NAME_ERROR_KEYS.get(reason, "error.filename_invalid"),
+            )
         root = project.root.resolve()
         target = (root / candidate).resolve()
         if target != root and root not in target.parents:
@@ -251,6 +279,8 @@ class ProjectService:
         target.parent.mkdir(parents=True, exist_ok=True)
         tmp = target.with_name(target.name + ".myai-tmp")
         tmp.write_bytes(data)
+        # ``os.replace`` is atomic on Windows too; it fails only if another
+        # process holds the file open, which the caller reports verbatim.
         os.replace(tmp, target)
         logger.info("project_file_saved path=%s bytes=%s", relative, len(data))
         return self.read(project, relative)
@@ -266,6 +296,12 @@ class ProjectService:
         clean = (new_name or "").strip()
         if not clean or not _SAFE_NAME.match(clean) or clean in {".", ".."}:
             raise ValidationError("New name contains unsupported characters")
+        reason = filename_problem(clean)
+        if reason is not None:
+            raise ValidationError(
+                f"New name is not usable on Windows ({reason})",
+                message_key=NAME_ERROR_KEYS.get(reason, "error.filename_invalid"),
+            )
         target = source.with_name(clean)
         if target.exists():
             raise ValidationError("A file or folder with that name already exists")
@@ -282,6 +318,71 @@ class ProjectService:
             target.unlink()
         else:
             raise NotFoundError(f"File does not exist: {relative}")
+
+    def make_folder(self, project: Project, relative: str) -> Path:
+        """Create a folder (and its parents) inside the project."""
+        target = self.resolve(project, relative)
+        if target.exists() and not target.is_dir():
+            raise ValidationError("A file with that name already exists")
+        target.mkdir(parents=True, exist_ok=True)
+        return target
+
+    def search(
+        self,
+        project: Project,
+        query: str,
+        *,
+        pattern: str = "",
+        limit: int = 50,
+        max_files: int = 2000,
+    ) -> list[dict]:
+        """Case-insensitive text search across the project's text files.
+
+        Returns ``[{path, line, text}]``. Binary, oversized and generated files
+        are skipped; the file count is capped so a huge folder cannot freeze the
+        worker thread that calls this.
+        """
+        import fnmatch
+
+        needle = (query or "").strip().lower()
+        if not needle:
+            raise ValidationError("Search text is empty", message_key="error.empty_search")
+        glob_pattern = (pattern or "*").strip() or "*"
+        matches: list[dict] = []
+        scanned = 0
+        root = project.root.resolve()
+        for folder, dirs, files in os.walk(root):
+            dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not d.startswith(".myai"))
+            for name in sorted(files):
+                if not fnmatch.fnmatch(name.lower(), glob_pattern.lower()):
+                    continue
+                path = Path(folder) / name
+                if path.suffix.lower() in BINARY_EXTENSIONS:
+                    continue
+                try:
+                    if path.stat().st_size > MAX_FILE_BYTES:
+                        continue
+                except OSError:
+                    continue
+                scanned += 1
+                if scanned > max_files:
+                    return matches
+                try:
+                    with open(path, encoding="utf-8", errors="replace") as handle:
+                        for number, line in enumerate(handle, start=1):
+                            if needle in line.lower():
+                                matches.append(
+                                    {
+                                        "path": self.relative(project, path),
+                                        "line": number,
+                                        "text": line.strip()[:240],
+                                    }
+                                )
+                                if len(matches) >= limit:
+                                    return matches
+                except OSError:
+                    continue
+        return matches
 
     def stat(self, project: Project) -> dict:
         files = 0

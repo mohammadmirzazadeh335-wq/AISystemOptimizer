@@ -3,7 +3,7 @@
 Agent Mode lets the model **do** things instead of only answering: list and read files in
 the project you opened, write or delete a file, run it with the toolchain installed on your
 machine, search the web, read GitHub issues, and store facts in memory. It is deliberately
-narrow: the model may only use the twelve registered tools, every sensitive call needs your
+narrow: the model may only use the fifteen registered tools, every sensitive call needs your
 approval, and a tool that cannot work says exactly why.
 
 ---
@@ -11,8 +11,8 @@ approval, and a tool that cannot work says exactly why.
 ## 1. Opening it
 
 1. Click **Agent Mode** in the sidebar (or switch the header to **Agent**).
-2. Optional but recommended: open the project folder first in **Code Studio**. The file
-   tools work only inside that folder.
+2. Optional but recommended: open the project folder first in **Code Studio**. Every
+   file tool except `create_project` works only inside that folder.
 3. Pick the model in the **Model** dropdown. A badge next to the task says whether the
    model advertises tool calling (`Tools supported` / `No tool support` / `Tool support
    unknown`). The agent sends your key to OpenRouter exactly like chat does.
@@ -21,13 +21,16 @@ approval, and a tool that cannot work says exactly why.
 
 ## 2. The tools card
 
-The left column lists all twelve tools with their risk level and live availability:
+The left column lists all fifteen tools with their risk level and live availability:
 
 | Tool | What it does | Risk |
 | --- | --- | --- |
 | `list_files` | list the project tree | read |
 | `read_file` | read a text file (size-capped, binary files refused) | read |
 | `write_file` | write or overwrite a file | write |
+| `make_folder` | create nested folders inside the project (traversal refused) | write |
+| `create_project` | create a real project folder and remember it in Code Studio | write |
+| `search_files` | grep the project case-insensitively, optional `*.py` glob | read |
 | `delete_file` | delete one file | write |
 | `run_file` | run a file with the detected toolchain, wall-clock limit | execute |
 | `remember` / `recall` | store and search durable facts in memory | write / read |
@@ -37,7 +40,7 @@ The left column lists all twelve tools with their risk level and live availabili
 | `github_comment` | post a comment on an issue | network |
 | `generate_image` | **always unavailable** — no image provider exists | network |
 
-“N of 12 ready” is computed from the real gates. A row marked *Unavailable* carries the
+“N of 15 ready” is computed from the real gates. A row marked *Unavailable* carries the
 exact reason (no project folder, network off, no endpoint, no token, no image provider).
 Hover a row to see the full text; the reason is also repeated in Settings → Agent.
 

@@ -1,8 +1,9 @@
 """Settings: a real control surface, not a demo.
 
 Every visible control writes to the validated settings registry; appearance and
-language changes apply instantly.  Controls that belong to later phases are
-disabled and labelled with their phase instead of being decorative.
+language changes apply instantly.  Nothing here is a placeholder: a page that
+cannot do something real points at the page that can instead of promising a
+phase.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ import platform
 import sys
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtCore import Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (
     QFrame,
@@ -40,22 +41,26 @@ from ..theme.manager import ThemeManager
 from ..widgets.buttons import AccentSwatch, NavButton, ThemePreview
 from ..widgets.dialogs import ModalDialog
 from ..widgets.fields import LanguageCard, SelectField, SettingRow, SliderRow, toggle_row
-from ..widgets.foundation import Badge, IconCircle, Kbd
+from ..widgets.foundation import Badge, Kbd
 
 CATEGORIES = [
-    ("general", "settings", "settings.cat_general", ""),
-    ("appearance", "palette", "settings.cat_appearance", ""),
-    ("language", "type", "settings.cat_language", ""),
-    ("ai", "sparkles", "settings.cat_ai", "2"),
-    ("memory", "database", "settings.cat_memory", "2"),
-    ("agent", "wrench", "settings.cat_agent", ""),
-    ("data", "hard-drive", "settings.cat_data", ""),
-    ("shortcuts", "command", "settings.cat_shortcuts", ""),
-    ("about", "info", "settings.cat_about", ""),
+    ("general", "settings", "settings.cat_general"),
+    ("appearance", "palette", "settings.cat_appearance"),
+    ("language", "type", "settings.cat_language"),
+    ("ai", "sparkles", "settings.cat_ai"),
+    ("memory", "database", "settings.cat_memory"),
+    ("agent", "wrench", "settings.cat_agent"),
+    ("data", "hard-drive", "settings.cat_data"),
+    ("shortcuts", "command", "settings.cat_shortcuts"),
+    ("about", "info", "settings.cat_about"),
 ]
 
 
 class SettingsDialog(ModalDialog):
+    #: Routed by MainWindow after the dialog closes: the request is real, the
+    #: navigation happens in the window that owns the pages.
+    navigate = Signal(str)
+
     def __init__(
         self,
         parent: QWidget,
@@ -111,10 +116,8 @@ class SettingsDialog(ModalDialog):
         nav_layout = QVBoxLayout(nav_frame)
         nav_layout.setContentsMargins(runtime.px(12), runtime.px(12), runtime.px(12), runtime.px(12))
         nav_layout.setSpacing(runtime.px(3))
-        for key, icon_name, label_key, phase in CATEGORIES:
-            button = NavButton(tr(label_key), icon_name, badge=str(phase) if phase else "")
-            if phase:
-                button.setToolTip(tr("settings.available_phase", phase=phase))
+        for key, icon_name, label_key in CATEGORIES:
+            button = NavButton(tr(label_key), icon_name)
             button.setCheckable(True)
             button.clicked.connect(lambda _=False, k=key: self._select(k))
             nav_layout.addWidget(button)
@@ -238,7 +241,6 @@ class SettingsDialog(ModalDialog):
                 tr("settings.autosave_hint"),
                 bool(self._settings.get("ui.editor_autosave")),
                 lambda value: self._write("ui.editor_autosave", value),
-                badge_text=tr("settings.available_phase", phase=3),
             )
         )
         start = SelectField(
@@ -356,38 +358,6 @@ class SettingsDialog(ModalDialog):
         layout.addWidget(preview)
         return widget
 
-    def _locked_page(self, phase: int, title: str, body: str, items: list[tuple[str, str]]) -> QWidget:
-        widget, layout = self._column()
-        card = QFrame()
-        card.setProperty("panel", "card")
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(runtime.px(20), runtime.px(18), runtime.px(20), runtime.px(18))
-        card_layout.setSpacing(runtime.px(9))
-        head = QHBoxLayout()
-        head.addWidget(IconCircle("lock", "warning", 38))
-        title_label = QLabel(title)
-        title_label.setProperty("role", "h2")
-        head.addWidget(title_label)
-        head.addStretch(1)
-        head.addWidget(Badge(tr("settings.available_phase", phase=phase), "warning"))
-        card_layout.addLayout(head)
-        description = QLabel(body)
-        description.setProperty("role", "muted")
-        description.setWordWrap(True)
-        card_layout.addWidget(description)
-        for icon_name, text in items:
-            row = QHBoxLayout()
-            icon_label = QLabel()
-            icon_label.setPixmap(runtime.icons().px(icon_name, 14, "muted"))
-            row.addWidget(icon_label)
-            label = QLabel(text)
-            label.setProperty("role", "muted")
-            label.setWordWrap(True)
-            row.addWidget(label, 1)
-            card_layout.addLayout(row)
-        layout.addWidget(card)
-        return widget
-
     def _page_ai(self) -> QWidget:
         widget, layout = self._column()
         card = QFrame()
@@ -400,18 +370,8 @@ class SettingsDialog(ModalDialog):
         title.setProperty("role", "h3")
         head.addWidget(title)
         head.addStretch(1)
-        head.addWidget(Badge(tr("settings.available_phase", phase=2), "warning"))
+        head.addWidget(Badge(tr("settings.provider_where"), "outline"))
         card_layout.addLayout(head)
-        key_row = QHBoxLayout()
-        key_input = QLineEdit()
-        key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        key_input.setPlaceholderText("sk-or-v1-…")
-        key_input.setEnabled(False)
-        key_row.addWidget(key_input, 1)
-        save = QPushButton(tr("settings.save_key"))
-        save.setEnabled(False)
-        key_row.addWidget(save)
-        card_layout.addLayout(key_row)
         hint = QLabel(tr("settings.api_key_hint"))
         hint.setProperty("role", "faint")
         hint.setWordWrap(True)
@@ -422,31 +382,93 @@ class SettingsDialog(ModalDialog):
         stored.setProperty("role", "faint")
         card_layout.addWidget(stored)
         layout.addWidget(card)
-        layout.addWidget(
-            self._locked_page(
-                2,
-                tr("settings.models"),
-                tr("chat.offline_hint"),
-                [
-                    ("key", "Encrypted key storage is ready (DPAPI / Fernet)."),
-                    ("refresh", "Live model catalogue and capability detection."),
-                    ("activity", "Streaming, cancellation and token statistics."),
-                ],
-            )
+
+        # Generation: ChatService reads ai.temperature on every send.
+        gen = QFrame()
+        gen.setProperty("panel", "card")
+        gen_layout = QVBoxLayout(gen)
+        gen_layout.setContentsMargins(runtime.px(18), runtime.px(16), runtime.px(18), runtime.px(16))
+        gen_layout.setSpacing(runtime.px(10))
+        gen_head = QHBoxLayout()
+        gen_title = QLabel(tr("settings.generation"))
+        gen_title.setProperty("role", "h3")
+        gen_head.addWidget(gen_title)
+        gen_head.addStretch(1)
+        gen_head.addWidget(Badge(tr("settings.applies_next_message"), "outline"))
+        gen_layout.addLayout(gen_head)
+        self.temperature_row = SliderRow(
+            0.0,
+            2.0,
+            float(self._settings.get("ai.temperature", 0.7)),
+            step=0.1,
+            suffix="",
+            decimals=1,
         )
+        self.temperature_row.setAccessibleName(tr("settings.temperature"))
+        self.temperature_row.value_changed.connect(
+            lambda value: self._write("ai.temperature", round(float(value), 1))
+        )
+        gen_layout.addWidget(
+            SettingRow(tr("settings.temperature"), tr("settings.temperature_hint"), self.temperature_row)
+        )
+        open_api = QPushButton(tr("settings.open_api"))
+        open_api.setProperty("variant", "secondary")
+        open_api.setProperty("buttonsize", "sm")
+        open_api.setCursor(Qt.CursorShape.PointingHandCursor)
+        open_api.clicked.connect(lambda: self._go("api"))
+        gen_layout.addWidget(open_api, 0, Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(gen)
         return widget
 
     def _page_memory(self) -> QWidget:
-        return self._locked_page(
-            2,
-            tr("settings.memory_enabled"),
-            tr("inspector.no_memory_hint"),
-            [
-                ("database", "Global and per-conversation memory with summaries."),
-                ("search", "Search, edit and export what the assistant remembers."),
-                ("shield", "Explicit control over what may be written to memory."),
-            ],
+        """Real memory controls. Counts come from the database, not a mock."""
+        from sqlalchemy import func, select
+
+        from ...data.models import Memory
+
+        widget, layout = self._column()
+        card = QFrame()
+        card.setProperty("panel", "card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(runtime.px(6), runtime.px(6), runtime.px(6), runtime.px(6))
+        card_layout.setSpacing(runtime.px(2))
+        card_layout.addWidget(
+            toggle_row(
+                tr("settings.memory_enabled"),
+                tr("settings.memory_enabled_hint"),
+                bool(self._settings.get("memory.enabled", True)),
+                lambda value: self._write("memory.enabled", bool(value)),
+            )
         )
+        layout.addWidget(card)
+
+        status = QFrame()
+        status.setProperty("panel", "card")
+        status_layout = QVBoxLayout(status)
+        status_layout.setContentsMargins(runtime.px(18), runtime.px(16), runtime.px(18), runtime.px(16))
+        status_layout.setSpacing(runtime.px(10))
+        head = QHBoxLayout()
+        title = QLabel(tr("settings.memory_store"))
+        title.setProperty("role", "h3")
+        head.addWidget(title)
+        head.addStretch(1)
+        with self._db.session() as session:
+            total = session.scalar(select(func.count()).select_from(Memory)) or 0
+        self.memory_count_label = Badge(tr("settings.memory_count", count=total), "outline")
+        head.addWidget(self.memory_count_label)
+        status_layout.addLayout(head)
+        hint = QLabel(tr("settings.memory_store_hint"))
+        hint.setProperty("role", "faint")
+        hint.setWordWrap(True)
+        status_layout.addWidget(hint)
+        open_memory = QPushButton(tr("settings.open_memory"))
+        open_memory.setProperty("variant", "secondary")
+        open_memory.setProperty("buttonsize", "sm")
+        open_memory.setCursor(Qt.CursorShape.PointingHandCursor)
+        open_memory.clicked.connect(lambda: self._go("memory"))
+        status_layout.addWidget(open_memory, 0, Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(status)
+        return widget
 
     def _page_agent(self) -> QWidget:
         from ...services.tools import ToolContext, registry
@@ -465,7 +487,7 @@ class SettingsDialog(ModalDialog):
         title.setProperty("role", "h3")
         head.addWidget(title)
         head.addStretch(1)
-        head.addWidget(Badge(tr("settings.done_phase", phase=4), "success"))
+        head.addWidget(Badge(tr("settings.agent_gate_badge"), "success"))
         card_layout.addLayout(head)
         card_layout.addWidget(
             toggle_row(
@@ -716,9 +738,9 @@ class SettingsDialog(ModalDialog):
         restore_row = QHBoxLayout()
         self.restore_button = QPushButton(tr("settings.restore"))
         self.restore_button.setEnabled(False)
-        self.restore_button.setToolTip(tr("settings.available_phase", phase=5))
+        self.restore_button.setToolTip(tr("settings.restore_unavailable"))
         restore_row.addWidget(self.restore_button)
-        restore_row.addWidget(Badge(tr("settings.available_phase", phase=5), "outline"))
+        restore_row.addWidget(Badge(tr("common.unavailable"), "outline"))
         restore_row.addStretch(1)
         retention = SelectField(
             [("5", "5"), ("10", "10"), ("20", "20")],
@@ -829,6 +851,11 @@ class SettingsDialog(ModalDialog):
         return widget
 
     # ----------------------------------------------------------------- actions
+    def _go(self, route: str) -> None:
+        """Close and let the window open a real page (never a dead button)."""
+        self.navigate.emit(route)
+        self.accept()
+
     def _write(self, key: str, value) -> None:  # noqa: ANN001
         try:
             self._settings.set(key, value)
@@ -938,7 +965,7 @@ class SettingsDialog(ModalDialog):
         self.title_label.setText(tr("settings.title"))
         self.subtitle_label.setText(tr("settings.subtitle"))
         self.close_button.setText(tr("dialog.close"))
-        for key, _icon, label_key, _phase in CATEGORIES:
+        for key, _icon, label_key in CATEGORIES:
             button = self._nav_buttons[key]
             button.set_text(tr(label_key))
         self._pages.clear()
