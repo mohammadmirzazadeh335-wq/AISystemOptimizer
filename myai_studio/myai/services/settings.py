@@ -53,6 +53,11 @@ DEFAULTS: dict[str, Any] = {
     "ai.context_warn_ratio": 0.8,
     "ai.openrouter_cache": [],
     "ai.last_model_sync": "",
+    # Network (reaches the provider through the proxy this machine already uses)
+    "network.proxy_mode": "system",
+    "network.proxy_url": "",
+    "network.connect_timeout": 20.0,
+    "network.read_timeout": 120.0,
     # Memory (phase 2)
     "memory.enabled": True,
     "memory.auto_capture": True,
@@ -237,6 +242,10 @@ class SettingsService:
                 raise ValidationError(
                     f"Setting {key} expects a number", message_key="error.settings"
                 ) from exc
+            if key == "network.connect_timeout" and not 3.0 <= number <= 120.0:
+                raise ValidationError("connect timeout out of range", message_key="error.settings")
+            if key == "network.read_timeout" and not 5.0 <= number <= 900.0:
+                raise ValidationError("read timeout out of range", message_key="error.settings")
             if key == "ai.temperature" and not 0.0 <= number <= 2.0:
                 raise ValidationError("temperature out of range", message_key="error.settings")
             if key == "ui.font_scale" and not 0.8 <= number <= 1.5:
@@ -293,6 +302,20 @@ class SettingsService:
             if value not in {"auto", "fa", "en"}:
                 raise ValidationError("Unsupported language preference", message_key="error.settings")
             return value
+        if key == "network.proxy_mode":
+            if value not in {"system", "manual", "off"}:
+                raise ValidationError("Unsupported proxy mode", message_key="error.settings")
+            return value
+        if key == "network.proxy_url":
+            from .net import normalize_proxy
+
+            text = str(value or "").strip()
+            try:
+                return normalize_proxy(text)
+            except ValueError as exc:
+                raise ValidationError(
+                    f"Invalid proxy address: {exc}", message_key="error.proxy_invalid"
+                ) from exc
         if key == "ai.base_url":
             url = str(value).strip().rstrip("/")
             parsed = urlparse(url)

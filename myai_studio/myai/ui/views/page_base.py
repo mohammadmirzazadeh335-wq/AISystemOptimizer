@@ -7,6 +7,7 @@ the AI settings, memory, personality and output screens never look bolted on.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt
@@ -25,8 +26,11 @@ from ...i18n import tr
 from ..theme import runtime
 from ..widgets.foundation import Badge
 
+logger = logging.getLogger(__name__)
+
 
 class PageShell(QWidget):
+
     """Headline + optional action area + vertically scrolling card column."""
 
     def __init__(
@@ -324,9 +328,16 @@ def run_async(
         try:
             result = work()
         except Exception as exc:  # noqa: BLE001 - reported to the caller
-            bridge.failure.emit(exc)
+            outcome, payload = "failure", exc
         else:
-            bridge.success.emit(result)
+            outcome, payload = "success", result
+        try:
+            (bridge.failure if outcome == "failure" else bridge.success).emit(payload)
+        except RuntimeError:
+            # The page was destroyed while the request was still in flight
+            # (a closed window, or a key deleted mid-call). The result has
+            # nowhere to go; failing here would only print a thread traceback.
+            logger.debug("async_result_dropped outcome=%s", outcome)
         finally:
             if bridge in keep:
                 keep.remove(bridge)

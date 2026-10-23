@@ -4,8 +4,8 @@ A premium, local-first AI desktop workspace for Windows 11: multi-model chat, me
 a real code studio, supervised agents, media and research — delivered in five verified
 phases.
 
-> **Current build: `0.7.3` — Phase 5 + LAB + Round 3, with a Windows x64 release**
-> (`v0.7.3`; the phase notes below describe the shipped feature set)
+> **Current build: `0.8.0` — Phase 5 + LAB + Round 3, with a Windows x64 release**
+> (`v0.8.0`; the phase notes below describe the shipped feature set)
 > Chat streams from OpenRouter, memory and personality are real and editable, the Output
 > Studio keeps every revision, Code Studio opens real folders and runs real files, and the
 > agent acts **only** through twenty-two registered tools behind an approval gate. Phase 5
@@ -29,9 +29,16 @@ phases.
 > itself versioned. This branch also ships the first **Windows executable** (see [Download](#download-windows-x64)).
 > See [`docs/ROUND3_CAPABILITIES.md`](docs/ROUND3_CAPABILITIES.md).
 
+> **Round 4 (`0.8.0`):** a real answer to "the provider did not answer in
+> time". The app now finds the proxy this machine already uses (Windows registry,
+> macOS `scutil`, or `HTTPS_PROXY`), accepts a manual proxy, shows the stage that
+> failed (proxy → DNS → TCP → TLS → HTTP) and retries once. See
+> [`docs/NETWORK_TROUBLESHOOTING.md`](docs/NETWORK_TROUBLESHOOTING.md) or its
+> [Persian version](docs/NETWORK_TROUBLESHOOTING_FA.md).
+
 ## Download (Windows x64)
 
-[**MyAI Studio Ultimate 0.7.3 — Windows x64**](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.7.3/MyAIStudio-v0.7.3-windows-x64.zip) — about 59 MB.
+[**MyAI Studio Ultimate 0.8.0 — Windows x64**](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.8.0/MyAIStudio-v0.8.0-windows-x64.zip) — about 59 MB.
 
 Extract the zip and run `MyAIStudio.exe`; keep the `_internal` folder beside it.
 Data lives in `%APPDATA%\MyAIStudio`; projects default to `Documents\MyAI Studio Projects`. The build is produced by

@@ -9,6 +9,7 @@ never shows a fabricated model list or a fake "connected" state.
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from datetime import datetime
 
 from PySide6.QtCore import Qt, Signal
@@ -17,16 +18,24 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
 from ...core.errors import AppError
-from ...i18n import tn, tr
+from ...i18n import has_key, tn, tr
+from ...services.net import (
+    NetworkOptions,
+    NetworkProbe,
+    normalize_proxy,
+    options_from_settings,
+    resolve_proxy,
+)
 from ...services.openrouter import ConnectionTest, ModelInfo, OpenRouterClient
 from ..theme import runtime
 from ..widgets.dialogs import ConfirmDialog
-from ..widgets.fields import SelectField
+from ..widgets.fields import FlowLayout, SelectField
 from ..widgets.foundation import Badge
 from .page_base import (
     PageShell,
@@ -125,6 +134,7 @@ class ApiPage(PageShell):
     def _build(self) -> None:
         self._build_key_card()
         self._build_test_card()
+        self._build_network_card()
         self._build_catalogue_card()
         self._build_sampling_card()
         self._refresh_key_state()
@@ -202,17 +212,211 @@ class ApiPage(PageShell):
         self.endpoint_value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.endpoint_row.addWidget(self.endpoint_value, 1)
 
+    def _proxy_select(self) -> SelectField:
+        """(value, label) — the widget stores the value on the left."""
+        return SelectField(
+            [
+                ("system", tr("api.proxy_system")),
+                ("manual", tr("api.proxy_manual")),
+                ("off", tr("api.proxy_off")),
+            ],
+            placeholder=tr("api.proxy_mode"),
+        )
+
+    def _network_options(self) -> NetworkOptions:
+        """Saved values — what the client actually uses."""
+        return options_from_settings(self.context.settings)
+
+    def _preview_options(self) -> NetworkOptions:
+        """Saved values overlaid with what is typed right now.
+
+        The status line must answer "what happens if I save this", not only
+        "what was saved last time"; otherwise typing an address looks ignored.
+        """
+        saved = options_from_settings(self.context.settings)
+        return replace(
+            saved,
+            mode=self.proxy_mode.value or saved.mode,
+            manual_proxy=self.proxy_url.text().strip(),
+        )
+
+    def _build_network_card(self) -> None:
+        """Proxy/VPN settings — the usual reason a key works for nobody."""
+        card, layout = self.card("api.network_card", "globe")
+        self.proxy_hint = hint_label(tr("api.proxy_hint"))
+        self.proxy_hint.setWordWrap(True)
+        layout.addWidget(self.proxy_hint)
+
+        # A flow layout, not a row: three controls plus an address field are
+        # wider than the page at 1.25x and would clip the last button.
+        self.proxy_host = QWidget()
+        self.proxy_row = FlowLayout(self.proxy_host, spacing=runtime.px(8))
+        layout.addWidget(self.proxy_host)
+
+        self.proxy_mode_label = field_label(tr("api.proxy_mode"))
+        self.proxy_row.addWidget(self.proxy_mode_label)
+        self.proxy_mode = self._proxy_select()
+        self.proxy_mode.set_value(str(self.context.settings.get("network.proxy_mode", "system")))
+        self.proxy_mode.value_changed.connect(self._on_proxy_mode)
+        self.proxy_row.addWidget(self.proxy_mode)
+
+        self.proxy_url_label = field_label(tr("api.proxy_url"))
+        self.proxy_row.addWidget(self.proxy_url_label)
+        self.proxy_url = QLineEdit(str(self.context.settings.get("network.proxy_url", "")))
+        self.proxy_url.setPlaceholderText("http://127.0.0.1:10809")
+        self.proxy_url.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
+        self.proxy_url.setAccessibleName(tr("api.proxy_url"))
+        self.proxy_url.setFixedWidth(runtime.px(210))
+        self.proxy_url.textChanged.connect(lambda _text: self._sync_proxy_fields())
+        self.proxy_row.addWidget(self.proxy_url)
+
+        self.proxy_save = primary_button(tr("api.proxy_save"), "check")
+        self.proxy_save.clicked.connect(self._save_proxy)
+        self.proxy_row.addWidget(self.proxy_save)
+        self.proxy_check = secondary_button(tr("api.probe"), "activity")
+        self.proxy_check.clicked.connect(self._probe_network)
+        self.proxy_row.addWidget(self.proxy_check)
+
+        self.proxy_state = QLabel("")
+        self.proxy_state.setProperty("role", "faint")
+        self.proxy_state.setWordWrap(True)
+        layout.addWidget(self.proxy_state)
+        self._sync_proxy_fields()
+
+    def _on_proxy_mode(self, mode: str) -> None:
+        if mode == "manual":
+            self.proxy_url.setEnabled(True)
+            if not self.proxy_url.text().strip():
+                self.proxy_url.setFocus()
+        else:
+            self.proxy_url.setEnabled(False)
+        self._sync_proxy_fields()
+
+    def _load_proxy_fields(self) -> None:
+        """Pull the saved network settings back into the widgets."""
+        mode = str(self.context.settings.get("network.proxy_mode", "system") or "system")
+        url = str(self.context.settings.get("network.proxy_url", "") or "")
+        self.proxy_mode.set_value(mode)
+        if self.proxy_url.text().strip() != url:
+            self.proxy_url.setText(url)
+        self.proxy_url.setEnabled(mode == "manual")
+        self._sync_proxy_fields()
+
+    def _sync_proxy_fields(self) -> None:
+        """Show the proxy that would actually be used right now."""
+        mode = self.proxy_mode.value or "system"
+        try:
+            choice = resolve_proxy(self._preview_options())
+        except ValueError as exc:
+            self.proxy_state.setText(tr("api.proxy_bad", error=str(exc)))
+            self.proxy_state.setProperty("role", "danger")
+            self.proxy_state.style().unpolish(self.proxy_state)
+            self.proxy_state.style().polish(self.proxy_state)
+            return
+        self.proxy_state.setProperty("role", "faint")
+        self.proxy_state.style().unpolish(self.proxy_state)
+        self.proxy_state.style().polish(self.proxy_state)
+        if choice.url:
+            self.proxy_state.setText(
+                tr("api.proxy_active", proxy=choice.label)
+            )
+        else:
+            self.proxy_state.setText(
+                tr("api.proxy_direct") if mode != "manual" else tr("api.proxy_manual_empty")
+            )
+
+    def _save_proxy(self) -> None:
+        mode = self.proxy_mode.value or "system"
+        raw = self.proxy_url.text().strip()
+        if mode == "manual":
+            try:
+                raw = normalize_proxy(raw)
+            except ValueError as exc:
+                self.notify.emit(tr("api.proxy_bad", error=str(exc)), "error")
+                return
+            if not raw:
+                self.notify.emit(tr("api.proxy_bad", error=tr("api.proxy_manual_empty")), "warning")
+                return
+        try:
+            self.context.settings.update(
+                {"network.proxy_mode": mode, "network.proxy_url": raw}
+            )
+        except AppError as exc:
+            self.notify.emit(self._localized_error(exc), "error")
+            return
+        self.proxy_url.setText(str(self.context.settings.get("network.proxy_url", "")))
+        self._sync_proxy_fields()
+        self.notify.emit(tr("api.proxy_saved"), "success")
+
+    def _probe_network(self) -> None:
+        if self._busy:
+            return
+        self._busy = True
+        self.proxy_check.setEnabled(False)
+        self.proxy_state.setText(tr("api.probing"))
+        client = self.client()
+        run_async(
+            self,
+            client.diagnose,
+            on_success=self._on_probe_done,
+            on_error=self._on_probe_error,
+        )
+
+    def _on_probe_done(self, result: object) -> None:
+        self._busy = False
+        self.proxy_check.setEnabled(True)
+        assert isinstance(result, NetworkProbe)
+        if result.ok:
+            self.proxy_state.setText(
+                tr("api.probe_ok", ms=result.elapsed_ms, detail=result.detail)
+            )
+            self.proxy_state.setProperty("role", "success")
+        else:
+            self.proxy_state.setText(
+                tr(
+                    "api.probe_failed",
+                    stage=tr(f"api.stage_{result.stage.replace('-', '_')}"),
+                    detail=result.detail,
+                )
+            )
+            self.proxy_state.setProperty("role", "danger")
+        self._restyle()
+
+    def _on_probe_error(self, exc: Exception) -> None:
+        self._busy = False
+        self.proxy_check.setEnabled(True)
+        self.proxy_state.setText(self._localized_error(exc))
+        self.proxy_state.setProperty("role", "danger")
+        self._restyle()
+
+    def _localized_error(self, exc: Exception) -> str:
+        """Translated sentence plus the technical detail, never a raw English line alone."""
+        if not isinstance(exc, AppError):
+            return str(exc)
+        key = getattr(exc, "message_key", None)
+        text = tr(key) if key and has_key(key) else exc.message
+        details = (exc.details or "").strip()
+        return f"{text} · {details}" if details else text
+
     def _build_catalogue_card(self) -> None:
         card, layout = self.card("api.models_card", "layers")
         top = QHBoxLayout()
         top.setSpacing(runtime.px(8))
         self.model_count = QLabel(tr("api.models_none"))
         self.model_count.setProperty("role", "muted")
+        # The status line carries drag-and-drop file names and model counts; at
+        # 1.5x it must wrap or shrink instead of pushing the search box and the
+        # refresh button past the right edge.
+        self.model_count.setWordWrap(True)
+        self.model_count.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.model_count.setMinimumWidth(runtime.px(120))
         top.addWidget(self.model_count, 1)
         self.search = QLineEdit()
         self.search.setAccessibleName(tr("api.search_models"))
         self.search.setPlaceholderText(tr("api.search_models"))
-        self.search.setFixedWidth(runtime.px(240))
+        self.search.setMinimumWidth(runtime.px(110))
+        self.search.setMaximumWidth(runtime.px(240))
+        self.search.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.search.textChanged.connect(self._on_filter)
         top.addWidget(self.search)
         self.refresh_button = secondary_button(tr("api.refresh"), "refresh")
@@ -364,6 +568,7 @@ class ApiPage(PageShell):
         return OpenRouterClient(
             self.context.secrets.get_api_key,
             base_url=str(self.context.settings.get("ai.base_url", "https://openrouter.ai/api/v1")),
+            network=self._network_options(),
         )
 
     def _test_connection(self) -> None:
@@ -393,15 +598,39 @@ class ApiPage(PageShell):
             self.context.activity.record(key="api.connected", kind="settings")
             self._load_models(refresh=True)
         else:
-            self.test_result.setText(tr("api.test_failed", error=result.message))
+            self.test_result.setText(
+                tr(
+                    "api.test_failed",
+                    error=self._localized_error_code(result.error_code, result.message),
+                )
+            )
+            self.test_result.setToolTip(
+                f"{result.message} · {result.stage or 'unknown'} · "
+                f"{result.proxy or tr('api.proxy_none_short')}"
+            )
             self.test_result.setProperty("role", "danger")
         self._restyle()
+
+    def _localized_error_code(self, code: str, message: str) -> str:
+        """Prefer the translated sentence for a known error code."""
+        key = {
+            "provider.timeout": "error.api_timeout",
+            "provider.auth": "error.api_auth",
+            "provider.credit": "error.api_credit",
+            "provider.rate_limit": "error.api_rate",
+            "network": "error.api_network",
+            "network.unreachable": "error.api_network",
+        }.get(code)
+        if key and has_key(key):
+            return tr(key)
+        return message
 
     def _on_test_error(self, exc: Exception) -> None:
         self._busy = False
         self.test_button.setEnabled(self.context.secrets.has_api_key())
-        message = exc.message if isinstance(exc, AppError) else str(exc)
+        message = self._localized_error(exc)
         self.test_result.setText(tr("api.test_failed", error=message))
+        self.test_result.setToolTip(str(exc))
         self.test_result.setProperty("role", "danger")
         self._restyle()
 
@@ -432,13 +661,14 @@ class ApiPage(PageShell):
 
     def _on_models_error(self, exc: Exception) -> None:
         self.refresh_button.setEnabled(True)
-        message = exc.message if isinstance(exc, AppError) else str(exc)
+        message = self._localized_error(exc)
         code = getattr(exc, "code", "")
         self.model_count.setText(tr("api.models_error", error=message))
+        self.model_count.setToolTip(str(exc))
         self.model_count.setProperty("role", "danger")
         self.model_count.style().unpolish(self.model_count)
         self.model_count.style().polish(self.model_count)
-        self.notify.emit(self._explain(code, message), "error")
+        self.notify.emit(self._explain(code, str(exc)), "error")
 
     def _explain(self, code: str, message: str) -> str:
         mapping = {
@@ -531,6 +761,22 @@ class ApiPage(PageShell):
         self._refresh_key_state()
         self.default_label.setText(tr("api.default_model"))
         self.endpoint_label.setText(tr("api.base_url"))
+        self.proxy_mode.set_items(
+            [
+                ("system", tr("api.proxy_system")),
+                ("manual", tr("api.proxy_manual")),
+                ("off", tr("api.proxy_off")),
+            ]
+        )
+        for widget, key in (
+            (self.proxy_mode_label, "api.proxy_mode"),
+            (self.proxy_url_label, "api.proxy_url"),
+            (self.proxy_save, "api.proxy_save"),
+            (self.proxy_check, "api.probe"),
+            (self.proxy_hint, "api.proxy_hint"),
+        ):
+            widget.setText(tr(key))
+        self._sync_proxy_fields()
         if hasattr(self, "network_note"):
             self.network_note.setText(tr("api.test_network_note"))
         self.test_result.setText(tr("api.test_idle") if not self._busy else tr("api.testing"))
@@ -538,6 +784,7 @@ class ApiPage(PageShell):
 
     def refresh(self) -> None:
         self._refresh_key_state()
+        self._load_proxy_fields()
         self.endpoint_value.setText(str(self.context.settings.get("ai.base_url", "")))
         if not self._models and self.context.secrets.has_api_key():
             self._load_models()

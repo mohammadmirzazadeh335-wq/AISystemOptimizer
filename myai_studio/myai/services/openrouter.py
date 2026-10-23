@@ -38,6 +38,7 @@ from ..core.errors import (
     RateLimitError,
     ValidationError,
 )
+from .net import NetworkOptions, client_kwargs, mask_proxy, options_timeout, probe
 
 logger = logging.getLogger(__name__)
 
@@ -203,6 +204,8 @@ class ConnectionTest:
     model_count: int = 0
     message: str = ""
     error_code: str = ""
+    proxy: str = ""
+    stage: str = ""
 
 
 def model_to_dict(model: ModelInfo) -> dict:
@@ -289,8 +292,10 @@ class OpenRouterClient:
         base_url: str = DEFAULT_BASE_URL,
         timeout: float = 60.0,
         transport: httpx.BaseTransport | None = None,
+        network: NetworkOptions | None = None,
     ) -> None:
         self._api_key_provider = api_key_provider
+        self.network = network or NetworkOptions()
         self.base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
         self.timeout = timeout
         self._transport = transport
@@ -309,13 +314,40 @@ class OpenRouterClient:
         }
 
     def _client(self, *, stream: bool = False) -> httpx.Client:
+        """Build a client that reaches the network the way this machine does.
+
+        ``trust_env`` is handled by :mod:`myai.services.net` rather than httpx:
+        the resolver reads environment variables **and** the Windows/macOS
+        system settings in a defined order, then passes one explicit proxy.
+        """
+        try:
+            network_kwargs = client_kwargs(self.network)
+        except (ValueError, RuntimeError) as exc:
+            raise ConfigurationError(
+                str(exc), message_key="error.proxy_invalid", hint_key="api.proxy_hint"
+            ) from exc
+        options = dict(network_kwargs)
+        if self._transport is not None:
+            options["transport"] = self._transport
+        if not options.get("proxy"):
+            options["timeout"] = options_timeout(self.network)
         return httpx.Client(
             base_url=self.base_url,
-            timeout=httpx.Timeout(self.timeout, connect=10.0),
-            transport=self._transport,
             follow_redirects=True,
             headers=self._headers(),
+            **options,
         )
+
+    def proxy_label(self) -> str:
+        """Masked proxy for display; never includes credentials."""
+        try:
+            return mask_proxy(str(client_kwargs(self.network).get("proxy") or ""))
+        except (ValueError, RuntimeError):
+            return ""
+
+    def diagnose(self) -> object:
+        """Staged DNS/TCP/TLS/HTTP probe used by the API page."""
+        return probe(self.base_url, self.network)
 
     @staticmethod
     def _raise_for_status(response: httpx.Response) -> None:
@@ -372,20 +404,51 @@ class OpenRouterClient:
         )
 
     def _wrap_transport_error(self, exc: Exception) -> AppError:
+        """Map a transport failure onto an error the UI can explain.
+
+        ``ConnectTimeout`` and ``ConnectError`` are separated from a read
+        timeout on purpose: the first two are almost always the local network
+        (a missing proxy on a filtered connection), while the third means the
+        request was already on its way.
+        """
         if isinstance(exc, AppError):
             return exc
+        proxy = self.proxy_label()
+        # httpx folds a TLS failure into ConnectError; the text is the only
+        # place the real stage survives, so classify from it.
+        text = str(exc)
+        lowered = text.lower()
+        if isinstance(exc, httpx.ConnectError) and ("tls" in lowered or "ssl" in lowered):
+            stage = "tls"
+        elif isinstance(exc, httpx.ConnectError):
+            stage = "tcp"
+        else:
+            stage = type(exc).__name__
+        detail = f"{type(exc).__name__}: {text[:160]}" if text else type(exc).__name__
+        context = {"proxy": proxy or "direct", "stage": stage}
+        if isinstance(exc, httpx.ConnectTimeout):
+            return TimeoutProviderError(
+                "Could not open a connection to the provider in time",
+                message_key="error.api_connect_timeout",
+                hint_key="api.proxy_hint",
+                details=f"{detail} · proxy={proxy or 'direct'}",
+                context=context,
+                cause=exc,
+            )
         if isinstance(exc, httpx.TimeoutException):
             return TimeoutProviderError(
                 "The provider did not answer in time",
                 message_key="error.api_timeout",
-                details=type(exc).__name__,
+                details=f"{detail} · proxy={proxy or 'direct'}",
+                context=context,
                 cause=exc,
             )
         return NetworkError(
-            "Could not reach the provider",
+            f"Could not reach the provider ({type(exc).__name__})",
             message_key="error.api_network",
-            hint_key="error.check_connection",
-            details=type(exc).__name__,
+            hint_key="api.proxy_hint",
+            details=f"{detail} · proxy={proxy or 'direct'}",
+            context=context,
             cause=exc,
         )
 
@@ -394,13 +457,26 @@ class OpenRouterClient:
         """Return the catalogue, cached for 10 minutes."""
         if not refresh and self._models_cache is not None and (time.time() - self._models_at) < 600:
             return list(self._models_cache)
-        try:
-            with self._client() as client:
-                response = client.get("/models")
-                self._raise_for_status(response)
-                payload = response.json()
-        except Exception as exc:  # noqa: BLE001 - normalised below
-            raise self._wrap_transport_error(exc) from exc
+        # One retry: a proxy that just came up (or a flaky Wi-Fi hop) makes the
+        # first attempt fail while the second succeeds, and GET /models is
+        # idempotent, so retrying cannot double-charge anything.
+        attempts = 2
+        for attempt in range(1, attempts + 1):
+            try:
+                with self._client() as client:
+                    response = client.get("/models")
+                    self._raise_for_status(response)
+                    payload = response.json()
+                break
+            except Exception as exc:  # noqa: BLE001 - normalised below
+                transient = isinstance(
+                    exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout)
+                )
+                if attempt < attempts and transient:
+                    logger.info("openrouter_models_retry attempt=%s reason=%s", attempt, type(exc).__name__)
+                    time.sleep(0.6)
+                    continue
+                raise self._wrap_transport_error(exc) from exc
         rows = payload.get("data") if isinstance(payload, dict) else None
         if not isinstance(rows, list):
             raise ProviderError("Malformed model catalogue", message_key="error.api_generic")
@@ -417,20 +493,26 @@ class OpenRouterClient:
     def test_connection(self) -> ConnectionTest:
         """Cheap, explicit connectivity + auth check used by the settings page."""
         started = time.perf_counter()
+        proxy = self.proxy_label()
+        stage = ""
         try:
             models = self.list_models(refresh=True)
         except AppError as exc:
+            stage = str(exc.context.get("stage", "") or "")
             return ConnectionTest(
                 ok=False,
                 latency_ms=int((time.perf_counter() - started) * 1000),
                 message=exc.message,
                 error_code=exc.code,
+                proxy=proxy,
+                stage=stage,
             )
         return ConnectionTest(
             ok=True,
             latency_ms=int((time.perf_counter() - started) * 1000),
             model_count=len(models),
             message=f"{len(models)} models available",
+            proxy=proxy,
         )
 
     # ---------------------------------------------------------------- streaming

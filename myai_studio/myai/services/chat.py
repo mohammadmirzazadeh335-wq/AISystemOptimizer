@@ -21,6 +21,7 @@ from ..data.db import Database
 from ..data.models import Conversation, Message
 from .conversations import ConversationService
 from .memory import MemoryService, estimate_tokens
+from .net import options_from_settings
 from .openrouter import ChatResult, ModelInfo, OpenRouterClient
 from .persona import PersonaService
 from .settings import SettingsService
@@ -153,8 +154,12 @@ class ChatService:
 
     def set_api_key_reader(self, reader: Callable[[], str | None]) -> None:
         self._api_key = reader  # type: ignore[assignment]
+        # The chat path must honour the same proxy as the API page, otherwise a
+        # machine that needs one can list models but never stream a reply.
         self._client_factory = lambda: OpenRouterClient(
-            reader, base_url=str(self._settings.get("ai.base_url") or "https://openrouter.ai/api/v1")
+            reader,
+            base_url=str(self._settings.get("ai.base_url") or "https://openrouter.ai/api/v1"),
+            network=options_from_settings(self._settings),
         )
 
     def client(self) -> OpenRouterClient:
