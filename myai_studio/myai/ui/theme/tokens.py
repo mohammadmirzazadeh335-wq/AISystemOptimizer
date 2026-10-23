@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from . import colorlab
+
 # --------------------------------------------------------------------------- accents
 # Each accent carries values tuned separately for dark and light surfaces.
 ACCENTS: dict[str, dict[str, str]] = {
@@ -135,11 +137,14 @@ _LIGHT_BASE: dict[str, str] = {
     "accent_contrast": "#FFFFFF",
     "violet": "#7457E0",
     "violet_soft": "#EFEBFF",
-    "success": "#0F9D6B",
+    # The light theme is audited by Appearance → Contrast: these three are
+    # text tokens, so they must clear WCAG AA (4.5:1) on white, not just look
+    # pleasant. Their previous values sat at 3.4–4.5 and were flagged LARGE.
+    "success": "#0B8158",
     "success_soft": "#E4F7EF",
-    "warning": "#B7791F",
+    "warning": "#9C6613",
     "warning_soft": "#FDF3E1",
-    "danger": "#D93A56",
+    "danger": "#D33550",
     "danger_soft": "#FDE9ED",
     "info": "#0D7FC4",
     "selection": "#E4ECFB",
@@ -266,14 +271,43 @@ class Metrics:
 METRICS = Metrics()
 
 
-def build_theme(name: str, accent: str = "azure", *, system_dark: bool = True) -> Theme:
-    accent = accent if accent in ACCENTS else "azure"
+def _custom_accent(value: str, *, surface: str, mode: str) -> dict[str, str]:
+    """Accent tokens for a user-picked colour, or the azure ramp if invalid."""
+    seed = colorlab.normalize(value)
+    if not seed:
+        return ACCENTS["azure"]
+    ramp = colorlab.accent_ramp(seed, mode=mode, surface=surface)
+    return {
+        "name_key": "settings.accent_custom",
+        "dark": ramp["base"],
+        "dark_hover": ramp["hover"],
+        "dark_pressed": ramp["pressed"],
+        "light": ramp["base"],
+        "light_hover": ramp["hover"],
+        "light_pressed": ramp["pressed"],
+        "glow": ramp["glow"],
+    }
+
+
+def build_theme(
+    name: str,
+    accent: str = "azure",
+    *,
+    system_dark: bool = True,
+    custom_accent: str = "",
+) -> Theme:
+    if accent not in ACCENTS and accent != "custom":
+        accent = "azure"
     if name == "system":
         name = "midnight" if system_dark else "dawn"
     if name == "dawn":
         colors = dict(_LIGHT_BASE)
         mode = "light"
-        accent_data = ACCENTS[accent]
+        accent_data = (
+            _custom_accent(custom_accent, surface=_LIGHT_BASE["surface"], mode="light")
+            if accent == "custom"
+            else ACCENTS[accent]
+        )
         colors.update(
             {
                 "accent": accent_data["light"],
@@ -289,7 +323,11 @@ def build_theme(name: str, accent: str = "azure", *, system_dark: bool = True) -
         if name == "aurora":
             colors.update(_AURORA_OVERRIDES)
         mode = "dark"
-        accent_data = ACCENTS[accent]
+        accent_data = (
+            _custom_accent(custom_accent, surface=colors["surface"], mode="dark")
+            if accent == "custom"
+            else ACCENTS[accent]
+        )
         colors.update(
             {
                 "accent": accent_data["dark"],

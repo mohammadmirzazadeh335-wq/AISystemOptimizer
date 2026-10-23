@@ -63,6 +63,54 @@ class PromptDiagnostics:
         }
 
 
+@dataclass(frozen=True)
+class PromptSegment:
+    """One measured piece of the next request.
+
+    ``category`` is a stable id (``system``, ``persona``, ``memory``,
+    ``history``, ``attachment``); the page translates it. ``preview`` is the
+    first line of the real content, trimmed — enough to recognise the segment
+    without dumping the conversation into a chart tooltip.
+    """
+
+    category: str
+    label: str
+    chars: int
+    tokens: int
+    preview: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "category": self.category,
+            "label": self.label,
+            "chars": self.chars,
+            "tokens": self.tokens,
+            "preview": self.preview,
+        }
+
+
+@dataclass(frozen=True)
+class ContextMap:
+    """Measured composition of the prompt that would be sent right now."""
+
+    segments: tuple[PromptSegment, ...] = ()
+    total_tokens: int = 0
+    window: int = 0
+    ratio: float = 0.0
+    model_id: str = ""
+    history_messages: int = 0
+    memory_items: int = 0
+
+    def by_category(self) -> dict[str, int]:
+        totals: dict[str, int] = {}
+        for segment in self.segments:
+            totals[segment.category] = totals.get(segment.category, 0) + segment.tokens
+        return totals
+
+    def largest(self) -> PromptSegment | None:
+        return max(self.segments, key=lambda segment: segment.tokens, default=None)
+
+
 @dataclass
 class SendOutcome:
     user_message: Message | None = None
@@ -145,17 +193,12 @@ class ChatService:
         history_limit: int = DEFAULT_HISTORY_LIMIT,
         attachments: list["AttachmentRecord"] | None = None,
     ) -> tuple[list[dict[str, str]], PromptDiagnostics]:
-        system_blocks: list[str] = [
-            "You are MyAI Studio, a precise desktop assistant. "
-            "Answer in the user's language unless instructed otherwise.",
-        ]
-        persona_block = self._persona.build_system_block()
+        base_block, persona_block, memory_block = self._system_blocks(conversation)
+        system_blocks = [base_block]
         if persona_block:
             system_blocks.append(persona_block)
-        if bool(self._settings.get("memory.enabled", True)):
-            memory_block = self._memory.build_context_block(conversation.id)
-            if memory_block:
-                system_blocks.append(memory_block)
+        if memory_block:
+            system_blocks.append(memory_block)
 
         history = self._conversations.messages(conversation.id)
         trimmed = history[-history_limit:] if history_limit else history
@@ -205,6 +248,104 @@ class ChatService:
             usage_ratio=min(1.0, total / window) if window else 0.0,
         )
         return messages, diagnostics
+
+    def _system_blocks(self, conversation: Conversation) -> tuple[str, str, str]:
+        """Base instruction, persona block and memory block, in send order."""
+        base = (
+            "You are MyAI Studio, a precise desktop assistant. "
+            "Answer in the user's language unless instructed otherwise."
+        )
+        persona_block = self._persona.build_system_block()
+        memory_block = ""
+        if bool(self._settings.get("memory.enabled", True)):
+            memory_block = self._memory.build_context_block(conversation.id)
+        return base, persona_block or "", memory_block or ""
+
+    def context_map(
+        self,
+        conversation: Conversation,
+        *,
+        history_limit: int = DEFAULT_HISTORY_LIMIT,
+        max_history_segments: int = 40,
+    ) -> ContextMap:
+        """Measure what the next request would contain, segment by segment.
+
+        This mirrors :meth:`build_messages` — same blocks, same filters, same
+        trim — so the chart cannot drift away from what is actually sent.
+        """
+        base_block, persona_block, memory_block = self._system_blocks(conversation)
+        segments: list[PromptSegment] = [
+            PromptSegment("system", "", len(base_block), estimate_tokens(base_block), base_block[:80]),
+        ]
+        if persona_block:
+            segments.append(
+                PromptSegment("persona", "", len(persona_block), estimate_tokens(persona_block), persona_block[:80])
+            )
+        if memory_block:
+            segments.append(
+                PromptSegment("memory", "", len(memory_block), estimate_tokens(memory_block), memory_block[:80])
+            )
+
+        history = self._conversations.messages(conversation.id)
+        trimmed = history[-history_limit:] if history_limit else history
+        usable = [
+            message
+            for message in trimmed
+            if message.role in {"user", "assistant"}
+            and message.status != "error"
+            and (message.content or "").strip()
+        ]
+        overflow = max(0, len(usable) - max_history_segments)
+        for index, message in enumerate(usable):
+            if index < overflow:
+                continue
+            text = message.content or ""
+            attachments = [
+                str(item.get("name"))
+                for item in ((message.meta or {}).get("attachments") or [])
+                if item.get("name")
+            ]
+            if attachments and index != len(usable) - 1:
+                text = f"{text}\n\n[Attached files: {', '.join(attachments)}]"
+            preview = text.strip().splitlines()[0][:90] if text.strip() else ""
+            segments.append(
+                PromptSegment(
+                    "history",
+                    f"{message.role} #{index + 1}",
+                    len(text),
+                    estimate_tokens(text),
+                    preview,
+                )
+            )
+        if overflow:
+            hidden_chars = sum(len(message.content or "") for message in usable[:overflow])
+            segments.append(
+                PromptSegment(
+                    "history",
+                    f"older #{overflow}",
+                    hidden_chars,
+                    estimate_tokens("x" * hidden_chars),
+                    "",
+                )
+            )
+
+        model_id = conversation.model_id or str(self._settings.get("ai.default_model", ""))
+        window = self.context_window(model_id)
+        total = sum(segment.tokens for segment in segments)
+        memory_items = (
+            len(self._memory.all_for_conversation(conversation.id))
+            if bool(self._settings.get("memory.enabled", True))
+            else 0
+        )
+        return ContextMap(
+            segments=tuple(segments),
+            total_tokens=total,
+            window=window,
+            ratio=min(1.0, total / window) if window else 0.0,
+            model_id=model_id,
+            history_messages=len(usable),
+            memory_items=memory_items,
+        )
 
     def context_status(self, conversation: Conversation) -> dict[str, Any]:
         """Usage report for the inspector, kept separate from memory storage."""

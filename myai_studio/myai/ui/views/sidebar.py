@@ -18,15 +18,18 @@ from PySide6.QtCore import (
     QParallelAnimationGroup,
     QPropertyAnimation,
     QRect,
+    QRectF,
     QSize,
     Qt,
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen
+from PySide6.QtGui import QColor, QFontMetrics, QLinearGradient, QPainter, QPen
 from PySide6.QtWidgets import (
+    QAbstractButton,
     QAbstractItemView,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QListView,
@@ -48,7 +51,7 @@ from ..brand import LogoMark, Wordmark
 from ..theme import runtime
 from ..theme.icons import draw as draw_icon
 from ..theme.icons import icon
-from ..widgets.buttons import IconButton, NavButton
+from ..widgets.buttons import IconButton, NavButton, _HoverMixin
 from ..widgets.dialogs import ConfirmDialog, PromptDialog
 from ..widgets.feedback import Skeleton
 from ..widgets.fields import SearchField
@@ -371,6 +374,167 @@ class SidebarResizeGrip(QWidget):
         painter.setBrush(color)
         x = self.width() // 2 - runtime.px(1)
         painter.drawRoundedRect(x, self.height() // 2 - runtime.px(16), runtime.px(2), runtime.px(32), 1, 1)
+class _ScrollFade(QWidget):
+    """Clickable "more below" band at the bottom of the navigation column.
+
+    Eighteen destinations plus the chat list do not fit a 900 px window, so the
+    column scrolls. A plain cut-off row reads as a layout bug, so the last few
+    pixels are tinted with the sidebar colour and carry a chevron that scrolls a
+    page down. It disappears at the end of the list, and it never blocks a row
+    that is fully visible because it is only shown while content remains.
+    """
+
+    def __init__(self, scroll: QScrollArea, parent: QWidget) -> None:
+        super().__init__(parent)
+        self._scroll = scroll
+        self._hover = False
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFixedHeight(runtime.px(24))
+        self.setAccessibleName(tr("nav.more_below"))
+        self.setToolTip(tr("nav.more_below"))
+        bar = scroll.verticalScrollBar()
+        bar.valueChanged.connect(self._sync)
+        bar.rangeChanged.connect(lambda *_: self._sync())
+        self._sync()
+
+    def _sync(self) -> None:
+        bar = self._scroll.verticalScrollBar()
+        more = bar.maximum() > 0 and bar.value() < bar.maximum()
+        self.setVisible(more)
+        if more:
+            self.raise_()
+            self.update()
+
+    def enterEvent(self, event) -> None:  # noqa: ANN001
+        self._hover = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: ANN001
+        self._hover = False
+        self.update()
+        super().leaveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt API
+        if event.button() == Qt.MouseButton.LeftButton:
+            bar = self._scroll.verticalScrollBar()
+            bar.setValue(min(bar.maximum(), bar.value() + bar.pageStep()))
+        super().mouseReleaseEvent(event)
+
+    @paint_event
+    def paintEvent(self, painter: QPainter, event) -> None:  # noqa: ANN001, ARG002
+        theme = runtime.theme()
+        base = QColor(theme.color("sidebar"))
+        clear = QColor(base)
+        clear.setAlpha(0)
+        gradient = QLinearGradient(0, 0, 0, self.height())
+        gradient.setColorAt(0.0, clear)
+        gradient.setColorAt(0.65, base)
+        gradient.setColorAt(1.0, base)
+        painter.fillRect(self.rect(), gradient)
+        tone = theme.color("accent") if self._hover else theme.color("text_faint")
+        size = runtime.px(13)
+        rect = QRectF(
+            (self.width() - size) / 2,
+            (self.height() - size) / 2 + runtime.px(3),
+            size,
+            size,
+        )
+        draw_icon(painter, "chevron-down", rect, tone, 1.8)
+
+
+class LabTile(_HoverMixin, QAbstractButton):
+    """Compact, two-column navigation tile for the LAB group.
+
+    Five extra destinations at full 38 px rows pushed the AI section below the
+    fold; a grid of 30 px tiles keeps every page reachable at 1440x900 without
+    scrolling while staying a real, keyboard-focusable button.
+    """
+
+    def __init__(self, text: str, icon_name: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._text = text
+        self._icon = icon_name
+        self.setCheckable(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setFixedHeight(runtime.px(30))
+        self.setToolTip(text)
+        self.setAccessibleName(text)
+        self._collapsed = False
+        self._init_hover()
+
+    def set_collapsed(self, collapsed: bool) -> None:
+        if collapsed == self._collapsed:
+            return
+        self._collapsed = collapsed
+        self.setFixedHeight(runtime.px(40) if collapsed else runtime.px(30))
+        self.updateGeometry()
+        self.update()
+
+    def set_text(self, text: str) -> None:
+        self._text = text
+        self.setToolTip(text)
+        self.setAccessibleName(text)
+        self.update()
+
+    def sizeHint(self) -> QSize:
+        metrics = QFontMetrics(runtime.ui_font(12, 500))
+        return QSize(metrics.horizontalAdvance(self._text) + runtime.px(48), runtime.px(30))
+
+    def enterEvent(self, event) -> None:  # noqa: ANN001
+        self._animate_hover(1.0)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: ANN001
+        self._animate_hover(0.0)
+        super().leaveEvent(event)
+
+    @paint_event
+    def paintEvent(self, painter: QPainter, event) -> None:  # noqa: ANN001, ARG002
+        c = runtime.theme().color
+        rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        radius = runtime.px(8)
+        checked = self.isChecked()
+        if checked:
+            painter.setBrush(QColor(c("accent_soft")))
+            painter.setPen(QPen(QColor(runtime.theme().alpha("accent", 0.38)), 1))
+            painter.drawRoundedRect(rect, radius, radius)
+        elif self._hover_value > 0.01:
+            hover = QColor(c("nav_hover"))
+            hover.setAlphaF(min(1.0, 0.9 * self._hover_value))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(hover)
+            painter.drawRoundedRect(rect, radius, radius)
+        if self.hasFocus():
+            painter.setPen(QPen(QColor(c("ring")), 1, Qt.PenStyle.DashLine))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(rect.adjusted(1.5, 1.5, -1.5, -1.5), radius - 2, radius - 2)
+        tone = c("accent") if checked else c("text_muted")
+        rtl = self.layoutDirection() == Qt.LayoutDirection.RightToLeft
+        pad = runtime.px(9)
+        icon_size = runtime.px(15) if not self._collapsed else runtime.px(17)
+        if self._collapsed:
+            # Collapsed rail: icon only, centred, like the full-size nav rows.
+            x = (self.width() - icon_size) / 2
+            icon_rect = QRectF(x, (self.height() - icon_size) / 2, icon_size, icon_size)
+            draw_icon(painter, self._icon, icon_rect, tone, 1.7)
+            return
+        x = self.width() - pad - icon_size if rtl else pad
+        icon_rect = QRectF(x, (self.height() - icon_size) / 2, icon_size, icon_size)
+        draw_icon(painter, self._icon, icon_rect, tone, 1.7)
+        painter.setFont(runtime.ui_font(12, 500 if checked else 400))
+        painter.setPen(QColor(c("text") if checked else c("text_muted")))
+        text_left = pad + icon_size + runtime.px(7)
+        text_width = self.width() - text_left - pad
+        text_rect = QRectF(text_left, 0, max(0, text_width), self.height())
+        metrics = QFontMetrics(painter.font())
+        elided = metrics.elidedText(self._text, Qt.TextElideMode.ElideRight, int(text_rect.width()))
+        align = (Qt.AlignmentFlag.AlignRight if rtl else Qt.AlignmentFlag.AlignLeft) | Qt.AlignmentFlag.AlignVCenter
+        painter.drawText(text_rect, align, elided)
+
+
 class Sidebar(QFrame):
     new_chat_requested = Signal()
     conversation_selected = Signal(str)
@@ -385,6 +549,14 @@ class Sidebar(QFrame):
         ("memory", "database", "nav.memory"),
         ("persona", "user", "nav.persona"),
         ("studio", "code", "nav.studio"),
+    ]
+
+    LAB = [
+        ("review", "git", "nav.review"),
+        ("atlas", "route", "nav.atlas"),
+        ("context", "layers", "nav.context"),
+        ("appearance", "palette", "nav.appearance"),
+        ("doctor", "shield", "nav.doctor"),
     ]
 
     LIBRARY = [
@@ -542,6 +714,24 @@ class Sidebar(QFrame):
             self.nav_buttons[key] = button
             self.nav_layout.addWidget(button)
 
+        self.lab_label = QLabel(tr("nav.lab"))
+        self.lab_label.setProperty("role", "section")
+        self.lab_label.setContentsMargins(runtime.px(8), runtime.px(6), 0, runtime.px(2))
+        self.nav_layout.addWidget(self.lab_label)
+        lab_grid = QGridLayout()
+        lab_grid.setContentsMargins(0, 0, 0, 0)
+        lab_grid.setHorizontalSpacing(runtime.px(4))
+        lab_grid.setVerticalSpacing(runtime.px(2))
+        self.lab_grid = lab_grid
+        self.lab_tiles: list[LabTile] = []
+        for index, (key, icon_name, label_key) in enumerate(self.LAB):
+            tile = LabTile(tr(label_key), icon_name)
+            tile.clicked.connect(lambda _=False, k=key: self._activate_route(k))
+            self.nav_buttons[key] = tile
+            self.lab_tiles.append(tile)
+            lab_grid.addWidget(tile, index // 2, index % 2)
+        self.nav_layout.addLayout(lab_grid)
+
         self.ai_label = QLabel(tr("nav.ai_section"))
         self.ai_label.setProperty("role", "section")
         self.ai_label.setContentsMargins(runtime.px(8), runtime.px(6), 0, runtime.px(2))
@@ -553,6 +743,7 @@ class Sidebar(QFrame):
             self.nav_layout.addWidget(button)
 
         outer.addWidget(self.nav_scroll, 1)
+        self.nav_fade = _ScrollFade(self.nav_scroll, self)
         outer.addStretch(0)
         bottom = QHBoxLayout()
         bottom.setContentsMargins(0, runtime.px(4), 0, 0)
@@ -665,7 +856,11 @@ class Sidebar(QFrame):
         self._active_route = route
         self._clear_library_checks()
         if route in self.nav_buttons:
-            self.nav_buttons[route].setChecked(True)
+            button = self.nav_buttons[route]
+            button.setChecked(True)
+            # The column scrolls at 900 px; a page opened from the command
+            # palette must not leave its own button hidden above the fold.
+            self.nav_scroll.ensureWidgetVisible(button, 0, runtime.px(8))
         self.list_view.clearSelection()
 
     def focus_search(self) -> None:
@@ -888,6 +1083,17 @@ class Sidebar(QFrame):
             self.collapse_button.set_icon_name("panel-left" if not rtl else "panel-right")
             self.collapse_button.setToolTip(tr("nav.collapse"))
 
+    def _layout_lab_tiles(self, collapsed: bool) -> None:
+        """One icon column in the rail, a two-column grid when expanded."""
+        for tile in self.lab_tiles:
+            self.lab_grid.removeWidget(tile)
+        if collapsed:
+            for index, tile in enumerate(self.lab_tiles):
+                self.lab_grid.addWidget(tile, index, 0, 1, 2)
+        else:
+            for index, tile in enumerate(self.lab_tiles):
+                self.lab_grid.addWidget(tile, index // 2, index % 2)
+
     def _apply_collapsed_visibility(self, collapsed: bool) -> None:
         self.wordmark.setVisible(not collapsed)
         self.search.setVisible(not collapsed)
@@ -896,6 +1102,8 @@ class Sidebar(QFrame):
         self.folder_button.setVisible(not collapsed)
         self.library_label.setVisible(not collapsed)
         self.ai_label.setVisible(not collapsed)
+        self.lab_label.setVisible(not collapsed)
+        self._layout_lab_tiles(collapsed)
         for button in self.nav_buttons.values():
             button.set_collapsed(collapsed)
         self.settings_button.set_collapsed(collapsed)
@@ -935,8 +1143,19 @@ class Sidebar(QFrame):
         super().resizeEvent(event)
         self.grip.reposition()
         self._fit_chat_list()
+        self._place_fade()
 
     # --------------------------------------------------------------- themes/i18n
+
+    def _place_fade(self) -> None:
+        if not hasattr(self, "nav_fade"):
+            return
+        geometry = self.nav_scroll.geometry()
+        bar_width = runtime.px(10)
+        self.nav_fade.setFixedWidth(max(0, geometry.width() - bar_width))
+        self.nav_fade.move(geometry.x(), geometry.y() + geometry.height() - self.nav_fade.height())
+        self.nav_fade._sync()  # noqa: SLF001 - internal placement helper
+
     def refresh_theme(self) -> None:
         self.account.setStyleSheet(
             f"QFrame#AccountCard {{ background-color: {runtime.theme().color('surface')};"
@@ -956,7 +1175,8 @@ class Sidebar(QFrame):
         self.folder_button.setToolTip(tr("nav.new_folder"))
         self.library_label.setText(tr("nav.library"))
         self.ai_label.setText(tr("nav.ai_section"))
-        for key, _icon, label_key in self.LIBRARY + self.AI_PAGES:
+        self.lab_label.setText(tr("nav.lab"))
+        for key, _icon, label_key in self.LIBRARY + self.LAB + self.AI_PAGES:
             button = self.nav_buttons.get(key)
             if button is not None:
                 button.set_text(tr(label_key))

@@ -37,9 +37,13 @@ from .theme import runtime
 from .theme.manager import ThemeManager
 from .views.agent_page import AgentPage
 from .views.api_page import ApiPage
+from .views.appearance_page import AppearancePage
+from .views.atlas_page import AtlasPage
 from .views.chat_view import ChatView
 from .views.code_page import CodePage
 from .views.composer import Composer, human_size
+from .views.context_page import ContextPage
+from .views.doctor_page import DoctorPage
 from .views.header import Header
 from .views.inspector import Inspector
 from .views.media_page import ImagesPage, VideoPage
@@ -49,6 +53,7 @@ from .views.performance_page import PerformancePage
 from .views.persona_page import PersonaPage
 from .views.plugins_page import PluginsPage
 from .views.prompts_page import PromptsPage
+from .views.review_page import ReviewPage
 from .views.settings_dialog import SettingsDialog
 from .views.sidebar import Sidebar
 from .views.tasks_page import TasksPage
@@ -62,6 +67,7 @@ logger = logging.getLogger(__name__)
 AI_ROUTES = {
     "api", "memory", "persona", "studio", "code", "agent",
     "prompts", "tasks", "performance", "images", "video", "web", "plugins",
+    "review", "atlas", "context", "appearance", "doctor",
 }
 #: One source of truth for a page's header/window title (route -> title, subtitle).
 PAGE_TITLES = {
@@ -78,6 +84,11 @@ PAGE_TITLES = {
     "video": ("video.title", "video.subtitle"),
     "web": ("web.title", "web.subtitle"),
     "plugins": ("plugins.title", "plugins.subtitle"),
+    "review": ("review.title", "review.subtitle"),
+    "atlas": ("atlas.title", "atlas.subtitle"),
+    "context": ("context.title", "context.subtitle"),
+    "appearance": ("appearance.title", "appearance.subtitle"),
+    "doctor": ("doctor.title", "doctor.subtitle"),
 }
 
 
@@ -176,6 +187,11 @@ class MainWindow(QMainWindow):
         self.video_page = VideoPage(self.context)
         self.web_page = WebPageView(self.context)
         self.plugins_page = PluginsPage(self.context)
+        self.review_page = ReviewPage(self.context)
+        self.atlas_page = AtlasPage(self.context)
+        self.context_page = ContextPage(self.context)
+        self.appearance_page = AppearancePage(self.context)
+        self.doctor_page = DoctorPage(self.context)
         self._pages = {
             "api": self.api_page,
             "memory": self.memory_page,
@@ -190,6 +206,11 @@ class MainWindow(QMainWindow):
             "video": self.video_page,
             "web": self.web_page,
             "plugins": self.plugins_page,
+            "review": self.review_page,
+            "atlas": self.atlas_page,
+            "context": self.context_page,
+            "appearance": self.appearance_page,
+            "doctor": self.doctor_page,
         }
         for page in self._pages.values():
             self.stack.addWidget(page)
@@ -205,8 +226,16 @@ class MainWindow(QMainWindow):
         for page in (
             self.prompts_page, self.tasks_page, self.performance_page,
             self.images_page, self.video_page, self.web_page, self.plugins_page,
+            self.review_page, self.atlas_page, self.context_page,
+            self.appearance_page, self.doctor_page,
         ):
             page.notify.connect(self._show_toast)
+        self.review_page.open_code.connect(lambda: self._navigate("code"))
+        self.atlas_page.open_code.connect(lambda: self._navigate("code"))
+        self.atlas_page.open_file.connect(self._open_in_code)
+        self.context_page.open_chat.connect(lambda: self._navigate("chat"))
+        self.context_page.open_settings.connect(self.open_settings)
+        self.doctor_page.open_settings.connect(self.open_settings)
         self.prompts_page.use_prompt.connect(self._use_prompt)
 
     def _shortcuts(self) -> None:
@@ -387,6 +416,13 @@ class MainWindow(QMainWindow):
         self._update_window_title()
         if route == "memory":
             self.memory_page.set_context(self._current.id if self._current else None)
+        elif route in {"review", "atlas"}:
+            page = self._pages[route]
+            page.set_project(self.code_page.project)
+        elif route == "context":
+            self.context_page.set_conversation(self._current)
+        elif route == "doctor":
+            self.doctor_page.refresh()
         elif route == "persona":
             self.persona_page.refresh()
         elif route == "api":
@@ -480,6 +516,7 @@ class MainWindow(QMainWindow):
             ),
         ]
         route_icons = {key: icon for key, icon, _label in Sidebar.LIBRARY}
+        route_icons.update({key: icon for key, icon, _label in Sidebar.LAB})
         route_icons.update({key: icon for key, icon, _label in Sidebar.AI_PAGES})
         for route in PAGE_TITLES:
             title_key, subtitle_key = PAGE_TITLES[route]
@@ -1047,6 +1084,17 @@ class MainWindow(QMainWindow):
         else:
             self.stack.setCurrentWidget(self.chat_view)
             self.composer.show()
+
+    def _open_in_code(self, relative: str) -> None:
+        """Open a file chosen on the atlas in Code Studio, with the project."""
+        project = self.code_page.project
+        self._navigate("code")
+        if self.code_page.project is None and project is not None:
+            self.code_page.set_project(project)
+        try:
+            self.code_page.open_file(relative)
+        except Exception:  # noqa: BLE001 - the page reports its own errors
+            logger.exception("atlas_open_failed path=%s", relative)
 
     def _show_toast(self, message: str, level: str = "info") -> None:
         if not message:

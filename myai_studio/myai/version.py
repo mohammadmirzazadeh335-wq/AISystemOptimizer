@@ -7,10 +7,11 @@ APP_TAGLINE_EN = "Design, build and run with intelligent agents"
 APP_TAGLINE_FA = "طراحی، ساخت و اجرا با عامل‌های هوشمند"
 APP_ID = "com.myaistudio.ultimate"
 
-# Phase-by-phase release train.  Bumped at the end of every completed phase.
-VERSION = "0.5.0"
+# Phase-by-phase release train.  Bumped at the end of every completed phase,
+# and again for the capability round that followed Phase 5.
+VERSION = "0.6.0"
 PHASE = 5
-BUILD_CHANNEL = "Phase 5 - Ecosystem"
+BUILD_CHANNEL = "Phase 5 - Ecosystem + Laboratory"
 
 __all__ = [
     "APP_NAME",

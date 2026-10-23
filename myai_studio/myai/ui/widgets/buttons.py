@@ -65,8 +65,8 @@ class NavButton(_HoverMixin, QAbstractButton):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(runtime.px(38))
-        self.setMaximumHeight(runtime.px(38))
+        self.setMinimumHeight(runtime.px(36))
+        self.setMaximumHeight(runtime.px(36))
         self._init_hover()
         self.setToolTip(text)
 
@@ -86,7 +86,7 @@ class NavButton(_HoverMixin, QAbstractButton):
     def sizeHint(self) -> QSize:
         metrics = QFontMetrics(runtime.ui_font(13, 500))
         width = runtime.px(44) if self._collapsed else metrics.horizontalAdvance(self._text) + runtime.px(58)
-        return QSize(width, runtime.px(38))
+        return QSize(width, runtime.px(36))
 
     def enterEvent(self, event) -> None:  # noqa: ANN001
         self._animate_hover(1.0)

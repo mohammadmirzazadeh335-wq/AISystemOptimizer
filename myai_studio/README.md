@@ -4,7 +4,7 @@ A premium, local-first AI desktop workspace for Windows 11: multi-model chat, me
 a real code studio, supervised agents, media and research — delivered in five verified
 phases.
 
-> **Current build: Phase 5 — Ecosystem** (`v0.5.0`)
+> **Current build: Phase 5 — Ecosystem + Laboratory** (`v0.6.0`)
 > Chat streams from OpenRouter, memory and personality are real and editable, the Output
 > Studio keeps every revision, Code Studio opens real folders and runs real files, and the
 > agent acts **only** through twenty-two registered tools behind an approval gate. Phase 5
@@ -13,6 +13,13 @@ phases.
 > prompt packs, and full keyboard/screen-reader labelling. Image Studio, Video Studio and
 > web **search** are present and clearly marked **unavailable** — no provider exists — while
 > their libraries and direct page reading are real.
+>
+> **After Phase 5 (current branch):** a second hardening round (seven more agent tools,
+> a static Windows gate, API-key hygiene) and a final capability round that adds five
+> LAB pages — **Review** (real diff + patch dry-run), **Project Atlas** (import graph),
+> **Context Map** (what the next request really contains), **Appearance** (accent lab
+> with a WCAG audit) and **Diagnostics** (14 measured checks). See
+> [`docs/LAB_PAGES.md`](docs/LAB_PAGES.md) and its Persian counterpart.
 
 ![Welcome screen](artifacts/ui/01_welcome_midnight_fa.png)
 
@@ -81,6 +88,14 @@ phases.
 | Windows static gate: no POSIX import at import time, no unmasked child console, no locale-encoded text I/O, no unguarded POSIX API | **Verified here (17/17 portability checks)** | `scripts/check_windows_static.py`, `tests/unit/test_windows_static.py` (13) |
 | API-key hygiene: shape check before any request (blocks header injection), encrypted store, redaction in every log handler, key absent from DB and backups | **Works** | `tests/unit/test_api_key_safety.py` (19) |
 | Settings has no mock pages: the AI page writes a real temperature used on the next send, the Memory page shows the live row count and opens Memory | **Works** | `tests/ui/test_settings_dialog.py::test_temperature_slider_writes_the_real_setting`, `::test_memory_toggle_is_written_and_used` |
+| **Review**: line diff of any two project files with real `+ / − / ~` counts, character-level intra-line highlights, swap, save-diff | **Works** | `tests/unit/test_review.py` (15), `tests/ui/test_lab_pages.py::test_review_*`, `p6_review_*.png` |
+| **Review → Apply patch**: parses real `@@` hunks, dry-runs every hunk, refuses a patch whose context does not exist, writes only after confirmation | **Works** | `test_review_patch_preview_then_apply_writes_the_file`, `test_review_refuses_a_patch_that_does_not_apply` |
+| **Project Atlas**: the import graph of the open folder — files, lines, resolved imports, unlinked files, hub ranking, deterministic layout | **Works** | `tests/unit/test_atlas_and_context.py` (16), `p6_atlas_*.png` |
+| **Project Atlas → click a node**: switches to Code Studio with that file open | **Works** | `test_clicking_a_hub_opens_the_file_in_code_studio` |
+| **Context Map**: the next request measured from the blocks the sender really builds — donut, 100 % segment bar, five largest contributors, advice | **Works** | `tests/unit/test_atlas_and_context.py`, `p6_context_*.png` |
+| **Appearance**: six accents (custom = hue/saturation/brightness + hex), real-widget preview, WCAG 2.1 audit for seven pairs, apply/reset written to settings | **Works** | `tests/unit/test_colorlab.py` (29), `test_applying_an_accent_updates_the_theme`, `p6_appearance_*.png` |
+| **Diagnostics**: 14 measured checks (database, schema, disk, backups, logs, attachments, secrets, key shape, Windows names, workspace, settings, locales, rows, toolchains) with a weighted score and clipboard report | **Works** | `tests/unit/test_doctor.py` (14), `test_doctor_runs_every_check_and_reports_a_score`, `p6_doctor_*.png` |
+| **Sidebar LAB group**: five extra routes as 30 px two-column tiles; icon-only one-column rail when collapsed so nothing falls below the fold | **Works** | `test_collapsed_rail_keeps_every_lab_tile_visible_and_icon_only`, `lab_*_collapsed.png` |
 
 The complete, honest matrix lives in [`docs/PHASE4_REPORT.md`](docs/PHASE4_REPORT.md) §3
 (Phase 3: [`docs/PHASE3_REPORT.md`](docs/PHASE3_REPORT.md) §2)
@@ -180,10 +195,10 @@ with `-Installer`, requiring Inno Setup 6).
 ./scripts/run_tests.sh -q
 ```
 
-Last measured run (final code, after the last change of the second hardening round):
+Last measured run (final code of the LAB round):
 
 ```
-682 passed, 1 skipped in 302.73s (0:05:02)
+803 passed, 1 skipped in 509.58s (0:08:29)
 ```
 
 The skip is the opt-in live OpenRouter test, which needs a real key and network
@@ -202,7 +217,7 @@ tests/unit          providers (mocked transport), memory, persona, outputs, chat
 tests/ui            real widgets: window, sidebar, composer, dialogs, themes, RTL,
                     API/memory/personality/studio pages, Code Studio (real files and
                     real processes), Agent Mode (approval dialog, timeline, step limit),
-                    streaming bubbles
+                    streaming bubbles, the five LAB pages driven through the window
 tests/integration   cross-layer flows, backup secret-exclusion, restart survival
 ```
 
@@ -233,7 +248,8 @@ myai/
   data/               SQLAlchemy models, database lifecycle, repositories
   services/           settings, conversations, activity, backups, openrouter, chat,
                       memory, persona, outputs, toolchains, runner, projects,
-                      tools (registry + handlers), agent (bounded loop)
+                      tools (registry + handlers), agent (bounded loop),
+                      review (diff + patch), atlas (import graph), doctor (health)
   security/           encrypted secret store
   i18n/               translation runtime + fa/en catalogues
   ui/
@@ -241,7 +257,8 @@ myai/
     widgets/          buttons, fields, feedback, dialogs, markdown, painting guard
     views/            sidebar, header, composer, chat, inspector, settings, placeholders,
                       api_page, memory_page, persona_page, output_page, code_page,
-                      agent_page
+                      agent_page, review_page, atlas_page, context_page,
+                      appearance_page, doctor_page
     main_window.py    application shell
     brand.py          vector identity
 tests/                unit, ui, integration
@@ -276,6 +293,8 @@ artifacts/ui/         screenshots produced by scripts/capture_ui.py
 - [`docs/AGENT_MODE.md`](docs/AGENT_MODE.md) — Agent Mode guide: tools, approval, network setup
 - [`docs/AGENT_MODE_FA.md`](docs/AGENT_MODE_FA.md) — راهنمای حالت عامل (فارسی)
 - [`docs/INSTALL_FA.md`](docs/INSTALL_FA.md) — راهنمای نصب و اجرا (فارسی)
+- [`docs/LAB_PAGES.md`](docs/LAB_PAGES.md) — the five LAB capabilities: Review, Project Atlas, Context Map, Appearance, Diagnostics
+- [`docs/LAB_PAGES_FA.md`](docs/LAB_PAGES_FA.md) — راهنمای فارسی صفحه‌های LAB
 - [`docs/TESTING.md`](docs/TESTING.md) — how to run and extend the tests
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — the five phases and their acceptance criteria
 

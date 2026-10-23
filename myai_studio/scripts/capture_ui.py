@@ -643,6 +643,70 @@ def main() -> int:
     step(lambda: ctx.settings.update({"ui.theme": "midnight", "ui.language": "fa"}))
     step(lambda: app.processEvents())
 
+    # 9. LAB pages: Review, Project Atlas, Context Map, Appearance, Diagnostics.
+    lab_root = ctx.paths.projects_dir / "atlas-lab"
+    (lab_root / "src").mkdir(parents=True, exist_ok=True)
+    (lab_root / "main.py").write_text(
+        "from src.engine import Engine\nfrom src.config import load\n\n\n"
+        "def main() -> int:\n    engine = Engine(load('demo.toml'))\n    return engine.run()\n",
+        encoding="utf-8",
+    )
+    (lab_root / "src" / "__init__.py").write_text("", encoding="utf-8")
+    (lab_root / "src" / "engine.py").write_text(
+        "from .config import Config\nfrom . import utils\n\n\n"
+        "class Engine:\n    def __init__(self, config: Config) -> None:\n"
+        "        self.config = config\n\n    def run(self) -> int:\n        return utils.now()\n",
+        encoding="utf-8",
+    )
+    (lab_root / "src" / "config.py").write_text(
+        "from dataclasses import dataclass\n\n\n@dataclass\nclass Config:\n"
+        "    name: str = 'demo'\n\n\ndef load(path: str) -> Config:\n    return Config(name=path)\n",
+        encoding="utf-8",
+    )
+    (lab_root / "src" / "utils.py").write_text(
+        "from datetime import datetime\n\n\ndef now() -> int:\n    return datetime.now().year\n",
+        encoding="utf-8",
+    )
+    (lab_root / "README.md").write_text(
+        "# Atlas lab\n\nA four-file project that exists so the import graph is real.\n",
+        encoding="utf-8",
+    )
+
+    def open_lab_project() -> None:
+        page.set_project(page.projects.open_folder(lab_root))
+
+    def lab_context() -> None:
+        conversation = ctx.conversations.list()[0]
+        window._current = ctx.conversations.get(conversation.id)
+        window.context_page.set_conversation(window._current)
+
+    def doctor_run() -> None:
+        window.doctor_page.run_now()
+
+    for theme_key in ("midnight", "dawn"):
+        for language in ("en", "fa"):
+            step(lambda t=theme_key, lang=language: ctx.settings.update({"ui.theme": t, "ui.language": lang}))
+            step(open_lab_project)
+            step(lambda: window._navigate("review"))
+            step(lambda: app.processEvents())
+            step(lambda t=theme_key, lg=language: shot(f"p6_review_{t}_{lg}"))
+            step(lambda: window._navigate("atlas"))
+            step(lambda: app.processEvents())
+            step(lambda t=theme_key, lg=language: shot(f"p6_atlas_{t}_{lg}"))
+            step(lab_context)
+            step(lambda: window._navigate("context"))
+            step(lambda: app.processEvents())
+            step(lambda t=theme_key, lg=language: shot(f"p6_context_{t}_{lg}"))
+            step(lambda: window._navigate("appearance"))
+            step(lambda: app.processEvents())
+            step(lambda t=theme_key, lg=language: shot(f"p6_appearance_{t}_{lg}"))
+            step(lambda: window._navigate("doctor"))
+            step(doctor_run)
+            step(lambda: app.processEvents())
+            step(lambda t=theme_key, lg=language: shot(f"p6_doctor_{t}_{lg}"))
+    step(lambda: ctx.settings.update({"ui.theme": "midnight", "ui.language": "fa"}))
+    step(lambda: app.processEvents())
+
     step(confirm)
     step(settings_dialog)
     step(settings_language)

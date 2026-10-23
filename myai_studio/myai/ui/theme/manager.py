@@ -117,8 +117,14 @@ class ThemeManager(QObject):
         language = settings.get("ui.language", "fa")
         theme_name = settings.get("ui.theme", "midnight")
         accent = settings.get("ui.accent", "azure")
+        custom_accent = str(settings.get("ui.accent_custom", "") or "")
         self._scale = float(settings.get("ui.font_scale", 1.0) or 1.0)
-        theme = build_theme(theme_name, accent, system_dark=detect_system_dark())
+        theme = build_theme(
+            theme_name,
+            accent,
+            system_dark=detect_system_dark(),
+            custom_accent=custom_accent,
+        )
 
         if not self._style_set:
             if self._app not in _STYLED_APPS:
@@ -205,7 +211,10 @@ class ThemeManager(QObject):
         self._app.setPalette(palette)
 
     def _on_settings_changed(self, changes: dict) -> None:
-        relevant = {"ui.theme", "ui.accent", "ui.font_scale", "ui.language", "ui.density", "ui.reduce_motion"}
+        relevant = {
+            "ui.theme", "ui.accent", "ui.accent_custom", "ui.font_scale",
+            "ui.language", "ui.density", "ui.reduce_motion",
+        }
         if relevant & set(changes):
             self.apply()
 
@@ -429,6 +438,42 @@ QScrollBar::handle:horizontal {{
 QScrollBar::handle:horizontal:hover {{ background: {c('scrollbar_hover')}; }}
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0px; }}
 QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{ background: transparent; }}
+
+/* ------------------------------------------------------------------ sliders */
+QSlider {{ min-height: 26px; background: transparent; }}
+QSlider::groove:horizontal {{
+    height: 8px; border-radius: 4px; background: {c('surface_3')};
+    border: 1px solid {c('border')};
+}}
+/* The hue axis is a real rainbow, so the track shows one. */
+QSlider#HueSlider::groove:horizontal {{
+    height: 8px; border-radius: 4px; border: 1px solid {c('border')};
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #ff4d4d, stop:0.17 #ffd24d, stop:0.33 #7bff4d, stop:0.5 #4dffd2,
+        stop:0.66 #4d9dff, stop:0.83 #b44dff, stop:1 #ff4d9d);
+}}
+QSlider#HueSlider::sub-page:horizontal {{ background: transparent; }}
+QSlider#HueSlider::handle:horizontal {{
+    width: 16px; height: 16px; margin: -5px 0; border-radius: 8px;
+    background: {c('surface')}; border: 2px solid {c('text')};
+}}
+QSlider::sub-page:horizontal {{
+    height: 8px; border-radius: 4px; background: {c('accent_soft')};
+}}
+QSlider::add-page:horizontal {{
+    height: 8px; border-radius: 4px; background: transparent;
+}}
+QSlider::handle:horizontal {{
+    width: 16px; height: 16px; margin: -5px 0; border-radius: 8px;
+    background: {c('accent')}; border: 2px solid {c('bg')};
+}}
+QSlider::handle:horizontal:hover {{ background: {c('accent_hover')}; }}
+QSlider::handle:horizontal:disabled {{ background: {c('border_strong')}; }}
+QSlider::groove:vertical {{ width: 6px; border-radius: 3px; background: {c('surface_3')}; }}
+QSlider::handle:vertical {{
+    height: 14px; margin: 0 -5px; border-radius: 7px;
+    background: {c('accent')}; border: 2px solid {c('surface')};
+}}
 
 QScrollArea {{ border: none; background: transparent; }}
 QScrollArea > QWidget > QWidget {{ background: transparent; }}

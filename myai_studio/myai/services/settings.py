@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import re
 import threading
 from collections.abc import Callable, Iterable
 from typing import Any
@@ -25,6 +26,7 @@ DEFAULTS: dict[str, Any] = {
     "ui.language": "fa",
     "ui.theme": "midnight",
     "ui.accent": "azure",
+    "ui.accent_custom": "",
     "ui.font_scale": 1.0,
     "ui.reduce_motion": False,
     "ui.density": "comfortable",
@@ -251,9 +253,16 @@ class SettingsService:
                 raise ValidationError("Unsupported theme", message_key="error.settings")
             return value
         if key in {"ui.accent"}:
-            if value not in {"azure", "violet", "teal", "amber", "rose"}:
+            if value not in {"azure", "violet", "teal", "amber", "rose", "custom"}:
                 raise ValidationError("Unsupported accent", message_key="error.settings")
             return value
+        if key == "ui.accent_custom":
+            text = str(value or "").strip().lower()
+            if text and not re.fullmatch(r"#[0-9a-f]{6}", text):
+                raise ValidationError(
+                    "Custom accent must be #rrggbb", message_key="error.settings"
+                )
+            return text
         if key in {"ui.density"}:
             if value not in {"comfortable", "compact"}:
                 raise ValidationError("Unsupported density", message_key="error.settings")

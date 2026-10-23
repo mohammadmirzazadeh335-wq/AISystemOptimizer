@@ -54,6 +54,19 @@ def redact(text: str) -> str:
     return out
 
 
+def find_secrets(text: str) -> list[str]:
+    """Every credential-shaped token in ``text`` (deduplicated, in order)."""
+    if not text or not isinstance(text, str):
+        return []
+    found: list[str] = []
+    for pattern in _PATTERNS:
+        for match in pattern.finditer(text):
+            value = match.group(2) if pattern.groups and match.lastindex and match.lastindex >= 2 else match.group(0)
+            if value not in found:
+                found.append(value)
+    return found
+
+
 def contains_secret(text: str, secrets: list[str]) -> bool:
     """True when any of ``secrets`` appears verbatim (used by the tests)."""
     if not text:
