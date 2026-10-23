@@ -4,7 +4,8 @@ A premium, local-first AI desktop workspace for Windows 11: multi-model chat, me
 a real code studio, supervised agents, media and research — delivered in five verified
 phases.
 
-> **Current build: Phase 5 — Ecosystem + Laboratory** (`v0.6.0`)
+> **Current build: `0.7.3` — Phase 5 + LAB + Round 3, with a Windows x64 release**
+> (`v0.7.3`; the phase notes below describe the shipped feature set)
 > Chat streams from OpenRouter, memory and personality are real and editable, the Output
 > Studio keeps every revision, Code Studio opens real folders and runs real files, and the
 > agent acts **only** through twenty-two registered tools behind an approval gate. Phase 5
@@ -30,7 +31,7 @@ phases.
 
 ## Download (Windows x64)
 
-[**MyAI Studio Ultimate 0.7.2 — Windows x64**](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.7.2/MyAIStudio-v0.7.2-windows-x64.zip) — about 59 MB.
+[**MyAI Studio Ultimate 0.7.3 — Windows x64**](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.7.3/MyAIStudio-v0.7.3-windows-x64.zip) — about 59 MB.
 
 Extract the zip and run `MyAIStudio.exe`; keep the `_internal` folder beside it.
 Data lives in `%APPDATA%\MyAIStudio`; projects default to `Documents\MyAI Studio Projects`. The build is produced by
@@ -313,6 +314,7 @@ artifacts/ui/         screenshots produced by scripts/capture_ui.py
 - [`docs/LAB_PAGES.md`](docs/LAB_PAGES.md) — the five LAB capabilities: Review, Project Atlas, Context Map, Appearance, Diagnostics
 - [`docs/LAB_PAGES_FA.md`](docs/LAB_PAGES_FA.md) — راهنمای فارسی صفحه‌های LAB
 - [`docs/ROUND3_CAPABILITIES.md`](docs/ROUND3_CAPABILITIES.md) — global search, usage & cost, file history
+- [`docs/FINAL_DEBUG_REPORT.md`](docs/FINAL_DEBUG_REPORT.md) — the final debug pass and the Windows build ([فارسی](docs/FINAL_DEBUG_REPORT_FA.md))
 - [`docs/ROUND3_CAPABILITIES_FA.md`](docs/ROUND3_CAPABILITIES_FA.md) — جست‌وجوی سراسری، مصرف و هزینه، تاریخچه‌ی فایل (فارسی)
 - [`docs/TESTING.md`](docs/TESTING.md) — how to run and extend the tests
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — the five phases and their acceptance criteria

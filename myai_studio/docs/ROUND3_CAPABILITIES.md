@@ -135,7 +135,7 @@ cross-compile), so the binary is built on GitHub's `windows-latest` runner by
 | package | `RUNNING.txt` added, `dist/MyAIStudio` zipped, uploaded as an artifact, and attached to the release for tag pushes |
 
 **Download (Windows x64):**
-[`MyAIStudio-v0.7.2-windows-x64.zip`](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.7.2/MyAIStudio-v0.7.2-windows-x64.zip)
+[`MyAIStudio-v0.7.3-windows-x64.zip`](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.7.3/MyAIStudio-v0.7.3-windows-x64.zip)
 
 Extract the zip and run `MyAIStudio.exe`; the `_internal` folder must stay next
 to it. Data lives in `%APPDATA%\MyAIStudio` unless `MYAI_STUDIO_HOME` is set.

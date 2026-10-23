@@ -8,7 +8,7 @@
 
 اگر نمی‌خواهید پایتون نصب کنید، فایل اجرایی آمادهٔ ویندوز ۶۴ بیتی را از ریلیز بگیرید:
 
-[`MyAIStudio-v0.7.2-windows-x64.zip`](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.7.2/MyAIStudio-v0.7.2-windows-x64.zip) (حدود ۵۹ مگابایت)
+[`MyAIStudio-v0.7.3-windows-x64.zip`](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.7.3/MyAIStudio-v0.7.3-windows-x64.zip) (حدود ۵۹ مگابایت)
 
 1. زیپ را در یک پوشهٔ قابل‌نوشتن (مثلاً `C:\MyAIStudio`) استخراج کنید.
 2. `MyAIStudio.exe` را اجرا کنید؛ پوشهٔ `_internal` را جابه‌جا یا حذف نکنید.

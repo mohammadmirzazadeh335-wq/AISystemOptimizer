@@ -54,7 +54,10 @@ jobs:
           exit $code
 
       - name: Report failures as annotations
-        if: always()
+        # Reporting is diagnostics, never the verdict: a broken report parser must
+        # not turn a green suite red. The step below carries the real exit code.
+        if: steps.pytest.outcome == 'failure'
+        continue-on-error: true
         run: python scripts/ci_report_failures.py pytest.xml --log pytest.log --write ci-failures.txt
 
       - name: Publish the failure list (best effort)
