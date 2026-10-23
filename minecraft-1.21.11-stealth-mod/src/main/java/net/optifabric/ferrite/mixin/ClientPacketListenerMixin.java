@@ -26,6 +26,7 @@ public abstract class ClientPacketListenerMixin {
 	@Inject(
 		method = "handleMovePlayer(Lnet/minecraft/network/protocol/game/ClientboundPlayerPositionPacket;)V",
 		at = @At("HEAD"),
+		cancellable = true,
 		require = 0
 	)
 	private void onPreHandleMovePlayer(ClientboundPlayerPositionPacket packet, CallbackInfo ci) {
@@ -36,6 +37,9 @@ public abstract class ClientPacketListenerMixin {
 		if (player != null) {
 			ferrite$savedYaw = player.getYRot();
 			ferrite$savedPitch = player.getXRot();
+		}
+		if (FlightModule.INSTANCE.onInterceptServerSetback(packet)) {
+			ci.cancel();
 		}
 	}
 
@@ -50,9 +54,9 @@ public abstract class ClientPacketListenerMixin {
 		}
 		LocalPlayer player = Minecraft.getInstance().player;
 		if (player != null) {
-			// Silent No-Rotate Setback: preserve player camera yaw & pitch so server setbacks don't jerk aim
-			player.setYRot(ferrite$savedYaw);
-			player.setXRot(ferrite$savedPitch);
+			// Silent No-Rotate Setback (+0.000001f forces sendPosition() to resync server rotation cleanly)
+			player.setYRot(ferrite$savedYaw + 0.000001F);
+			player.setXRot(ferrite$savedPitch + 0.000001F);
 			player.yRotO = ferrite$savedYaw;
 			player.xRotO = ferrite$savedPitch;
 			FlightModule.INSTANCE.onServerSetback(player, player.getY());
