@@ -85,6 +85,11 @@ class SearchField(QFrame):
     def text(self) -> str:
         return self._edit.text()
 
+    def set_text(self, text: str) -> None:
+        """Programmatic fill (global search results pre-filter a page)."""
+        self._edit.setText(text)
+        self._edit.setFocus(Qt.FocusReason.ShortcutFocusReason)
+
     def set_kbd_hint(self, text: str) -> None:
         self._kbd.setText(text)
 

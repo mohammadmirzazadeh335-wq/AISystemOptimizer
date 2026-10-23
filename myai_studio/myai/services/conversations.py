@@ -93,6 +93,13 @@ class ConversationService:
     def stats(self, conversation_id: str) -> dict[str, Any]:
         return self._conversations.stats(conversation_id)
 
+    def search_messages(self, needle: str, limit: int = 20) -> list[dict[str, Any]]:
+        """Message bodies matching ``needle``, newest first (global search)."""
+        term = (needle or "").strip()
+        if not term:
+            return []
+        return self._messages.search_text(term, limit)
+
     def folders(self) -> list[Folder]:
         return self._folders.list()
 
@@ -170,11 +177,20 @@ class ConversationService:
         model_id: str = "",
         status: str = "complete",
         meta: dict | None = None,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
     ) -> Message:
         if role not in {"user", "assistant", "system", "tool"}:
             raise ValidationError(f"Invalid role: {role}")
         message = self._messages.add(
-            conversation_id, role, content, model_id=model_id, status=status, meta=meta
+            conversation_id,
+            role,
+            content,
+            model_id=model_id,
+            status=status,
+            meta=meta,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
         )
         conversation = self._conversations.get(conversation_id)
         self._bus.emit(Events.MESSAGE_CREATED, message=message, conversation=conversation)

@@ -36,6 +36,8 @@ from myai.ui.theme import runtime  # noqa: E402
 from myai.ui.theme.manager import ThemeManager  # noqa: E402
 from myai.ui.views.settings_dialog import SettingsDialog  # noqa: E402
 from myai.ui.widgets.dialogs import ConfirmDialog  # noqa: E402
+from myai.ui.widgets.global_search import GlobalSearchDialog  # noqa: E402
+from myai.ui.widgets.history_panel import HistoryDialog  # noqa: E402
 
 SAMPLE_ASSISTANT = """## A plan that actually runs
 
@@ -704,6 +706,151 @@ def main() -> int:
             step(doctor_run)
             step(lambda: app.processEvents())
             step(lambda t=theme_key, lg=language: shot(f"p6_doctor_{t}_{lg}"))
+    step(lambda: ctx.settings.update({"ui.theme": "midnight", "ui.language": "fa"}))
+    step(lambda: app.processEvents())
+
+    # 10. Round-3 capabilities: usage/cost, global search, file history.
+    from datetime import datetime as _dt
+
+    from sqlalchemy import update as _update
+
+    from myai.data.models import Message as _Message
+
+    def seed_usage() -> None:
+        ctx.settings.update(
+            {
+                "ai.openrouter_cache": [
+                    {"id": "anthropic/claude-sonnet-4", "name": "Claude Sonnet 4",
+                     "prompt_price": 3.0, "completion_price": 15.0},
+                    {"id": "openai/gpt-4o-mini", "name": "GPT-4o mini",
+                     "prompt_price": 0.15, "completion_price": 0.6},
+                    {"id": "google/gemini-2.5-flash", "name": "Gemini 2.5 Flash",
+                     "prompt_price": 0.3, "completion_price": 2.5},
+                    {"id": "deepseek/deepseek-chat", "name": "DeepSeek Chat",
+                     "prompt_price": 0.27, "completion_price": 1.1},
+                    {"id": "meta-llama/llama-3.3-70b-instruct", "name": "Llama 3.3 70B",
+                     "prompt_price": 0.12, "completion_price": 0.3},
+                ],
+                "usage.monthly_budget": 4.0,
+                "usage.range_days": 30,
+            }
+        )
+        demo_conversation = ctx.conversations.create("Usage ledger  ·  last 30 days")
+        import random as _random
+
+        rng = _random.Random(11)
+        priced = [
+            "anthropic/claude-sonnet-4",
+            "openai/gpt-4o-mini",
+            "google/gemini-2.5-flash",
+            "deepseek/deepseek-chat",
+            "meta-llama/llama-3.3-70b-instruct",
+        ]
+        weights = [0.16, 0.34, 0.22, 0.16, 0.12]
+        today = _dt.utcnow()
+        for offset in range(29, -1, -1):
+            replies = rng.choice([0, 1, 1, 2, 2, 3])
+            for index in range(replies):
+                model = rng.choices(priced, weights=weights, k=1)[0]
+                if offset == 1 and index == 0:
+                    model = "local/llama-3.2-3b"  # deliberately unpriced
+                input_tokens = rng.randint(9000, 62000)
+                output_tokens = rng.randint(1200, 11000)
+                message = ctx.conversations.add_message(
+                    demo_conversation.id,
+                    "assistant",
+                    "Seeded usage entry for the dashboard preview.",
+                    model_id=model,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                )
+                when = today - _td(days=offset, hours=rng.randint(0, 9), minutes=rng.randint(0, 59))
+                with ctx.db.session() as session:
+                    session.execute(
+                        _update(_Message)
+                        .where(_Message.id == message.id)
+                        .values(created_at=when, updated_at=when)
+                    )
+
+    from datetime import timedelta as _td
+
+    lab_project = page.projects.open_folder(lab_root)
+
+    def seed_history_versions() -> None:
+        page.set_project(lab_project)
+        for index in range(3):
+            if index:
+                time.sleep(1.05)  # one snapshot per second reads as a real history
+            page.projects.write(
+                lab_project,
+                "src/engine.py",
+                (
+                    "from .config import Config\nfrom . import utils\n\n\n"
+                    f"RETRIES = {index}\n\n\n"
+                    "class Engine:\n    def __init__(self, config: Config) -> None:\n"
+                    "        self.config = config\n\n    def run(self) -> int:\n"
+                    "        return utils.now()\n"
+                ),
+            )
+
+    def factory_usage_context() -> None:
+        window._current = ctx.conversations.get(conversation.id)
+
+
+    def open_search_dialog(note: str) -> None:
+        dialog = GlobalSearchDialog(
+            window,
+            ctx.search,
+            lambda hit, query: None,
+            project=lab_project,
+            conversation_id=conversation.id,
+        )
+        dialog.search.setText("engine")
+        dialog._run_search()
+        dialog._fixed_size = (runtime.px(780), runtime.px(600))
+        dialog_shot(dialog, f"r3_search_{note}")
+
+    def open_history_dialog(note: str) -> None:
+        page.set_project(lab_project)
+        dialog = HistoryDialog(
+            window,
+            ctx.history,
+            page.projects,
+            lab_project,
+            "src/engine.py",
+            page.projects.read(lab_project, "src/engine.py").text,
+            lambda text: None,
+        )
+        dialog._on_row(len(dialog._snapshots) - 1)  # the oldest, so the diff is real
+        dialog._fixed_size = (runtime.px(920), runtime.px(620))
+        dialog_shot(dialog, f"r3_history_{note}")
+
+    def open_code_history() -> None:
+        page.set_project(lab_project)
+        page.open_file("src/engine.py")
+
+    step(seed_usage)
+    step(seed_history_versions)
+    for theme_key in ("midnight", "dawn"):
+        for language in ("en", "fa"):
+            note = f"{theme_key}_{language}"
+            step(lambda t=theme_key, lg=language: ctx.settings.update({"ui.theme": t, "ui.language": lg}))
+            step(lambda: window._navigate("usage"))
+            step(lambda: app.processEvents())
+            step(lambda t=theme_key, lg=language: shot(f"r3_usage_{t}_{lg}"))
+            step(lambda n=note: open_search_dialog(n))
+            step(lambda n=note: open_history_dialog(n))
+    step(open_code_history)
+    step(lambda: ctx.settings.update({"ui.theme": "midnight", "ui.language": "en"}))
+    step(lambda: window._navigate("code"))
+    step(lambda: app.processEvents())
+    step(lambda: shot("r3_code_history_button_midnight_en"))
+    step(lambda: ctx.settings.update({"ui.theme": "midnight", "ui.language": "fa", "ui.font_scale": 1.5}))
+    step(lambda: window._navigate("usage"))
+    step(lambda: app.processEvents())
+    step(lambda: shot("r3_usage_midnight_fa_scale1_5"))
+    step(lambda: ctx.settings.update({"ui.font_scale": 1.0}))
+    step(lambda: window.resize(1440, 900))
     step(lambda: ctx.settings.update({"ui.theme": "midnight", "ui.language": "fa"}))
     step(lambda: app.processEvents())
 

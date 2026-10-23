@@ -73,6 +73,10 @@ DEFAULTS: dict[str, Any] = {
     "web.safe_search": True,
     # Plugins (phase 5)
     "plugins.enabled": [],
+    # Usage & cost (LAB round 2)
+    "usage.monthly_budget": 0.0,
+    "usage.range_days": 30,
+    "usage.history_limit": 40,
     # Data
     "data.backup_on_exit": False,
     "data.backups_to_keep": 10,
@@ -221,6 +225,10 @@ class SettingsService:
                 raise ValidationError("window width out of range", message_key="error.settings")
             if key == "ui.window_height" and not 600 <= number <= 8000:
                 raise ValidationError("window height out of range", message_key="error.settings")
+            if key == "usage.range_days" and number not in {7, 30, 90}:
+                raise ValidationError("usage range out of range", message_key="error.settings")
+            if key == "usage.history_limit" and not 5 <= number <= 200:
+                raise ValidationError("history limit out of range", message_key="error.settings")
             return number
         if isinstance(default, float):
             try:
@@ -237,6 +245,8 @@ class SettingsService:
                 raise ValidationError("context warning ratio out of range", message_key="error.settings")
             if key == "code.timeout_seconds" and not 1.0 <= number <= 120.0:
                 raise ValidationError("code timeout out of range", message_key="error.settings")
+            if key == "usage.monthly_budget" and not 0.0 <= number <= 1_000_000.0:
+                raise ValidationError("budget out of range", message_key="error.settings")
             return number
         if key == "web.search_url":
             text = str(value or "").strip()

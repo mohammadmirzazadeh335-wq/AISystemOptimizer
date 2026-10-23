@@ -20,6 +20,12 @@ phases.
 > **Context Map** (what the next request really contains), **Appearance** (accent lab
 > with a WCAG audit) and **Diagnostics** (14 measured checks). See
 > [`docs/LAB_PAGES.md`](docs/LAB_PAGES.md) and its Persian counterpart.
+>
+> **Round 3 (this branch):** three everyday capabilities — **global search** over
+> every local source (Ctrl+Shift+F), a **Usage & cost** dashboard built from the
+> tokens the provider reported plus the cached per-million prices, and **file
+> history** in Code Studio where every save/patch is a version and a restore is
+> itself versioned. See [`docs/ROUND3_CAPABILITIES.md`](docs/ROUND3_CAPABILITIES.md).
 
 ![Welcome screen](artifacts/ui/01_welcome_midnight_fa.png)
 
@@ -295,6 +301,8 @@ artifacts/ui/         screenshots produced by scripts/capture_ui.py
 - [`docs/INSTALL_FA.md`](docs/INSTALL_FA.md) — راهنمای نصب و اجرا (فارسی)
 - [`docs/LAB_PAGES.md`](docs/LAB_PAGES.md) — the five LAB capabilities: Review, Project Atlas, Context Map, Appearance, Diagnostics
 - [`docs/LAB_PAGES_FA.md`](docs/LAB_PAGES_FA.md) — راهنمای فارسی صفحه‌های LAB
+- [`docs/ROUND3_CAPABILITIES.md`](docs/ROUND3_CAPABILITIES.md) — global search, usage & cost, file history
+- [`docs/ROUND3_CAPABILITIES_FA.md`](docs/ROUND3_CAPABILITIES_FA.md) — جست‌وجوی سراسری، مصرف و هزینه، تاریخچه‌ی فایل (فارسی)
 - [`docs/TESTING.md`](docs/TESTING.md) — how to run and extend the tests
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — the five phases and their acceptance criteria
 

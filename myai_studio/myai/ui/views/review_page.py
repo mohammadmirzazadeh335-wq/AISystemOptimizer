@@ -49,7 +49,7 @@ class ReviewPage(PageShell):
     def __init__(self, context) -> None:  # noqa: ANN001
         super().__init__("review.title", "review.subtitle", icon_name="git")
         self.context = context
-        self.projects = ProjectService(context.paths, context.settings)
+        self.projects = ProjectService(context.paths, context.settings, history=getattr(context, "history", None))
         self.project: Project | None = None
         self._files: list[str] = []
         self._left = ""
@@ -393,7 +393,7 @@ class ReviewPage(PageShell):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         try:
-            self.projects.write(self.project, target, preview.updated)
+            self.projects.write(self.project, target, preview.updated, reason="patch")
         except Exception as exc:  # noqa: BLE001
             self.notify.emit(str(exc), "error")
             return

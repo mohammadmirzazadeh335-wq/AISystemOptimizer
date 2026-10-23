@@ -179,7 +179,7 @@ class AtlasPage(PageShell):
         from ...services.projects import ProjectService
 
         if not hasattr(self, "_projects"):
-            self._projects = ProjectService(self.context.paths, self.context.settings)
+            self._projects = ProjectService(self.context.paths, self.context.settings, history=getattr(self.context, "history", None))
         return self._projects
 
     def _fill_hubs(self, atlas: Atlas | None) -> None:

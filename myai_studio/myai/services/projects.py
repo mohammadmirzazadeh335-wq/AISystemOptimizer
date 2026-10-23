@@ -108,9 +108,15 @@ def language_for(path: Path | str) -> str:
 
 
 class ProjectService:
-    def __init__(self, paths: AppPaths, settings: SettingsService) -> None:
+    def __init__(self, paths: AppPaths, settings: SettingsService, history=None) -> None:  # noqa: ANN001
         self._paths = paths
         self._settings = settings
+        # Optional so tests and tools can keep using ProjectService alone; when a
+        # HistoryService is attached every write keeps the previous state.
+        self._history = history
+
+    def attach_history(self, history) -> None:  # noqa: ANN001
+        self._history = history
 
     # ------------------------------------------------------------------ project
     def open_folder(self, path: str | Path) -> Project:
@@ -269,7 +275,9 @@ class ProjectService:
             truncated=truncated,
         )
 
-    def write(self, project: Project, relative: str, text: str) -> FileContent:
+    def write(
+        self, project: Project, relative: str, text: str, *, reason: str = "save"
+    ) -> FileContent:
         target = self.resolve(project, relative)
         data = text.encode("utf-8")
         if len(data) > MAX_FILE_BYTES:
@@ -283,13 +291,18 @@ class ProjectService:
         # process holds the file open, which the caller reports verbatim.
         os.replace(tmp, target)
         logger.info("project_file_saved path=%s bytes=%s", relative, len(data))
+        if self._history is not None:
+            try:
+                self._history.record(project.root, relative, text, reason=reason)
+            except Exception:  # noqa: BLE001 - a version log must never block a save
+                logger.exception("history_record_failed path=%s", relative)
         return self.read(project, relative)
 
     def create_file(self, project: Project, relative: str, content: str = "") -> FileContent:
         target = self.resolve(project, relative)
         if target.exists():
             raise ValidationError("A file or folder with that name already exists")
-        return self.write(project, relative, content)
+        return self.write(project, relative, content, reason="create")
 
     def rename(self, project: Project, relative: str, new_name: str) -> str:
         source = self.resolve(project, relative)

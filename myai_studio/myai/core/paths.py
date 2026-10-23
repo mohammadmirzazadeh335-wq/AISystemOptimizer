@@ -88,6 +88,10 @@ class AppPaths:
     def projects_dir(self) -> Path:
         return self.home / "projects"
 
+    @property
+    def history_dir(self) -> Path:
+        return self.home / "history"
+
     def ensure(self) -> "AppPaths":
         for path in (
             self.home,
@@ -100,6 +104,7 @@ class AppPaths:
             self.videos_dir,
             self.documents_dir,
             self.projects_dir,
+            self.history_dir,
         ):
             path.mkdir(parents=True, exist_ok=True)
         return self

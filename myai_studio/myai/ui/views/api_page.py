@@ -148,7 +148,11 @@ class ApiPage(PageShell):
         row = QHBoxLayout()
         row.setSpacing(runtime.px(7))
         self.save_key = primary_button(tr("api.save_key"), "lock")
+        # A key that is not typed cannot be saved; keeping the button live only
+        # produced an error message after a pointless click.
+        self.save_key.setEnabled(False)
         self.save_key.clicked.connect(self._save_key)
+        self.key_input.textChanged.connect(self._sync_key_button)
         row.addWidget(self.save_key)
         self.show_key = ghost_button(tr("api.show_key"), "eye")
         self.show_key.setCheckable(True)
@@ -286,6 +290,7 @@ class ApiPage(PageShell):
         if hasattr(self, "test_button"):
             self.test_button.setEnabled(has_key)
         self.key_input.clear()
+        self._sync_key_button()
         self.key_input.setPlaceholderText(masked if has_key else "sk-or-v1-…")
         self.save_key.setText(tr("api.replace_key") if has_key else tr("api.save_key"))
         if has_key:
@@ -303,6 +308,9 @@ class ApiPage(PageShell):
     def _toggle_visibility(self, visible: bool) -> None:
         self.key_input.setEchoMode(QLineEdit.EchoMode.Normal if visible else QLineEdit.EchoMode.Password)
         self.show_key.setText(tr("api.hide_key") if visible else tr("api.show_key"))
+
+    def _sync_key_button(self) -> None:
+        self.save_key.setEnabled(bool(self.key_input.text().strip()))
 
     def _save_key(self) -> None:
         from ...services.openrouter import api_key_problem

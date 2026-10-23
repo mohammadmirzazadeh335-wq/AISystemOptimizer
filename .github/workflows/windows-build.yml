@@ -1,0 +1,124 @@
+name: Windows build
+
+# Builds a genuine Windows executable on GitHub's windows-latest runner.
+# PyInstaller cannot cross-compile, so this is the only way to produce a
+# real .exe from the Linux development host.
+#
+# Trigger: push a v* tag (the build then publishes a release with the zip),
+# or run the workflow manually to get the artifact without a release.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  tests:
+    name: Test suite (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: myai_studio
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            myai_studio/requirements.txt
+            myai_studio/requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Run the test suite
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q
+
+  build:
+    name: PyInstaller build + packaged smoke test
+    # Deliberately independent of the test job: a platform-specific test
+    # failure must not hide the executable, but the result is still reported.
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: myai_studio
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build and smoke-test the executable
+        env:
+          # The runner has no interactive desktop; the offscreen platform keeps
+          # the packaged smoke test deterministic.
+          QT_QPA_PLATFORM: offscreen
+        run: ./scripts/build_windows.ps1 -SkipTests
+
+      - name: Show what was built
+        run: |
+          if (-not (Test-Path "dist/MyAIStudio/MyAIStudio.exe")) { throw "MyAIStudio.exe missing" }
+          "{0:N1} MB" -f ((Get-ChildItem dist/MyAIStudio -Recurse | Measure-Object Length -Sum).Sum / 1MB)
+
+      - name: Add run instructions to the package
+        run: |
+          $version = (Select-String -Path myai/version.py -Pattern '^VERSION = "(.*)"').Matches.Groups[1].Value
+          $text = @(
+            "MyAI Studio Ultimate $version - Windows x64",
+            "",
+            "1. Extract this whole folder somewhere you can write to.",
+            "2. Run MyAIStudio.exe (keep MyAIStudio.exe next to the _internal folder).",
+            "3. Data lives in %USERPROFILE%\.myai_studio unless MYAI_STUDIO_HOME is set.",
+            "",
+            "Built with PyInstaller on GitHub Actions (windows-latest, Python 3.11).",
+            "The packaged executable was smoke-started on the build runner before this zip was created."
+          ) -join "`r`n"
+          Set-Content -Path dist/MyAIStudio/RUNNING.txt -Value $text -Encoding UTF8
+
+      - name: Package the onedir build
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if (-not $tag -or $tag -eq "main") { $tag = "dev" }
+          $zip = "MyAIStudio-$tag-windows-x64.zip"
+          Compress-Archive -Path dist/MyAIStudio -DestinationPath $zip -Force
+          Get-Item $zip | Format-List Name, Length
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyAIStudio-windows-x64
+          path: myai_studio/MyAIStudio-*-windows-x64.zip
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publish release (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $zip = "MyAIStudio-$tag-windows-x64.zip"
+          $version = (Select-String -Path myai/version.py -Pattern '^VERSION = "(.*)"').Matches.Groups[1].Value
+          $notes = "Windows x64 build of MyAI Studio Ultimate $version (PyInstaller onedir).`n`n" +
+            "Built on GitHub's windows-latest runner from tag $tag.`n" +
+            "The packaged executable was started with --smoke and exited with code 0 before this zip was created.`n`n" +
+            "Run MyAIStudio.exe from the extracted folder; keep the folder intact (the runtime files live beside it)."
+          gh release create $tag $zip --title "MyAI Studio $tag (Windows x64)" --notes $notes

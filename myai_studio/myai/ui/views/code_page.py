@@ -48,6 +48,7 @@ from ...services.toolchains import ToolchainRegistry, ToolchainUnavailable, regi
 from ..theme import runtime
 from ..widgets.fields import FlowLayout, SelectField
 from ..widgets.foundation import Badge
+from ..widgets.history_panel import HistoryDialog
 from .page_base import PageShell, ghost_button, primary_button, secondary_button
 
 # --------------------------------------------------------------------- syntax
@@ -353,7 +354,7 @@ class CodePage(PageShell):
             actions_below=True,
         )
         self.context = context
-        self.projects = ProjectService(context.paths, context.settings)
+        self.projects = ProjectService(context.paths, context.settings, history=getattr(context, "history", None))
         self.runner = Runner()
         self.toolchains: ToolchainRegistry = registry()
         self.project: Project | None = None
@@ -401,6 +402,7 @@ class CodePage(PageShell):
         self.stop_button.clicked.connect(self.stop_run)
         self.actions_flow.addWidget(self.stop_button)
 
+        self.actions_flow.addWidget(self._toolbar_divider())
         # File actions live beside the project actions: inside a 208 px tree
         # header they left the folder name with a two-letter stub.
         self.new_file_button = ghost_button("", "plus")
@@ -418,6 +420,11 @@ class CodePage(PageShell):
         self.delete_button.setToolTip(tr("code.delete_file"))
         self.delete_button.clicked.connect(self.delete_selected)
         self.actions_flow.addWidget(self.delete_button)
+        self.actions_flow.addWidget(self._toolbar_divider())
+        self.history_button = ghost_button(tr("code.history"), "history")
+        self.history_button.setToolTip(tr("code.history_hint"))
+        self.history_button.clicked.connect(self.open_history)
+        self.actions_flow.addWidget(self.history_button)
 
         splitter = QSplitter(Qt.Orientation.Vertical)
         splitter.setChildrenCollapsible(False)
@@ -442,6 +449,13 @@ class CodePage(PageShell):
         self.splitter = splitter
         self.add_widget(splitter)
         self.body.setStretchFactor(splitter, 1)
+
+    @staticmethod
+    def _toolbar_divider() -> QFrame:
+        divider = QFrame()
+        divider.setProperty("panel", "vdivider")
+        divider.setFixedSize(1, runtime.px(22))
+        return divider
 
     def _build_tree_card(self) -> QWidget:
         frame = QFrame()
@@ -866,6 +880,36 @@ class CodePage(PageShell):
             self._populate_tree()
             self.notify.emit(tr("code.saved_toast", name=self.current_file), "success")
         return True
+
+    def open_history(self) -> None:
+        if self.project is None or self.current_file is None:
+            self.notify.emit(tr("code.select_file_first"), "warning")
+            return
+        if self.editor.isReadOnly():
+            self.notify.emit(tr("code.binary_warning"), "warning")
+            return
+        dialog = HistoryDialog(
+            self.window(),
+            self.context.history,
+            self.projects,
+            self.project,
+            self.current_file,
+            self.editor.toPlainText(),
+            on_restored=self._on_version_restored,
+            on_notify=lambda text, tone: self.notify.emit(text, tone),
+        )
+        dialog.exec()
+
+    def _on_version_restored(self, text: str) -> None:
+        """Mirror the restored text in the editor after the service wrote it."""
+        self.editor.blockSignals(True)
+        self.editor.setPlainText(text)
+        self.editor.blockSignals(False)
+        self._dirty = False
+        self._clean_text = text
+        self._mark_clean()
+        self._populate_tree()
+        self._update_project_ui()
 
     def new_file(self) -> None:
         if self.project is None:

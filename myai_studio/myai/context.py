@@ -29,16 +29,20 @@ from .services.agent import AgentService
 from .services.attachments import AttachmentService
 from .services.chat import ChatService, build_chat_service
 from .services.conversations import ConversationService
+from .services.history import HistoryService
 from .services.media import MediaService
 from .services.memory import MemoryService
 from .services.outputs import OutputService
 from .services.performance import PerformanceService
 from .services.persona import PersonaService
 from .services.plugins import PluginService
+from .services.projects import ProjectService
 from .services.prompts import PromptService
+from .services.search import SearchService
 from .services.settings import SettingsService
 from .services.tasks import TaskService
 from .services.tools import registry as tool_registry
+from .services.usage import UsageService
 from .services.web import WebService
 
 logger = logging.getLogger(__name__)
@@ -65,6 +69,9 @@ class AppContext:
     media: MediaService
     plugins: PluginService
     web: WebService
+    history: HistoryService
+    search: SearchService
+    usage: UsageService
     _booted: bool = field(default=False, repr=False)
 
     @property
@@ -124,6 +131,17 @@ def build_context(home: str | Path | None = None, *, log: bool = True) -> AppCon
     media = MediaService(paths)
     plugins = PluginService(paths, settings, prompts, bus)
     web = WebService()
+    history = HistoryService(paths, int(settings.get("usage.history_limit", 40) or 40))
+    project_service = ProjectService(paths, settings, history=history)
+    search = SearchService(
+        conversations,
+        prompts=prompts,
+        memory=memory,
+        outputs=outputs,
+        tasks=tasks,
+        projects=project_service,
+    )
+    usage = UsageService(MessageRepository(db), settings)
     chat = build_chat_service(
         db=db,
         bus=bus,
@@ -164,4 +182,7 @@ def build_context(home: str | Path | None = None, *, log: bool = True) -> AppCon
         media=media,
         plugins=plugins,
         web=web,
+        history=history,
+        search=search,
+        usage=usage,
     )

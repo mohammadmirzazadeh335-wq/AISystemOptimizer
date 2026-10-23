@@ -705,7 +705,7 @@ def test_layout_survives_font_scale_and_small_window(ui, scale) -> None:
     ctx.settings.set("ui.font_scale", scale)
     pump()
     try:
-        for route in ("api", "memory", "persona", "studio"):
+        for route in ("api", "memory", "persona", "studio", "usage"):
             window._navigate(route)
             pump()
             page = window._pages[route]

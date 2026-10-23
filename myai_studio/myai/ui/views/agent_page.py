@@ -129,7 +129,7 @@ class AgentPage(PageShell):
         self.context = context
         self.agent = context.agent
         self.registry: ToolRegistry = self.agent.tools
-        self.projects = ProjectService(context.paths, context.settings)
+        self.projects = ProjectService(context.paths, context.settings, history=getattr(context, "history", None))
         self.runner = Runner()
         self.project: Project | None = None
         self._models: list[dict] = []

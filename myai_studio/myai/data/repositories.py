@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import delete, func, or_, select, text
@@ -241,6 +242,8 @@ class MessageRepository:
         model_id: str = "",
         status: str = "complete",
         meta: dict[str, Any] | None = None,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
     ) -> Message:
         with self.db.session() as session:
             conversation = session.get(Conversation, conversation_id)
@@ -253,6 +256,8 @@ class MessageRepository:
                 model_id=model_id,
                 status=status,
                 meta=meta or {},
+                input_tokens=max(0, int(input_tokens or 0)),
+                output_tokens=max(0, int(output_tokens or 0)),
             )
             session.add(message)
             conversation.message_count = int(conversation.message_count or 0) + 1
@@ -283,6 +288,61 @@ class MessageRepository:
             if conversation_id:
                 stmt = stmt.where(Message.conversation_id == conversation_id)
             return int(session.scalar(stmt) or 0)
+
+    def search_text(self, needle: str, limit: int = 20) -> list[dict[str, Any]]:
+        """Newest messages whose body contains ``needle`` (case-insensitive)."""
+        with self.db.session() as session:
+            like = f"%{needle}%"
+            stmt = (
+                select(Message, Conversation.title)
+                .join(Conversation, Conversation.id == Message.conversation_id)
+                .where(Message.content.ilike(like))
+                .order_by(Message.created_at.desc())
+                .limit(max(1, int(limit)))
+            )
+            return [
+                {
+                    "id": message.id,
+                    "conversation_id": message.conversation_id,
+                    "conversation_title": title or "",
+                    "role": message.role,
+                    "content": message.content,
+                    "created_at": message.created_at,
+                }
+                for message, title in session.execute(stmt).all()
+            ]
+
+    def usage_since(self, since: datetime) -> list[dict[str, Any]]:
+        """Tokens grouped by UTC day, model and role.
+
+        Only rows that carry usage are interesting; an empty assistant reply
+        still counts as a request, a user message never does.
+        """
+        with self.db.session() as session:
+            day = func.date(Message.created_at)
+            stmt = (
+                select(
+                    day,
+                    Message.model_id,
+                    Message.role,
+                    func.coalesce(func.sum(Message.input_tokens), 0),
+                    func.coalesce(func.sum(Message.output_tokens), 0),
+                    func.count(Message.id),
+                )
+                .where(Message.created_at >= since)
+                .group_by(day, Message.model_id, Message.role)
+            )
+            return [
+                {
+                    "day": str(row[0]),
+                    "model_id": row[1] or "",
+                    "role": row[2] or "",
+                    "input_tokens": int(row[3] or 0),
+                    "output_tokens": int(row[4] or 0),
+                    "messages": int(row[5] or 0),
+                }
+                for row in session.execute(stmt).all()
+            ]
 
 
 class SettingRepository:

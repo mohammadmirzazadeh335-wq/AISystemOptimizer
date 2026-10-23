@@ -137,12 +137,17 @@ class NavButton(_HoverMixin, QAbstractButton):
             draw_icon(painter, self._icon, icon_rect, tone_color, 1.7)
             painter.setFont(runtime.ui_font(13, 500 if checked else 400))
             painter.setPen(QColor(c("text") if checked else c("text_muted")))
-            text_pad = runtime.px(38)
+            # Keep the label next to the icon at every sidebar width: the old
+            # arithmetic left a wide dead gap at 1.5x font scale, so the icon
+            # sat at the edge and the text floated far from it.
+            gap = runtime.px(10)
             if rtl:
-                text_rect = QRectF(pad, 0, self.width() - text_pad - pad + icon_size - runtime.px(30), content_height)
+                lead = pad + icon_size + gap
+                text_rect = QRectF(pad, 0, self.width() - lead - pad, content_height)
                 align = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
             else:
-                text_rect = QRectF(pad + icon_size + runtime.px(10), 0, self.width() - icon_size - text_pad - pad - runtime.px(20), content_height)
+                lead = pad + icon_size + gap
+                text_rect = QRectF(lead, 0, self.width() - lead - pad, content_height)
                 align = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
             metrics = QFontMetrics(painter.font())
             elided = metrics.elidedText(self._text, Qt.TextElideMode.ElideRight, int(text_rect.width()))

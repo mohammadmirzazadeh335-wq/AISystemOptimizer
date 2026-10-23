@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PySide6.QtCore import Property, QEasingCurve, QPropertyAnimation, QRectF, Qt
+from PySide6.QtCore import Property, QEasingCurve, QPointF, QPropertyAnimation, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
@@ -261,6 +261,121 @@ class SegmentBar(QWidget):
             painter.drawRect(QRectF(x, 0, max(0.0, width - 1), self.height()))
             x += width
         painter.restore()
+
+
+class BarSeries(QWidget):
+    """Vertical bars for a short daily series (spend, tokens).
+
+    The value is the height; the label is shown on hover and on a few x-axis
+    ticks, so a 90-day series still reads.  A non-zero bar keeps a 2 px floor so
+    a tiny value stays visible; a zero day draws only a hairline, never a stub.
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._values: list[tuple[str, float]] = []
+        self._caption = ""
+        self._hover = -1
+        self.setMouseTracking(True)
+        self.setFixedHeight(runtime.px(148))
+        self.setMinimumWidth(runtime.px(180))
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setAccessibleName("bar series")
+
+    def set_data(self, values: list[tuple[str, float]], *, caption: str = "") -> None:
+        self._values = [(label, max(0.0, float(value))) for label, value in values]
+        self._caption = caption
+        self.update()
+
+    def values(self) -> list[tuple[str, float]]:
+        return list(self._values)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802 - Qt API
+        index = self._index_at(event.position().x())
+        if index != self._hover:
+            self._hover = index
+            if 0 <= index < len(self._values):
+                label, value = self._values[index]
+                self.setToolTip(f"{label} · {self._caption.format(value)}" if self._caption else label)
+            self.update()
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802 - Qt API
+        self._hover = -1
+        self.update()
+        super().leaveEvent(event)
+
+    def _index_at(self, x: float) -> int:
+        if not self._values:
+            return -1
+        pad = runtime.px(6)
+        width = max(1.0, self.width() - pad * 2)
+        step = width / len(self._values)
+        index = int((x - pad) / step)
+        return max(0, min(len(self._values) - 1, index)) if x >= pad else -1
+
+    @paint_event
+    def paintEvent(self, painter: QPainter, event) -> None:  # noqa: N802, ARG002
+        painter.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
+        theme = runtime.theme()
+        pad = runtime.px(6)
+        label_height = runtime.px(18)
+        chart_height = max(runtime.px(20), self.height() - label_height - pad)
+        width = max(1.0, self.width() - pad * 2)
+        baseline = chart_height
+        if not self._values:
+            painter.setPen(QColor(theme.color("text_faint")))
+            painter.setFont(runtime.ui_font(10))
+            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "—")
+            return
+        peak = max((value for _, value in self._values), default=0.0) or 1.0
+        step = width / len(self._values)
+        gap = max(1.5, min(runtime.px(3), step * 0.28))
+        bar_width = max(1.5, step - gap)
+
+        # Grid: three faint lines, drawn before the bars.
+        grid = QPen(QColor(theme.color("border")))
+        grid.setWidthF(1.0)
+        painter.setPen(grid)
+        for fraction in (0.25, 0.5, 0.75, 1.0):
+            y = baseline - chart_height * fraction
+            painter.drawLine(QPointF(pad, y), QPointF(pad + width, y))
+
+        accent = QColor(theme.color("accent"))
+        hairline = QColor(theme.color("border"))
+        hairline.setAlphaF(0.55)
+        for index, (_label, value) in enumerate(self._values):
+            x = pad + index * step + gap / 2
+            if value <= 0:
+                painter.setPen(QPen(hairline, 1.0))
+                painter.drawLine(
+                    QPointF(x, baseline - 1), QPointF(x + bar_width, baseline - 1)
+                )
+                continue
+            height = max(2.0, chart_height * (value / peak))
+            rect = QRectF(x, baseline - height, bar_width, height)
+            color = QColor(accent)
+            # Older days fade slightly; the hovered and newest bars stay solid.
+            if index == self._hover:
+                color = QColor(theme.color("accent_glow")) if "accent_glow" in theme.colors else accent
+            elif index != len(self._values) - 1:
+                color.setAlphaF(0.62)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(color)
+            painter.drawRoundedRect(rect, min(3.0, bar_width / 2), min(3.0, bar_width / 2))
+
+        painter.setPen(QColor(theme.color("text_faint")))
+        painter.setFont(runtime.ui_font(9))
+        tick_every = max(1, len(self._values) // 6)
+        for index, (label, _value) in enumerate(self._values):
+            if index % tick_every and index != len(self._values) - 1:
+                continue
+            x = pad + index * step
+            painter.drawText(
+                QRectF(x - step, baseline + runtime.px(3), step * 2, label_height),
+                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+                label,
+            )
 
 
 def _rounded_path(rect: QRectF, radius: float):  # noqa: ANN202 - QPainterPath

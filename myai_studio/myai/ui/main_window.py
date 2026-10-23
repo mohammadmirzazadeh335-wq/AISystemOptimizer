@@ -57,9 +57,11 @@ from .views.review_page import ReviewPage
 from .views.settings_dialog import SettingsDialog
 from .views.sidebar import Sidebar
 from .views.tasks_page import TasksPage
+from .views.usage_page import UsagePage
 from .views.web_page import WebPageView
 from .widgets.dialogs import ConfirmDialog, PreviewDialog, PromptDialog
 from .widgets.feedback import ToastManager
+from .widgets.global_search import GlobalSearchDialog
 from .widgets.palette import CommandPalette, PaletteAction
 
 logger = logging.getLogger(__name__)
@@ -67,7 +69,7 @@ logger = logging.getLogger(__name__)
 AI_ROUTES = {
     "api", "memory", "persona", "studio", "code", "agent",
     "prompts", "tasks", "performance", "images", "video", "web", "plugins",
-    "review", "atlas", "context", "appearance", "doctor",
+    "review", "atlas", "context", "appearance", "doctor", "usage",
 }
 #: One source of truth for a page's header/window title (route -> title, subtitle).
 PAGE_TITLES = {
@@ -89,6 +91,7 @@ PAGE_TITLES = {
     "context": ("context.title", "context.subtitle"),
     "appearance": ("appearance.title", "appearance.subtitle"),
     "doctor": ("doctor.title", "doctor.subtitle"),
+    "usage": ("usage.title", "usage.subtitle"),
 }
 
 
@@ -192,6 +195,7 @@ class MainWindow(QMainWindow):
         self.context_page = ContextPage(self.context)
         self.appearance_page = AppearancePage(self.context)
         self.doctor_page = DoctorPage(self.context)
+        self.usage_page = UsagePage(self.context)
         self._pages = {
             "api": self.api_page,
             "memory": self.memory_page,
@@ -211,6 +215,7 @@ class MainWindow(QMainWindow):
             "context": self.context_page,
             "appearance": self.appearance_page,
             "doctor": self.doctor_page,
+            "usage": self.usage_page,
         }
         for page in self._pages.values():
             self.stack.addWidget(page)
@@ -227,7 +232,7 @@ class MainWindow(QMainWindow):
             self.prompts_page, self.tasks_page, self.performance_page,
             self.images_page, self.video_page, self.web_page, self.plugins_page,
             self.review_page, self.atlas_page, self.context_page,
-            self.appearance_page, self.doctor_page,
+            self.appearance_page, self.doctor_page, self.usage_page,
         ):
             page.notify.connect(self._show_toast)
         self.review_page.open_code.connect(lambda: self._navigate("code"))
@@ -236,6 +241,8 @@ class MainWindow(QMainWindow):
         self.context_page.open_chat.connect(lambda: self._navigate("chat"))
         self.context_page.open_settings.connect(self.open_settings)
         self.doctor_page.open_settings.connect(self.open_settings)
+        self.usage_page.open_chat.connect(lambda: self._navigate("chat"))
+        self.usage_page.open_catalogue.connect(lambda: self._navigate("api"))
         self.prompts_page.use_prompt.connect(self._use_prompt)
 
     def _shortcuts(self) -> None:
@@ -243,6 +250,8 @@ class MainWindow(QMainWindow):
         self.shortcut_new.activated.connect(self.new_chat)
         self.shortcut_search = QShortcut(QKeySequence("Ctrl+K"), self)
         self.shortcut_search.activated.connect(self.sidebar.focus_search)
+        self.shortcut_search_all = QShortcut(QKeySequence("Ctrl+Shift+F"), self)
+        self.shortcut_search_all.activated.connect(self.open_global_search)
         self.shortcut_palette = QShortcut(QKeySequence("Ctrl+Shift+P"), self)
         self.shortcut_palette.activated.connect(self.open_palette)
         self.shortcut_code = QShortcut(QKeySequence("Ctrl+Shift+C"), self)
@@ -495,6 +504,38 @@ class MainWindow(QMainWindow):
         self.composer.set_text(prompt)
         self.composer.focus_input()
 
+    # ------------------------------------------------------------ global search
+    def open_global_search(self) -> None:
+        dialog = GlobalSearchDialog(
+            self,
+            self.context.search,
+            self._open_search_hit,
+            project=self.code_page.project,
+            conversation_id=self._current.id if self._current is not None else None,
+        )
+        dialog.exec()
+
+    def _open_search_hit(self, hit, query: str = "") -> None:  # noqa: ANN001
+        if hit.source in {"conversation", "message"}:
+            conversation_id = (
+                hit.ref if hit.source == "conversation" else hit.extra.get("conversation_id", "")
+            )
+            if conversation_id:
+                self.open_conversation(conversation_id)
+            return
+        if hit.source == "file":
+            self._open_in_code(hit.ref)
+            return
+        routes = {"prompt": "prompts", "memory": "memory", "output": "studio", "task": "tasks"}
+        route = routes.get(hit.source)
+        if route is None:
+            return
+        self._navigate(route)
+        page = self._pages.get(route)
+        search = getattr(page, "search", None)
+        if query and search is not None and hasattr(search, "set_text"):
+            search.set_text(query)
+
     # ----------------------------------------------------------------- palette
     def _palette_actions(self) -> list[PaletteAction]:
         actions: list[PaletteAction] = [
@@ -513,6 +554,14 @@ class MainWindow(QMainWindow):
                 icon="search",
                 keywords=("find", "conversation"),
                 run=self.sidebar.focus_search,
+            ),
+            PaletteAction(
+                id="search.everything",
+                title=tr("palette.search_all"),
+                hint="Ctrl+Shift+F",
+                icon="search",
+                keywords=("find", "everything", "prompt", "file", "memory"),
+                run=self.open_global_search,
             ),
         ]
         route_icons = {key: icon for key, icon, _label in Sidebar.LIBRARY}

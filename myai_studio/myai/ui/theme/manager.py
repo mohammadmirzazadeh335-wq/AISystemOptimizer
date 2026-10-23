@@ -356,6 +356,9 @@ QPushButton[variant="ghost"] {{ background: transparent; border: 1px solid trans
 QPushButton[variant="ghost"]:hover {{ background: {c('surface_2')}; color: {c('text')}; }}
 QPushButton[variant="danger"] {{ background: {c('danger_soft')}; color: {c('danger')}; border: 1px solid {c('danger')}; }}
 QPushButton[variant="danger"]:hover {{ background: {c('danger')}; color: {c('accent_contrast')}; }}
+QPushButton[variant="danger"]:disabled {{
+    background: transparent; color: {c('text_faint')}; border: 1px solid {c('border')};
+}}
 QPushButton[variant="link"] {{ border: none; background: transparent; color: {c('accent')}; padding: 2px 4px; }}
 QPushButton[variant="link"]:hover {{ color: {c('accent_hover')}; background: transparent; }}
 QPushButton[buttonsize="sm"] {{ padding: {round(4 * scale)}px {round(9 * scale)}px; font-size: {fs(12)}px; }}
