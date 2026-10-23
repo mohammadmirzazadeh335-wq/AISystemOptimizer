@@ -66,6 +66,15 @@ def _from_log(path: Path) -> list[tuple[str, str, str]]:
 
 
 def main(argv: list[str]) -> int:
+    # A Windows runner's stdout is cp1252 unless told otherwise; printing a
+    # test name with "›" or a Persian log line then raises UnicodeEncodeError
+    # and the whole report step dies silently. Force UTF-8 and never fail on
+    # an unencodable character again.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+        except (AttributeError, ValueError):
+            pass
     args = argv[1:]
     report = Path(args[0]) if args and not args[0].startswith("-") else Path("pytest.xml")
     log = Path("pytest.log")
