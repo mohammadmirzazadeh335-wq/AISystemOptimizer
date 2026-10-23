@@ -30,10 +30,10 @@ phases.
 
 ## Download (Windows x64)
 
-[**MyAI Studio Ultimate 0.7.1 — Windows x64**](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.7.1/MyAIStudio-v0.7.1-windows-x64.zip) — about 59 MB.
+[**MyAI Studio Ultimate 0.7.2 — Windows x64**](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.7.2/MyAIStudio-v0.7.2-windows-x64.zip) — about 59 MB.
 
 Extract the zip and run `MyAIStudio.exe`; keep the `_internal` folder beside it.
-Data lives in `%USERPROFILE%\.myai_studio`. The build is produced by
+Data lives in `%APPDATA%\MyAIStudio`; projects default to `Documents\MyAI Studio Projects`. The build is produced by
 `.github/workflows/windows-build.yml` on GitHub's `windows-latest` runner, where the
 packaged executable is smoke-started before the zip is published. It is **not
 code-signed**, so Windows SmartScreen asks for confirmation on first launch.

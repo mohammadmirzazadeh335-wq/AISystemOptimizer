@@ -9,7 +9,7 @@ APP_ID = "com.myaistudio.ultimate"
 
 # Phase-by-phase release train.  Bumped at the end of every completed phase,
 # and again for the capability round that followed Phase 5.
-VERSION = "0.7.1"
+VERSION = "0.7.2"
 PHASE = 6
 BUILD_CHANNEL = "Round 3.1 - Windows release, final debug"
 

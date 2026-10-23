@@ -47,11 +47,32 @@ jobs:
         continue-on-error: true
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m pytest -q --tb=short --junitxml=pytest.xml
+        run: |
+          python -m pytest -q --tb=short -rf --junitxml=pytest.xml *> pytest.log
+          $code = $LASTEXITCODE
+          Get-Content pytest.log -Tail 25
+          exit $code
 
       - name: Report failures as annotations
         if: always()
-        run: python scripts/ci_report_failures.py pytest.xml
+        run: python scripts/ci_report_failures.py pytest.xml --log pytest.log --write ci-failures.txt
+
+      - name: Publish the failure list (best effort)
+        if: always() && steps.pytest.outcome == 'failure'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $repo = "${{ github.repository }}"
+          $sha = "${{ github.sha }}"
+          gh api -X POST "repos/$repo/git/refs" -f ref=refs/heads/ci-reports -f sha=$sha 2>&1 | Out-Null
+          $existing = gh api "repos/$repo/contents/ci/last-run.txt?ref=ci-reports" --jq .sha 2>&1
+          $args = @("-X", "PUT", "repos/$repo/contents/ci/last-run.txt",
+                    "-f", "message=ci: windows failure report",
+                    "-f", "branch=ci-reports",
+                    "-f", "content=$([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content ci-failures.txt -Raw))))")
+          if ($existing -match '^[0-9a-f]{40}$') { $args += @("-f", "sha=$existing") }
+          gh api @args | Out-Null
 
       - name: Fail the job if tests failed
         if: steps.pytest.outcome == 'failure'
@@ -98,7 +119,8 @@ jobs:
             "",
             "1. Extract this whole folder somewhere you can write to.",
             "2. Run MyAIStudio.exe (keep MyAIStudio.exe next to the _internal folder).",
-            "3. Data lives in %USERPROFILE%\.myai_studio unless MYAI_STUDIO_HOME is set.",
+            "3. Data lives in %APPDATA%\MyAIStudio; projects default to Documents\MyAI Studio Projects.",
+            "   Set MYAI_STUDIO_HOME to relocate everything.",
             "",
             "Built with PyInstaller on GitHub Actions (windows-latest, Python 3.11).",
             "The packaged executable was smoke-started on the build runner before this zip was created."

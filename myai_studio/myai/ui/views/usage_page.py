@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ...i18n import tr
+from ...i18n import is_rtl, tr
 from ...services.usage import CURRENCY, RANGES, UsageReport
 from ..theme import runtime
 from ..widgets.buttons import SegmentedControl
@@ -96,6 +96,12 @@ class UsagePage(PageShell):
         self.cost_label = QLabel("$0.00")
         self.cost_label.setFont(runtime.ui_font(30, 700))
         self.cost_label.setProperty("role", "h1")
+        # A bare "‑" before a currency would read as part of the number for an
+        # RTL eye; the big figure follows the reading direction instead.
+        self.cost_label.setAlignment(
+            Qt.AlignmentFlag.AlignVCenter
+            | (Qt.AlignmentFlag.AlignRight if is_rtl() else Qt.AlignmentFlag.AlignLeft)
+        )
         cost_row.addWidget(self.cost_label)
         self.total_sub = QLabel("")
         self.total_sub.setProperty("role", "muted")
@@ -381,6 +387,10 @@ class UsagePage(PageShell):
     # -------------------------------------------------------------- language
     def retranslate(self) -> None:
         super().retranslate()
+        self.cost_label.setAlignment(
+            Qt.AlignmentFlag.AlignVCenter
+            | (Qt.AlignmentFlag.AlignRight if is_rtl() else Qt.AlignmentFlag.AlignLeft)
+        )
         self.total_caption.setText(tr("usage.total_caption"))
         self.price_note.setText(tr("usage.price_note"))
         self.chart_hint.setText(tr("usage.daily_hint"))

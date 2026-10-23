@@ -132,10 +132,10 @@
 | بسته‌بندی | افزودن `RUNNING.txt`، زیپ‌کردن `dist/MyAIStudio`، بارگذاری به‌عنوان artifact و پیوست به ریلیز هنگامِ پوش تگ |
 
 **دانلود (ویندوز ۶۴ بیتی):**
-[`MyAIStudio-v0.7.1-windows-x64.zip`](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.7.1/MyAIStudio-v0.7.1-windows-x64.zip)
+[`MyAIStudio-v0.7.2-windows-x64.zip`](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.7.2/MyAIStudio-v0.7.2-windows-x64.zip)
 
 زیپ را استخراج کنید و `MyAIStudio.exe` را اجرا کنید؛ پوشهٔ `_internal` باید کنار
-آن بماند. داده‌ها در `%USERPROFILE%\.myai_studio` ذخیره می‌شوند مگر آنکه
+آن بماند. داده‌ها در `%APPDATA%\MyAIStudio` ذخیره می‌شوند مگر آنکه
 `MYAI_STUDIO_HOME` تنظیم شده باشد.
 
 برای ساخت دوباره روی یک ویندوز واقعی:
