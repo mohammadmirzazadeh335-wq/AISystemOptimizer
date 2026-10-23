@@ -13,7 +13,7 @@ projected from intent.
 | Visual pass | 14 fresh frames of the three new surfaces at midnight/dawn × fa/en, plus a 1.5× Persian frame; the sidebar, Usage, search and history were read and corrected from those frames |
 | Layout stress | `QScrollArea.horizontalScrollBar().maximum()` = 0 at 1.5×1440×900 (viewport 490 px), 1.5×1120×720 (363 px), 1.25×1120×720 (370 px), 1.0×1440×900 (792 px) |
 | Windows build | GitHub Actions runs on `windows-latest`: PyInstaller build, packaged smoke run, zip published as a release asset |
-| Windows tests | run `39931204558`: the **"Run the test suite" step finished successfully** (12 min 28 s, pytest exit code 0). The job was still marked red because the extra annotation-report step of mine crashed; that step is diagnostics-only now (`39931204558` → step 5 success, step 6 failure) |
+| Windows tests | not green. In runs `39931204558` and `39933019121` the pytest step reports `outcome=failure` (masked by `continue-on-error`), the JUnit file carries no failing test, and the annotation step found nothing to print, so the Windows-only cause is **not identified yet**. The Linux suite is the green evidence: 831 passed, 1 skipped |
 
 ## 2. Defects found in this pass and what changed
 
@@ -42,4 +42,4 @@ projected from intent.
 - **The live model path was not exercised**: no OpenRouter key, and `openrouter.ai` is unreachable from this sandbox; the one test that needs a key is skipped by design.
 - **The artefact is not code-signed**, so SmartScreen warns on first launch.
 - **The zip was not downloaded back into this sandbox** — `objects.githubusercontent.com` is blocked here. The evidence for it is the CI smoke run, the artifact upload step and the release asset (62,275,774 bytes).
-- The **Windows test job's** result for this exact tag is stated in the release notes and in the hand-over message; it is not inferred from the Linux run.
+- **The Windows test job for this tag is red.** The packaged executable still builds and smoke-starts with exit code 0, but pytest exits non-zero on the Windows runner and the failure list could not be read back from the runner, so no Windows test claim is made here.
