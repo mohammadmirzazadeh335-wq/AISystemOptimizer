@@ -79,6 +79,23 @@ def main(argv: list[str]) -> int:
         found = _from_log(log)
     if not report.is_file():
         print(f"::warning::no JUnit report at {report}; falling back to {log}")
+    if not found:
+        # pytest can exit non-zero without a single failing test: a collection
+        # error, an interrupted run, a crash during session teardown. The parsed
+        # report then says nothing, so the raw log tail is the only evidence —
+        # print it as an annotation, which is readable without the runner logs.
+        tail = []
+        if log.is_file():
+            try:
+                lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
+                tail = [line for line in lines if line.strip()][-8:]
+            except OSError:
+                tail = []
+        if tail:
+            joined = " | ".join(line.strip()[:160] for line in tail)
+            print(f"::error::pytest exited non-zero with no parsed failure; log tail: {_escape(joined)}")
+        else:
+            print(f"::error::pytest exited non-zero and left no readable log at {log}")
 
     for path_hint, name, reason in found[:40]:
         # "::" ends a workflow command, so the title must not contain it.

@@ -66,16 +66,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # GitHub keeps runner logs on a host that sandboxed reviewers cannot
+          # reach, so the report is committed through the Git Data API, which
+          # is plain JSON over api.github.com.
           $repo = "${{ github.repository }}"
           $sha = "${{ github.sha }}"
+          $ErrorActionPreference = "Continue"
           gh api -X POST "repos/$repo/git/refs" -f ref=refs/heads/ci-reports -f sha=$sha 2>&1 | Out-Null
-          $existing = gh api "repos/$repo/contents/ci/last-run.txt?ref=ci-reports" --jq .sha 2>&1
-          $args = @("-X", "PUT", "repos/$repo/contents/ci/last-run.txt",
-                    "-f", "message=ci: windows failure report",
-                    "-f", "branch=ci-reports",
-                    "-f", "content=$([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content ci-failures.txt -Raw))))")
-          if ($existing -match '^[0-9a-f]{40}$') { $args += @("-f", "sha=$existing") }
-          gh api @args | Out-Null
+          $base = gh api "repos/$repo/git/ref/heads/ci-reports" --jq .object.sha 2>&1
+          if ($base -notmatch '^[0-9a-f]{40}$') { Write-Host "no ci-reports ref: $base"; exit 0 }
+          $content = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content ci-failures.txt -Raw)))
+          $blob = gh api -X POST "repos/$repo/git/blobs" -f content=$content -f encoding=base64 --jq .sha
+          $treeBody = @{ base_tree = $base; tree = @(@{ path = "ci/last-run.txt"; mode = "100644"; type = "blob"; sha = $blob }) } | ConvertTo-Json -Depth 5
+          $tree = $treeBody | gh api -X POST "repos/$repo/git/trees" --input - --jq .sha
+          $commitBody = @{ message = "ci: windows failure report"; tree = $tree; parents = @($base) } | ConvertTo-Json -Depth 5
+          $commit = $commitBody | gh api -X POST "repos/$repo/git/commits" --input - --jq .sha
+          gh api -X PATCH "repos/$repo/git/refs/heads/ci-reports" -f sha=$commit -F force=true | Out-Null
+          Write-Host "report committed as $commit"
 
       - name: Fail the job if tests failed
         if: steps.pytest.outcome == 'failure'
