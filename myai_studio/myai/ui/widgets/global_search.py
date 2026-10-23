@@ -94,7 +94,8 @@ class _HitRow(QPushButton):
             f" border: 1px solid {runtime.theme().color('border')};"
             f" border-radius: {runtime.px(6)}px; padding: {runtime.px(1)}px {runtime.px(7)}px;"
         )
-        extra = hit.subtitle or ""
+        line_no = (hit.extra or {}).get("line")
+        extra = tr("search.line", number=line_no) if line_no else (hit.subtitle or "")
         badge.setText(QFontMetrics(badge.font()).elidedText(extra, Qt.TextElideMode.ElideRight, runtime.px(90)))
         badge.setVisible(bool(extra))
         layout.addWidget(badge)

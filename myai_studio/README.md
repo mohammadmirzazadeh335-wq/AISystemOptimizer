@@ -25,7 +25,18 @@ phases.
 > every local source (Ctrl+Shift+F), a **Usage & cost** dashboard built from the
 > tokens the provider reported plus the cached per-million prices, and **file
 > history** in Code Studio where every save/patch is a version and a restore is
-> itself versioned. See [`docs/ROUND3_CAPABILITIES.md`](docs/ROUND3_CAPABILITIES.md).
+> itself versioned. This branch also ships the first **Windows executable** (see [Download](#download-windows-x64)).
+> See [`docs/ROUND3_CAPABILITIES.md`](docs/ROUND3_CAPABILITIES.md).
+
+## Download (Windows x64)
+
+[**MyAI Studio Ultimate 0.7.1 — Windows x64**](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.7.1/MyAIStudio-v0.7.1-windows-x64.zip) — about 59 MB.
+
+Extract the zip and run `MyAIStudio.exe`; keep the `_internal` folder beside it.
+Data lives in `%USERPROFILE%\.myai_studio`. The build is produced by
+`.github/workflows/windows-build.yml` on GitHub's `windows-latest` runner, where the
+packaged executable is smoke-started before the zip is published. It is **not
+code-signed**, so Windows SmartScreen asks for confirmation on first launch.
 
 ![Welcome screen](artifacts/ui/01_welcome_midnight_fa.png)
 

@@ -1034,6 +1034,7 @@
   "search.footer_move": "جابه‌جایی",
   "search.footer_open": "بازکردن",
   "search.hint": "برای جست‌وجو در همه‌ی منابع محلی شروع به تایپ کنید.",
+  "search.line": "خط {number}",
   "search.placeholder": "حداقل دو حرف بنویسید…",
   "search.source_conversation": "گفتگوها",
   "search.source_file": "فایل‌های پروژه",

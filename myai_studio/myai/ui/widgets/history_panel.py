@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ...core.timeutil import format_datetime, relative_time
+from ...core.timeutil import format_datetime, relative_time, to_local
 from ...i18n import current_language, tr
 from ...services.history import Snapshot
 from ...services.review import compare_texts
@@ -145,9 +145,8 @@ class HistoryDialog(ModalDialog):
         language = current_language()
         for snapshot in self._snapshots:
             stamp = format_datetime(snapshot.created_at, language)
-            reason = self._service.describe(snapshot)
-            item = QListWidgetItem(f"{reason}  ·  {relative_time(snapshot.created_at, language)}")
-            item.setToolTip(stamp)
+            item = QListWidgetItem(self._label(snapshot))
+            item.setToolTip(f"{stamp} · {relative_time(snapshot.created_at, language)}")
             item.setData(Qt.ItemDataRole.UserRole, snapshot.id)
             self.list.addItem(item)
         self.count_label.setText(tr("history.count", count=len(self._snapshots)))
@@ -164,6 +163,19 @@ class HistoryDialog(ModalDialog):
             self.reason_badge.setVisible(False)
             self.restore_button.setEnabled(False)
             self.stamp_label.setText("")
+
+    def _label(self, snapshot: Snapshot) -> str:
+        """Reason plus a time the eye can tell apart — seconds when fresh.
+
+        Relative wording alone turns three saves a second apart into three
+        identical "just now" rows, which makes the list unusable.
+        """
+        when = relative_time(snapshot.created_at, current_language())
+        if snapshot.age < 600:
+            local = to_local(snapshot.created_at)
+            if local:
+                when = local.strftime("%H:%M:%S")
+        return f"{self._service.describe(snapshot)}  ·  {when}"
 
     def _on_row(self, row: int) -> None:
         if row < 0 or row >= len(self._snapshots):
@@ -187,7 +199,7 @@ class HistoryDialog(ModalDialog):
         self.diff.set_diff(
             compare_texts(self._current_text, text),
             old_name=tr("history.current_label"),
-            new_name=self._service.describe(snapshot),
+            new_name=self._label(snapshot),
         )
 
     # ----------------------------------------------------------------- actions

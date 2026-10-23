@@ -41,7 +41,12 @@ def test_filter_narrows_and_reports_empty(ui) -> None:
     palette = CommandPalette(window, window._palette_actions())  # noqa: SLF001
     palette.search.setText("prompt")
     pump()
-    assert [row.action.id for row in palette._rows] == ["go.prompts"]  # noqa: SLF001
+    # "Search everything" advertises prompts among its sources, so it is a
+    # second, deliberate match; the navigation entry stays first-class too.
+    assert [row.action.id for row in palette._rows] == [  # noqa: SLF001
+        "search.everything",
+        "go.prompts",
+    ]
     palette.search.setText("نشد پیدا")
     pump()
     assert palette._rows == []  # noqa: SLF001

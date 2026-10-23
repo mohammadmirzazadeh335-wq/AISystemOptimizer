@@ -121,3 +121,34 @@ were fixed rather than documented away:
 - History snapshots are plain UTF-8 files under the application home. They are
   excluded from project backups (`paths.history_dir` lives outside the project)
   and are removed when the user clears them.
+
+## 7. Windows build and download
+
+A Linux host cannot produce a Windows executable (PyInstaller does not
+cross-compile), so the binary is built on GitHub's `windows-latest` runner by
+`.github/workflows/windows-build.yml`:
+
+| Step | What runs |
+| --- | --- |
+| tests job | Python 3.11, `pip install -r requirements-dev.txt`, full `pytest -q` with `QT_QPA_PLATFORM=offscreen`; failures are printed as check annotations |
+| build job | `scripts/build_windows.ps1 -SkipTests` → PyInstaller 6.12 onedir, icon, bundled locales + assets, then the packaged `MyAIStudio.exe --smoke --allow-multi` must exit 0 |
+| package | `RUNNING.txt` added, `dist/MyAIStudio` zipped, uploaded as an artifact, and attached to the release for tag pushes |
+
+**Download (Windows x64):**
+[`MyAIStudio-v0.7.1-windows-x64.zip`](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.7.1/MyAIStudio-v0.7.1-windows-x64.zip)
+
+Extract the zip and run `MyAIStudio.exe`; the `_internal` folder must stay next
+to it. Data lives in `%USERPROFILE%\.myai_studio` unless `MYAI_STUDIO_HOME` is set.
+
+To rebuild locally on a Windows machine:
+
+```powershell
+cd myai_studio
+powershell -ExecutionPolicy Bypass -File scriptsuild_windows.ps1            # tests + exe + smoke
+powershell -ExecutionPolicy Bypass -File scriptsuild_windows.ps1 -Installer # adds the Inno Setup installer
+```
+
+Honest limits of this artefact: it is **not code-signed**, so SmartScreen asks
+for confirmation on first launch; it was smoke-started on the runner (exit 0)
+but not clicked through by a human on a physical desktop; and it contains no
+OpenRouter key, so live completions still need the user's own key.

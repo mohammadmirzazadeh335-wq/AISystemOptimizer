@@ -1034,6 +1034,7 @@
   "search.footer_move": "Move",
   "search.footer_open": "Open",
   "search.hint": "Start typing to search every local source at once.",
+  "search.line": "line {number}",
   "search.placeholder": "Type at least two characters…",
   "search.source_conversation": "Conversations",
   "search.source_file": "Project files",

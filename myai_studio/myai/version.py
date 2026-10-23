@@ -9,9 +9,9 @@ APP_ID = "com.myaistudio.ultimate"
 
 # Phase-by-phase release train.  Bumped at the end of every completed phase,
 # and again for the capability round that followed Phase 5.
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 PHASE = 6
-BUILD_CHANNEL = "Round 3 - Search, Usage & File History"
+BUILD_CHANNEL = "Round 3.1 - Windows release, final debug"
 
 __all__ = [
     "APP_NAME",

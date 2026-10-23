@@ -118,3 +118,35 @@
 - نسخه‌های تاریخچه فایل‌های متنی ساده زیر خانه‌ی برنامه‌اند. از پشتیبان‌گیری
   پروژه بیرون‌اند (`paths.history_dir` خارج از پروژه است) و با «حذف تاریخچه» پاک
   می‌شوند.
+
+## ۷. ساخت ویندوز و دانلود
+
+یک ماشین لینوکسی نمی‌تواند فایل اجرایی ویندوز بسازد (PyInstaller کامپایل
+متقاطع ندارد)، بنابراین باینری روی رانر `windows-latest` گیت‌هاب و با
+`.github/workflows/windows-build.yml` ساخته می‌شود:
+
+| مرحله | چه چیزی اجرا می‌شود |
+| --- | --- |
+| کار تست | پایتون ۳.۱۱، `pip install -r requirements-dev.txt`، اجرای کامل `pytest -q` با `QT_QPA_PLATFORM=offscreen`؛ شکست‌ها به‌صورت annotation گزارش می‌شوند |
+| کار ساخت | `scripts/build_windows.ps1 -SkipTests` → PyInstaller 6.12 در حالت onedir، آیکون، لوکال‌ها و assets، سپس اجرای `MyAIStudio.exe --smoke --allow-multi` که باید با کد ۰ خارج شود |
+| بسته‌بندی | افزودن `RUNNING.txt`، زیپ‌کردن `dist/MyAIStudio`، بارگذاری به‌عنوان artifact و پیوست به ریلیز هنگامِ پوش تگ |
+
+**دانلود (ویندوز ۶۴ بیتی):**
+[`MyAIStudio-v0.7.1-windows-x64.zip`](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.7.1/MyAIStudio-v0.7.1-windows-x64.zip)
+
+زیپ را استخراج کنید و `MyAIStudio.exe` را اجرا کنید؛ پوشهٔ `_internal` باید کنار
+آن بماند. داده‌ها در `%USERPROFILE%\.myai_studio` ذخیره می‌شوند مگر آنکه
+`MYAI_STUDIO_HOME` تنظیم شده باشد.
+
+برای ساخت دوباره روی یک ویندوز واقعی:
+
+```powershell
+cd myai_studio
+powershell -ExecutionPolicy Bypass -File scriptsuild_windows.ps1            # تست + exe + smoke
+powershell -ExecutionPolicy Bypass -File scriptsuild_windows.ps1 -Installer # نصب‌کنندهٔ Inno Setup
+```
+
+محدودیت‌های صادقانهٔ این خروجی: **امضا نشده** است، پس SmartScreen در اجرای اول
+تأیید می‌خواهد؛ روی رانر با `--smoke` اجرا و با کد ۰ بسته شده، اما انسان روی
+دسکتاپ واقعی آن را کلیک‌به‌کلیک بررسی نکرده است؛ و هیچ کلید OpenRouter در آن
+نیست، پس برای پاسخ‌های زنده همچنان کلید خودتان لازم است.

@@ -432,11 +432,27 @@ class _ScrollFade(QWidget):
         gradient.setColorAt(0.65, base)
         gradient.setColorAt(1.0, base)
         painter.fillRect(self.rect(), gradient)
-        tone = theme.color("accent") if self._hover else theme.color("text_faint")
-        size = runtime.px(13)
+        # A bare chevron read as a stray glyph; a soft pill makes it obvious the
+        # band is the control that scrolls the column.
+        pill_w = runtime.px(38)
+        pill_h = runtime.px(19)
+        pill = QRectF(
+            (self.width() - pill_w) / 2,
+            (self.height() - pill_h) / 2,
+            pill_w,
+            pill_h,
+        )
+        fill = QColor(theme.color("surface_3" if self._hover else "surface_2"))
+        fill.setAlphaF(0.95 if self._hover else 0.75)
+        edge = QColor(theme.color("accent") if self._hover else theme.color("border"))
+        painter.setPen(QPen(edge, 1.0))
+        painter.setBrush(fill)
+        painter.drawRoundedRect(pill, pill_h / 2, pill_h / 2)
+        tone = theme.color("accent") if self._hover else theme.color("text_muted")
+        size = runtime.px(11)
         rect = QRectF(
             (self.width() - size) / 2,
-            (self.height() - size) / 2 + runtime.px(3),
+            (self.height() - size) / 2 + runtime.px(1),
             size,
             size,
         )

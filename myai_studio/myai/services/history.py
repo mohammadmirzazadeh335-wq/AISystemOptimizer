@@ -147,7 +147,9 @@ class HistoryService:
             project_service.write(project, relative, text, reason="restore")
         else:
             project_service.write(project, relative, text)
-            self.record(project.root, relative, text, reason="restore")
+        # A ProjectService built without a history service records nothing, so
+        # tag the state here too; ``record`` skips an identical newest version.
+        self.record(project.root, relative, text, reason="restore")
         return text
 
     def clear(self, project_root: str | Path, relative: str) -> int:

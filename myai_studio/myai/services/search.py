@@ -242,7 +242,7 @@ class SearchService:
                 title=row.get("path", ""),
                 snippet=row.get("text", "").strip(),
                 ref=row.get("path", ""),
-                subtitle=f"line {row.get('line')}",
+                subtitle="",
                 extra={"line": row.get("line")},
             )
             for row in rows[:limit]

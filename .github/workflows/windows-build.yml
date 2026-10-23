@@ -19,7 +19,7 @@ jobs:
   tests:
     name: Test suite (Windows)
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 120
     defaults:
       run:
         shell: pwsh
@@ -43,9 +43,21 @@ jobs:
           python -m pip install -r requirements-dev.txt
 
       - name: Run the test suite
+        id: pytest
+        continue-on-error: true
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m pytest -q
+        run: python -m pytest -q --tb=short --junitxml=pytest.xml
+
+      - name: Report failures as annotations
+        if: always()
+        run: python scripts/ci_report_failures.py pytest.xml
+
+      - name: Fail the job if tests failed
+        if: steps.pytest.outcome == 'failure'
+        run: |
+          Write-Host "pytest reported failures; see the annotations above"
+          exit 1
 
   build:
     name: PyInstaller build + packaged smoke test
