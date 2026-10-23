@@ -36,15 +36,36 @@ def test_python_toolchain_is_detected_with_a_real_version() -> None:
     assert python.executables and Path(python.executables[0]).exists()
 
 
-def test_missing_toolchains_name_the_missing_command() -> None:
-    """A toolchain this machine does not have must say what is missing."""
-    chain = {item.id: item for item in ToolchainRegistry().detect()}
-    missing = [item for item in chain.values() if not item.available]
-    assert missing, "at least one toolchain should be unavailable in this image"
-    for item in missing:
+def test_missing_toolchains_name_the_missing_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A toolchain this machine does not have must say what is missing.
+
+    The image is not assumed to lack anything: the Windows runner ships Java,
+    Go and Rust, so "at least one toolchain is missing" was false there. The
+    detection is driven by an injected spec instead, which makes the assertion
+    about the code rather than about the machine.
+    """
+    from myai.services import toolchains as module
+
+    monkeypatch.setattr(
+        module,
+        "specs",
+        lambda: (("nope", "Nope", ("myai-tool-that-does-not-exist",), ("--version",), (".nope",)),),
+    )
+    item = ToolchainRegistry().get("nope")
+    assert item is not None and item.available is False
+    assert item.version == ""
+    assert "myai-tool-that-does-not-exist" in item.detail
+    assert "not found" in item.detail
+
+
+def test_every_unavailable_toolchain_explains_itself() -> None:
+    """Whatever this machine lacks, the reason must be in the detail."""
+    for item in ToolchainRegistry().detect():
+        if item.available:
+            continue
         assert item.version == ""
-        assert "not found" in item.detail or "did not answer" in item.detail
         assert item.detail
+        assert "not found" in item.detail or "did not answer" in item.detail
 
 
 def test_registry_is_cached_and_can_refresh() -> None:

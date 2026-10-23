@@ -37,6 +37,46 @@ def create_application(argv: Sequence[str]) -> QApplication:
     return app
 
 
+def _write_stderr(text: str) -> None:
+    """Print a human message without ever dying on the console code page.
+
+    On Windows ``sys.stderr`` is encoded with the active console code page
+    (cp1252/cp437 far more often than utf-8).  A Persian sentence cannot be
+    represented there, and a plain ``print`` would raise ``UnicodeEncodeError``
+    *after* the lock was already refused — the user would see a traceback
+    instead of the reason.  When the stream cannot encode the text, the UTF-8
+    bytes are written to the underlying buffer, which every pipe and terminal
+    can carry.
+    """
+    stream = sys.stderr
+    if stream is None:
+        return
+    encoding = getattr(stream, "encoding", None) or "utf-8"
+    try:
+        payload = (text + "\n").encode(encoding)
+    except (UnicodeEncodeError, LookupError):
+        buffer = getattr(stream, "buffer", None)
+        if buffer is not None:
+            try:
+                buffer.write((text + "\n").encode("utf-8", "replace"))
+                buffer.flush()
+                return
+            except (OSError, ValueError):  # pragma: no cover - closed stream
+                return
+        payload = (text + "\n").encode("ascii", "replace")
+        encoding = "ascii"
+    try:
+        buffer = getattr(stream, "buffer", None)
+        if buffer is not None:
+            buffer.write(payload)
+            buffer.flush()
+        else:  # pytest/capture objects expose only the text interface
+            stream.write(payload.decode(encoding))
+            stream.flush()
+    except (OSError, ValueError, UnicodeError):  # pragma: no cover - closed stream
+        pass
+
+
 def _acquire_lock(home: Path, allow_multi: bool) -> tuple[QLockFile | None, bool]:
     if allow_multi:
         return None, True
@@ -105,7 +145,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         # Never show a modal box here: the user already has the window open, and a
         # blocking dialog in a headless/CI run would hang the process forever.
         logger.warning("second_instance_blocked home=%s", ctx.paths.home)
-        print(tr("error.already_running"), file=sys.stderr)
+        _write_stderr(tr("error.already_running"))
         ctx.shutdown()
         return 0
 

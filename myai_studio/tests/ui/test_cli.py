@@ -125,20 +125,27 @@ def test_single_instance_lock_blocks_second_window(tmp_path: Path) -> None:
                 break
             time.sleep(0.05)
         time.sleep(0.4)
+        # Captured as bytes: the console code page on a Windows runner is not
+        # UTF-8, and decoding with the locale would turn the Persian sentence
+        # into mojibake before it can be checked.
         second = subprocess.run(
             [python, "-m", "myai", "--smoke"],
             cwd=ROOT,
             env=env,
             capture_output=True,
-            text=True,
             timeout=30,
             check=False,
         )
+        stderr = second.stderr.decode("utf-8", "replace")
         # The second instance must exit immediately, without opening a window and
         # without a blocking dialog.
-        assert second.returncode == 0, second.stderr
-        assert "window_shown" not in second.stdout
-        assert "already" in second.stderr.lower() or "در حال اجرا" in second.stderr
+        assert second.returncode == 0, stderr
+        assert b"window_shown" not in second.stdout
+        # The structured record is the unambiguous proof that the lock branch ran;
+        # the human sentence is best effort on a console that cannot encode
+        # Persian, so it is checked separately below.
+        assert "second_instance_blocked" in _log(home), _log(home)[-1500:]
+        assert "already" in stderr.lower() or "در حال اجرا" in stderr, repr(stderr[-800:])
     finally:
         first.wait(timeout=60)
     assert first.returncode == 0

@@ -313,6 +313,15 @@ def _gcc_available() -> bool:
     return registry().get("c").available
 
 
+def _artifact(folder: Path, stem: str) -> Path:
+    """The path the plan actually produces on this platform.
+
+    A Windows compiler does not write ``main``; it writes ``main.exe``. The
+    build plan already knows that, so the test must too.
+    """
+    return folder / ".myai-build" / (stem + (".exe" if os.name == "nt" else ""))
+
+
 @pytest.mark.skipif(not _gcc_available(), reason="gcc is not installed on this machine")
 def test_compiler_error_is_shown_verbatim(project) -> None:
     page, folder = project
@@ -323,8 +332,10 @@ def test_compiler_error_is_shown_verbatim(project) -> None:
     output = page.output_view.toPlainText()
     assert "error" in output.lower()
     assert "broken.c" in output
-    assert page.status_badge.property("badge") == "danger"
-    assert not (folder / ".myai-build" / "broken").exists()
+    badge = page.status_badge.property("badge")
+    detail = f"badge={badge!r} text={page.status_badge.text()!r} output={output[-800:]!r}"
+    assert badge == "danger", detail
+    assert not _artifact(folder, "broken").exists()
 
 
 @pytest.mark.skipif(not _gcc_available(), reason="gcc is not installed on this machine")
@@ -336,7 +347,7 @@ def test_c_compiles_and_runs(project) -> None:
     wait_for_run(page)
     assert "c-ran" in page.output_view.toPlainText()
     assert page.status_badge.property("badge") == "success"
-    assert (folder / ".myai-build" / "main").exists()
+    assert _artifact(folder, "main").exists()
 
 
 def test_markdown_is_honestly_unrunnable(project) -> None:
@@ -440,7 +451,11 @@ def test_toolchain_inspector_lists_availability(project) -> None:
         page._toggle_toolchain_details()
         pump()
         assert page.toolchain_detail.isVisible() is True
-        assert "not found" in page.toolchain_detail.text()
+        detail = page.toolchain_detail.text()
+        # "was not found on PATH" when the binary is absent, "exists but did not
+        # answer --version" when a broken shim is on PATH (the Windows image has
+        # several). Both are honest reasons and both must be shown.
+        assert "not found" in detail or "did not answer" in detail, detail
         page._toggle_toolchain_details()
         assert page.toolchain_detail.isVisible() is False
 

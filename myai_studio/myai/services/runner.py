@@ -143,6 +143,13 @@ def _kill_tree(process: subprocess.Popen) -> None:
             pass
 
 
+#: A compile step is not the program: give it its own, larger budget. On Windows
+#: the first invocation of a compiler goes through an antivirus scan and cold
+#: caches, and borrowing that time from the program's own limit reported a
+#: 0.3 s parse error as a timeout.
+COMPILE_TIMEOUT = 90.0
+
+
 class Runner:
     """Execute :class:`RunPlan` objects with limits, streaming and cancellation."""
 
@@ -169,13 +176,15 @@ class Runner:
     ) -> RunResult:
         started = time.monotonic()
         result = RunResult(plan=plan)
-        deadline = started + self._clamp_timeout(plan.timeout_seconds)
+        run_budget = self._clamp_timeout(plan.timeout_seconds)
 
         for step in plan.steps:
+            budget = max(run_budget, COMPILE_TIMEOUT) if step.kind == "compile" else run_budget
             outcome = self._run_step(
                 step,
                 plan=plan,
-                deadline=deadline,
+                deadline=time.monotonic() + budget,
+                budget=budget,
                 on_output=on_output,
                 cancel_event=cancel_event,
             )
@@ -219,6 +228,7 @@ class Runner:
         *,
         plan: RunPlan,
         deadline: float,
+        budget: float,
         on_output: OutputCallback | None,
         cancel_event: threading.Event | None,
     ) -> StepResult:
@@ -316,7 +326,7 @@ class Runner:
             reader.join(timeout=2)
 
         if timed_out:
-            emit("stderr", f"[timeout] stopped after {plan.timeout_seconds:.0f}s")
+            emit("stderr", f"[timeout] stopped after {budget:.0f}s")
         if cancelled:
             emit("stderr", "[cancelled] stopped by the user")
 

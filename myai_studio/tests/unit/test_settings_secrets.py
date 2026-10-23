@@ -120,11 +120,24 @@ def test_secret_rejects_bad_names_and_empty_values(tmp_path: Path) -> None:
 
 
 def test_secret_file_is_owner_only(tmp_path: Path) -> None:
+    """The secret file must not be readable by anyone else.
+
+    The mechanism is not the same on both platforms, so the assertion is not
+    either: Windows has no POSIX mode bits (``os.stat`` always reports 0o666)
+    and protects the file by encrypting it with DPAPI, bound to the user
+    account. Asserting 0600 there would say nothing about the real protection.
+    """
     import os
     import stat
 
+    token = "super-secret-token-value"
     store = SecretStore(tmp_path / "secrets.bin", tmp_path / "secret.key")
-    store.set("k", "v")
+    store.set("k", token)
+    raw = (tmp_path / "secrets.bin").read_bytes()
+    assert token.encode("utf-8") not in raw, "the secret was written in plaintext"
+    if os.name == "nt":
+        assert store.backend == "dpapi"
+        return
     mode = stat.S_IMODE(os.stat(tmp_path / "secrets.bin").st_mode)
     assert mode & 0o077 == 0, oct(mode)
 

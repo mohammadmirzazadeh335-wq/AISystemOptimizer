@@ -219,3 +219,35 @@ def test_console_handler_survives_a_legacy_code_page() -> None:
     record = logging.LogRecord("t", logging.INFO, __file__, 1, "سلام", None, None)
     handler.emit(record)  # must not raise
     assert stream.written and "?" in stream.written[0]
+
+
+def _cp1252_stream():
+    """A text stream whose code page cannot hold Persian, like a real console."""
+    raw = io.BytesIO()
+    stream = io.TextIOWrapper(raw, encoding="cp1252", errors="strict", newline="")
+    return raw, stream
+
+
+def test_single_instance_message_survives_a_legacy_code_page(monkeypatch) -> None:
+    """``print`` would raise here and the user would see a traceback instead."""
+    from myai import app as app_module
+
+    raw, stream = _cp1252_stream()
+    monkeypatch.setattr(app_module.sys, "stderr", stream)
+    app_module._write_stderr("MyAI Studio از قبل در حال اجراست.")
+    stream.flush()
+    # The bytes are UTF-8, so a pipe or log collector still gets the real text.
+    assert raw.getvalue().decode("utf-8").strip() == "MyAI Studio از قبل در حال اجراست."
+
+
+def test_single_instance_message_uses_plain_stderr_when_it_can_encode(monkeypatch) -> None:
+    import sys
+
+    from myai import app as app_module
+
+    raw = io.BytesIO()
+    stream = io.TextIOWrapper(raw, encoding="utf-8", errors="strict", newline="")
+    monkeypatch.setattr(sys, "stderr", stream)
+    app_module._write_stderr("already running")
+    stream.flush()
+    assert raw.getvalue() == b"already running\n"

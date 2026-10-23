@@ -4,8 +4,8 @@ A premium, local-first AI desktop workspace for Windows 11: multi-model chat, me
 a real code studio, supervised agents, media and research — delivered in five verified
 phases.
 
-> **Current build: `0.8.0` — Phase 5 + LAB + Round 3, with a Windows x64 release**
-> (`v0.8.0`; the phase notes below describe the shipped feature set)
+> **Current build: `0.8.3` — Phase 5 + LAB + Round 3/4, with a Windows x64 release**
+> (`v0.8.3`; the phase notes below describe the shipped feature set)
 > Chat streams from OpenRouter, memory and personality are real and editable, the Output
 > Studio keeps every revision, Code Studio opens real folders and runs real files, and the
 > agent acts **only** through twenty-two registered tools behind an approval gate. Phase 5
@@ -36,9 +36,23 @@ phases.
 > [`docs/NETWORK_TROUBLESHOOTING.md`](docs/NETWORK_TROUBLESHOOTING.md) or its
 > [Persian version](docs/NETWORK_TROUBLESHOOTING_FA.md).
 
+> **`0.8.3` — the Windows test job is now readable, and its seven failures are
+> fixed.** The Windows runner was red on `v0.8.0` and `v0.8.2` while publishing
+> nothing about *why*: the reporter crashed on a cp1252 console before it could
+> print a single test name. It now forces UTF-8 (`PYTHONIOENCODING`) and, when
+> pytest dies without a parsed failure, annotates the log tail; the failure list
+> is committed through the Git Data API instead of a contents API that returned
+> 404. With the names visible, all seven causes were real and fixable: POSIX file
+> modes are not a thing on Windows (DPAPI is what protects the secret file), the
+> shared Windows image ships Java/Go/Rust, compilers write `.exe`, `cc` shims
+> answer nothing, and `print(..., file=sys.stderr)` raised `UnicodeEncodeError`
+> on the Persian "already running" message. Compile steps also get their own
+> 90 s budget instead of borrowing the program's 10 s, and the single-instance
+> message is written as UTF-8 bytes when the console code page cannot hold it.
+
 ## Download (Windows x64)
 
-[**MyAI Studio Ultimate 0.8.0 — Windows x64**](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.8.0/MyAIStudio-v0.8.0-windows-x64.zip) — about 59 MB.
+[**MyAI Studio Ultimate 0.8.3 — Windows x64**](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.8.3/MyAIStudio-v0.8.3-windows-x64.zip) — about 59 MB.
 
 Extract the zip and run `MyAIStudio.exe`; keep the `_internal` folder beside it.
 Data lives in `%APPDATA%\MyAIStudio`; projects default to `Documents\MyAI Studio Projects`. The build is produced by

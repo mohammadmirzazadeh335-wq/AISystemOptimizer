@@ -18,6 +18,7 @@ import pytest
 from myai.core.errors import NotFoundError, ToolError, ValidationError
 from myai.services.projects import ProjectService
 from myai.services.runner import Runner
+from myai.services.toolchains import ToolchainRegistry, ToolchainUnavailable
 from myai.services.tools import (
     ToolContext,
     ToolDenied,
@@ -299,15 +300,53 @@ def test_run_file_keeps_stderr_verbatim(tctx: ToolContext) -> None:
     assert "Traceback" in result.output
 
 
-def test_run_file_reports_a_missing_toolchain(tctx: ToolContext) -> None:
+def test_run_file_reports_a_missing_toolchain(
+    tctx: ToolContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A missing compiler must surface as a clear "cannot run this" error.
+
+    The toolchain is injected rather than assumed absent: the Windows CI image
+    does ship a .NET SDK, so a real Program.cs ran there and nothing was
+    raised. What the test is about is the mapping from a plan that cannot be
+    built to the agent-visible error.
+    """
     (tctx.project.root / "Program.cs").write_text("class P {}\n", encoding="utf-8")
+    assert tctx.runner is not None
+
+    def no_toolchain(*_args, **_kwargs):  # noqa: ANN001, ANN002, ANN003
+        raise ToolchainUnavailable("dotnet", "dotnet was not found on PATH")
+
+    monkeypatch.setattr(tctx.runner, "plan_for", no_toolchain)
 
     def allow(tool, arguments):  # noqa: ANN001, ARG001
         return True
 
     with pytest.raises(ToolUnavailable) as excinfo:
         registry().execute("run_file", {"path": "Program.cs"}, tctx, confirm=allow)
-    assert "not found" in excinfo.value.message or "unavailable" in excinfo.value.message.lower()
+    assert "dotnet was not found on PATH" in excinfo.value.message
+
+
+def test_run_file_reports_a_real_missing_toolchain(tctx: ToolContext) -> None:
+    """End to end on this machine, when it genuinely has no such compiler."""
+    missing = [item.id for item in ToolchainRegistry().detect() if not item.available]
+    if not missing:
+        pytest.skip("this image has every configured toolchain; nothing to prove here")
+    extension = {"rust": ".rs", "go": ".go", "c": ".c", "cpp": ".cpp", "java": ".java"}
+    toolchain = missing[0]
+    suffix = extension.get(toolchain)
+    if suffix is None:
+        pytest.skip(f"{toolchain} has no sample source in this test")
+    (tctx.project.root / f"Program{suffix}").write_text(
+        "int main(void) { return 0; }\n" if suffix in {".c", ".cpp"} else "// nothing\n",
+        encoding="utf-8",
+    )
+
+    def allow(tool, arguments):  # noqa: ANN001, ARG001
+        return True
+
+    with pytest.raises(ToolUnavailable) as excinfo:
+        registry().execute("run_file", {"path": f"Program{suffix}"}, tctx, confirm=allow)
+    assert "not found" in excinfo.value.message or "did not answer" in excinfo.value.message
 
 
 def test_run_file_times_out_and_is_killed(tctx: ToolContext) -> None:
