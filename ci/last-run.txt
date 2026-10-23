@@ -1,0 +1,7 @@
+tests/ui/test_cli.py::tests.ui.test_cli::test_single_instance_lock_blocks_second_window - AssertionError: assert ('already' in 'info    myai.data.db: database_ready path=c:\\users\\runneradmin\\appdata\\local\\temp\\pytest-of-runneradmin\\pytest...\\u06cc\\u06af\\u0631 \\u0631\\u0627 \\u0628\\u0628\\u0646\\u062f\\u06cc\\u062f.\ninfo    myai.context: app_shutdown\n' or 'در حال اجرا' in 'I
+tests/ui/test_code_studio.py::tests.ui.test_code_studio::test_compiler_error_is_shown_verbatim - AssertionError: assert 'warning' == 'danger'
+tests/ui/test_code_studio.py::tests.ui.test_code_studio::test_c_compiles_and_runs - AssertionError: assert False
+tests/ui/test_code_studio.py::tests.ui.test_code_studio::test_toolchain_inspector_lists_availability - assert 'not found' in "Java: java.EXE exists but did not answer '-version'\nGo: go.EXE exists but did not answer 'version'\nRust: rustc.EXE exists but did not answer '--version'"
+tests/unit/test_agent_tools.py::tests.unit.test_agent_tools::test_run_file_reports_a_missing_toolchain - Failed: DID NOT RAISE <class 'myai.services.tools.ToolUnavailable'>
+tests/unit/test_code_services.py::tests.unit.test_code_services::test_missing_toolchains_name_the_missing_command - AssertionError: at least one toolchain should be unavailable in this image
+tests/unit/test_settings_secrets.py::tests.unit.test_settings_secrets::test_secret_file_is_owner_only - AssertionError: 0o666
