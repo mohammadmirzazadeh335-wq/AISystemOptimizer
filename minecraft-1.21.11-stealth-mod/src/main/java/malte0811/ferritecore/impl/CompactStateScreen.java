@@ -4,7 +4,6 @@ import java.util.Locale;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.components.Renderable;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.Component;
@@ -13,6 +12,8 @@ import org.lwjgl.glfw.GLFW;
 public final class CompactStateScreen extends Screen {
 	private EditBox firstCoordField;
 	private EditBox secondCoordField;
+	private Button confirmBtn;
+	private Button cancelBtn;
 
 	public CompactStateScreen() {
 		super(Component.literal(""));
@@ -45,10 +46,10 @@ public final class CompactStateScreen extends Screen {
 		addRenderableWidget(firstCoordField);
 		addRenderableWidget(secondCoordField);
 
-		Button confirmBtn = Button.builder(Component.literal("OK [Enter]"), b -> submitCoordinates())
+		confirmBtn = Button.builder(Component.literal("OK [Enter]"), b -> submitCoordinates())
 			.bounds(left + 14, top + 74, 84, 20)
 			.build();
-		Button cancelBtn = Button.builder(Component.literal("Cancel"), b -> onClose())
+		cancelBtn = Button.builder(Component.literal("Cancel"), b -> onClose())
 			.bounds(left + 102, top + 74, 84, 20)
 			.build();
 
@@ -67,7 +68,6 @@ public final class CompactStateScreen extends Screen {
 		String raw2 = secondCoordField.getValue().trim();
 
 		try {
-			// Support typing "X Y" together in the first box or separately in the two boxes
 			if (raw1.contains(" ") || raw1.contains(",") || raw1.contains(":")) {
 				String[] parts = raw1.split("[\\s,:]+");
 				if (parts.length >= 2) {
@@ -138,7 +138,6 @@ public final class CompactStateScreen extends Screen {
 		int left = (this.width - boxW) / 2;
 		int top = (this.height - boxH) / 2;
 
-		// Subtle compact dark panel with border
 		graphics.fill(left - 1, top - 1, left + boxW + 1, top + boxH + 1, 0xFF3A4454);
 		graphics.fill(left, top, left + boxW, top + boxH, 0xE610141D);
 
@@ -146,7 +145,6 @@ public final class CompactStateScreen extends Screen {
 		graphics.drawString(this.font, "X:", left + 14, top + 29, 0xFF38BDF8, true);
 		graphics.drawString(this.font, "Y:", left + 108, top + 29, 0xFF38BDF8, true);
 
-		// Live surface elevation analysis preview
 		String previewText = "Z (Surface): --";
 		int previewColor = 0xFF94A3B8;
 		double[] coords = parseInputCoordinates();
@@ -165,8 +163,17 @@ public final class CompactStateScreen extends Screen {
 		}
 		graphics.drawCenteredString(this.font, previewText, this.width / 2, top + 52, previewColor);
 
-		for (Renderable renderable : this.renderables) {
-			renderable.render(graphics, mouseX, mouseY, partialTicks);
+		if (firstCoordField != null) {
+			firstCoordField.render(graphics, mouseX, mouseY, partialTicks);
+		}
+		if (secondCoordField != null) {
+			secondCoordField.render(graphics, mouseX, mouseY, partialTicks);
+		}
+		if (confirmBtn != null) {
+			confirmBtn.render(graphics, mouseX, mouseY, partialTicks);
+		}
+		if (cancelBtn != null) {
+			cancelBtn.render(graphics, mouseX, mouseY, partialTicks);
 		}
 	}
 
