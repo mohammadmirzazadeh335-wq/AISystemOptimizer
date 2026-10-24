@@ -1,8 +1,8 @@
 {
   "required": true,
   "minVersion": "0.8",
-  "package": "net.optifabric.ferrite.mixin",
-  "plugin": "net.optifabric.ferrite.core.FerriteMixinPlugin",
+  "package": "malte0811.ferritecore.mixin",
+  "plugin": "malte0811.ferritecore.impl.DeduplicationConfig",
   "compatibilityLevel": "JAVA_21",
   "client": [
     "AtmosphericFogEnvironmentMixin",
