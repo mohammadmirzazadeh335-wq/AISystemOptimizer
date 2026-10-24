@@ -26,6 +26,7 @@ from ..core.errors import AppError
 logger = logging.getLogger(__name__)
 
 _NAME_RE = re.compile(r"^[a-zA-Z0-9_.\-]{1,80}$")
+_PROVIDER_RE = re.compile(r"^[a-z][a-z0-9_\-]{0,30}$")
 _IS_WINDOWS = sys.platform.startswith("win")
 
 
@@ -207,22 +208,58 @@ class SecretStore:
         _atomic_write(self.path, json.dumps(envelope).encode("utf-8"))
 
     # ------------------------------------------------------------------- api
-    # The single place that knows which key name the AI provider uses. Keeping
-    # it here means no module has to hard-code the storage name.
+    # The single place that knows which key name each provider uses. Keeping it
+    # here means no module has to hard-code a storage name.
+    #
+    # ``openrouter.api_key`` is the name 0.8 and earlier wrote, so it stays as
+    # the OpenRouter slot: an existing install keeps its key after the upgrade
+    # instead of silently appearing unconfigured.
     OPENROUTER_KEY = "openrouter.api_key"
+    KEY_TEMPLATE = "ai.key.{provider}"
 
-    def get_api_key(self) -> str | None:
-        return self.get(self.OPENROUTER_KEY)
+    def key_name(self, provider: str) -> str:
+        """Storage name for one provider's key (validated, no path tricks)."""
+        identifier = (provider or "").strip().lower()
+        if not _PROVIDER_RE.match(identifier):
+            raise ValueError(f"Invalid provider id: {provider!r}")
+        if identifier == "openrouter":
+            return self.OPENROUTER_KEY
+        return self.KEY_TEMPLATE.format(provider=identifier)
 
-    def set_api_key(self, value: str) -> None:
+    def get_key(self, provider: str = "openrouter") -> str | None:
+        return self.get(self.key_name(provider))
+
+    def set_key(self, provider: str, value: str) -> None:
+        name = self.key_name(provider)
         value = (value or "").strip()
         if not value:
-            self.delete(self.OPENROUTER_KEY)
+            self.delete(name)
             return
-        self.set(self.OPENROUTER_KEY, value)
+        self.set(name, value)
+
+    def has_key(self, provider: str = "openrouter") -> bool:
+        return self.has(self.key_name(provider))
+
+    def configured_providers(self) -> list[str]:
+        """Provider ids with a stored key; the UI can show them at a glance."""
+        names = set(self.names())
+        found = []
+        for name in names:
+            if name == self.OPENROUTER_KEY:
+                found.append("openrouter")
+            elif name.startswith("ai.key."):
+                found.append(name[len("ai.key."):])
+        return sorted(found)
+
+    # Backwards-compatible single-provider helpers (OpenRouter).
+    def get_api_key(self) -> str | None:
+        return self.get_key("openrouter")
+
+    def set_api_key(self, value: str) -> None:
+        self.set_key("openrouter", value)
 
     def has_api_key(self) -> bool:
-        return self.has(self.OPENROUTER_KEY)
+        return self.has_key("openrouter")
 
     def get(self, name: str) -> str | None:
         self._validate_name(name)

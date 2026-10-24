@@ -65,7 +65,8 @@ def test_storing_a_key_makes_the_security_checks_green(ctx) -> None:  # noqa: AN
     checks = by_key(run(ctx))
     assert checks["secrets"].status == OK
     assert checks["api_key"].status == OK
-    assert checks["api_key"].detail.endswith("sk-or- prefix")
+    assert "sk-or- prefix" in checks["api_key"].detail
+    assert "OpenRouter" in checks["api_key"].detail
     # The detail must never contain the key itself.
     assert all(key not in check.detail for check in checks.values())
     report = run(ctx)

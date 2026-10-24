@@ -69,6 +69,11 @@ class ModelInfo:
     supports_vision: bool = False
     supports_streaming: bool = True
     modality: str = "text"
+    #: False when the catalogue carries no prices at all (Anthropic, Gemini and
+    #: plain OpenAI-compatible endpoints do not publish them). Without this the
+    #: UI would read "no price" as "free" and show a green Free badge on a
+    #: paid model.
+    price_known: bool = True
 
     @property
     def label(self) -> str:
@@ -86,7 +91,11 @@ class ModelInfo:
         return str(self.context_length)
 
     def is_free(self) -> bool:
-        return self.prompt_price == 0 and self.completion_price == 0
+        return (
+            self.price_known
+            and self.prompt_price == 0
+            and self.completion_price == 0
+        )
 
 
 def parse_model(payload: dict[str, Any]) -> ModelInfo:
@@ -220,6 +229,7 @@ def model_to_dict(model: ModelInfo) -> dict:
         "supports_vision": model.supports_vision,
         "supports_streaming": model.supports_streaming,
         "modality": model.modality,
+        "price_known": model.price_known,
     }
 
 
@@ -238,6 +248,9 @@ def model_from_dict(data: dict) -> ModelInfo | None:
             supports_vision=bool(data.get("supports_vision")),
             supports_streaming=bool(data.get("supports_streaming", True)),
             modality=str(data.get("modality") or "text"),
+            # Older caches predate the flag and came from OpenRouter, which does
+            # publish prices, so the default is honest for them.
+            price_known=bool(data.get("price_known", True)),
         )
     except (TypeError, ValueError):
         return None

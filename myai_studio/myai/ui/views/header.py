@@ -179,6 +179,8 @@ class Header(QFrame):
             placeholder=tr("header.no_model"),
             compact=True,
             empty_action=(tr("inspector.open_settings"), self.settings_requested.emit),
+            searchable=True,
+            search_placeholder=tr("picker.search"),
         )
         self.model_chip.value_changed.connect(self.model_changed)
         self.model_chip.setToolTip(tr("chat.model_hint"))
@@ -277,6 +279,10 @@ class Header(QFrame):
             return
         window = 0
         self.context_ring.set_usage(estimated / window if window else 0.0, True)
+
+    def set_model_choices(self, choices, current: str = "") -> None:
+        self.model_chip.set_choices(choices, current)
+        self.model_chip.set_placeholder(tr("header.model") if choices else tr("header.no_model"))
 
     def set_models(self, models: list[tuple[str, str]], current: str = "") -> None:
         self.model_chip.set_items(models)

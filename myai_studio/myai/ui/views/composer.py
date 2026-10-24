@@ -173,6 +173,8 @@ class Composer(QWidget):
             placeholder=tr("header.no_model"),
             compact=True,
             empty_action=(tr("inspector.open_settings"), self.settings_requested.emit),
+            searchable=True,
+            search_placeholder=tr("picker.search"),
         )
         toolbar.addWidget(self.model_chip)
         self.send_button = SendButton()
@@ -230,6 +232,10 @@ class Composer(QWidget):
         self.model_chip.set_items(items)
         if current:
             self.model_chip.set_value(current)
+
+    def set_model_choices(self, choices, current: str = "") -> None:
+        """Rich rows for the searchable picker (name, id and capability tags)."""
+        self.model_chip.set_choices(choices, current)
 
     def model_value(self) -> str:
         return self.model_chip.value

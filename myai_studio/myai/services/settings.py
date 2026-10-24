@@ -13,7 +13,6 @@ import re
 import threading
 from collections.abc import Callable, Iterable
 from typing import Any
-from urllib.parse import urlparse
 
 from ..core.errors import ValidationError
 from ..core.events import Events, SignalBus
@@ -38,9 +37,14 @@ DEFAULTS: dict[str, Any] = {
     "ui.editor_autosave": True,
     "ui.window_width": 1440,
     "ui.window_height": 900,
-    # AI provider (phase 2)
+    # AI provider (phase 2; multi-provider since 0.9)
     "ai.provider": "openrouter",
+    # Kept for the active OpenRouter URL and for installs made before 0.9.
     "ai.base_url": "https://openrouter.ai/api/v1",
+    #: provider id -> base URL, so switching providers does not lose either URL.
+    "ai.base_urls": {},
+    #: provider id -> cached catalogue (see services.providers.cached_models).
+    "ai.model_cache": {},
     "ai.default_model": "",
     "ai.temperature": 0.7,
     "ai.max_tokens": 4096,
@@ -316,14 +320,29 @@ class SettingsService:
                 raise ValidationError(
                     f"Invalid proxy address: {exc}", message_key="error.proxy_invalid"
                 ) from exc
-        if key == "ai.base_url":
-            url = str(value).strip().rstrip("/")
-            parsed = urlparse(url)
-            if parsed.scheme != "https" or not parsed.netloc:
+        if key == "ai.provider":
+            from .providers import provider_ids
+
+            text = str(value or "").strip().lower()
+            if text not in provider_ids():
                 raise ValidationError(
-                    "Provider base URL must be an https address", message_key="error.settings"
+                    "Unknown AI provider", message_key="error.settings"
                 )
-            return url
+            return text
+        if key == "ai.base_urls":
+            if not isinstance(value, dict):
+                raise ValidationError("Base URLs must be a mapping", message_key="error.settings")
+            cleaned: dict[str, str] = {}
+            for provider_id, url in value.items():
+                text = str(url or "").strip().rstrip("/")
+                if not text:
+                    continue
+                cleaned[str(provider_id)] = text
+            return cleaned
+        if key == "ai.base_url":
+            from .providers import normalize_base_url
+
+            return normalize_base_url(str(value), provider=None)
         if isinstance(default, str):
             return str(value)
         return value

@@ -30,6 +30,7 @@ from ..data.models import Conversation
 from ..i18n import tr
 from ..services.backup import BackupService
 from ..services.openrouter import ModelInfo, model_from_dict, model_to_dict
+from ..services.providers import cached_models, current_provider, has_key, models_cache
 from ..version import APP_NAME
 from .brand import app_icon
 from .bridge import QtBridge
@@ -62,6 +63,7 @@ from .views.web_page import WebPageView
 from .widgets.dialogs import ConfirmDialog, PreviewDialog, PromptDialog
 from .widgets.feedback import ToastManager
 from .widgets.global_search import GlobalSearchDialog
+from .widgets.model_picker import Choice, model_tags
 from .widgets.palette import CommandPalette, PaletteAction
 
 logger = logging.getLogger(__name__)
@@ -222,6 +224,7 @@ class MainWindow(QMainWindow):
         self.api_page.notify.connect(self._show_toast)
         self.api_page.model_selected.connect(self._on_api_model_selected)
         self.api_page.models_updated.connect(self._on_models_loaded)
+        self.api_page.provider_changed.connect(self._on_provider_changed)
         self.memory_page.notify.connect(self._show_toast)
         self.persona_page.notify.connect(self._show_toast)
         self.studio_page.notify.connect(self._show_toast)
@@ -659,7 +662,7 @@ class MainWindow(QMainWindow):
                 self.context.activity.record(key="chat.message_saved", kind="chat")
                 self._show_toast(tr("chat.saved_local"), "info")
                 return
-            if not self.context.secrets.has_api_key():
+            if not has_key(current_provider(self.context.settings), self.context.secrets):
                 self.context.conversations.add_message(
                     conversation.id, "user", text, model_id=model_id,
                     meta={"attachments": attachments},
@@ -847,22 +850,44 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------------- models
     def _bootstrap_models(self) -> None:
-        cached = self.context.settings.get("ai.openrouter_cache", []) or []
+        provider = current_provider(self.context.settings)
+        cached = cached_models(self.context.settings, provider.id)
         models: list[ModelInfo] = []
-        if isinstance(cached, list):
-            for item in cached:
-                model = model_from_dict(item) if isinstance(item, dict) else None
-                if model is not None:
-                    models.append(model)
+        for item in cached:
+            model = model_from_dict(item) if isinstance(item, dict) else None
+            if model is not None:
+                models.append(model)
         self._ai_models = models
         self.context.chat.set_models(models)
         self.api_page.set_models(models)
         self._apply_models_to_ui()
-        if self.context.secrets.has_api_key():
+        if has_key(provider, self.context.secrets):
             QTimer.singleShot(350, self._fetch_models_async)
 
+    def _on_provider_changed(self, provider_id: str) -> None:
+        """Switching provider must change what the composer offers.
+
+        The old catalogue belongs to the old service: keeping it would let the
+        user pick a model the new provider has never heard of. The cached list
+        of the new provider is shown first, then refreshed from the network.
+        """
+        logger.info("provider_changed provider=%s", provider_id)
+        provider = current_provider(self.context.settings)
+        models: list[ModelInfo] = []
+        for item in cached_models(self.context.settings, provider.id):
+            model = model_from_dict(item) if isinstance(item, dict) else None
+            if model is not None:
+                models.append(model)
+        self._ai_models = models
+        self.context.chat.set_models(models)
+        self._apply_models_to_ui()
+        if has_key(provider, self.context.secrets):
+            self._fetch_models_async()
+
     def _fetch_models_async(self) -> None:
-        client = self.api_page.client()
+        # The provider-aware client: whichever service is selected is the one
+        # whose catalogue is fetched, with that service's own key.
+        client = self.context.chat.client()
         from .views.page_base import run_async
 
         run_async(
@@ -878,16 +903,39 @@ class MainWindow(QMainWindow):
         self._ai_models = list(models)
         self.context.chat.set_models(self._ai_models)
         self.api_page.set_models(self._ai_models)
+        self._store_model_cache()
+
+    def _store_model_cache(self) -> None:
+        """Cache the catalogue under the provider that produced it."""
+        provider = current_provider(self.context.settings)
+        cache = models_cache(self.context.settings)
+        cache[provider.id] = [model_to_dict(model) for model in self._ai_models]
         try:
-            self.context.settings.set(
-                "ai.openrouter_cache", [model_to_dict(model) for model in self._ai_models]
-            )
+            updates: dict = {"ai.model_cache": cache}
+            if provider.id == "openrouter":
+                # Keep the pre-0.9 key useful for a downgrade-free path.
+                updates["ai.openrouter_cache"] = cache[provider.id]
+            self.context.settings.update(updates)
         except AppError:
             logger.exception("model_cache_write_failed")
         self._apply_models_to_ui()
 
     def _apply_models_to_ui(self) -> None:
         items = [(model.id, model.name or model.id) for model in self._ai_models]
+        choices = [
+            Choice(
+                model.id,
+                model.name or model.id,
+                detail=model.id,
+                tags=model_tags(
+                    model.context_length,
+                    free=model.is_free(),
+                    tools=model.supports_tools,
+                    vision=model.supports_vision,
+                ),
+            )
+            for model in self._ai_models
+        ]
         default = str(self.context.settings.get("ai.default_model", ""))
         current = (
             self._current.model_id
@@ -896,6 +944,9 @@ class MainWindow(QMainWindow):
         )
         self.header.set_models(items, current)
         self.composer.set_models(items, current)
+        if choices:
+            self.header.set_model_choices(choices, current)
+            self.composer.set_model_choices(choices, current)
         if self._current is not None:
             self._refresh_context_usage()
 

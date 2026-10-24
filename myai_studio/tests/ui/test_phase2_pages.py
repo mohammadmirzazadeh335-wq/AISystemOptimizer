@@ -430,7 +430,7 @@ def test_ai_pages_are_fully_retranslated_on_language_switch(ui) -> None:
     finally:
         pass
     en_page = window.api_page
-    assert window.header.title.text() == "OpenRouter connection"
+    assert window.header.title.text() == "Provider connection"
     assert en_page.lead.text() == tr("api.subtitle")
     assert en_page.save_key.text() != fa_save
     studio = window.studio_page

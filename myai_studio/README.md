@@ -4,8 +4,8 @@ A premium, local-first AI desktop workspace for Windows 11: multi-model chat, me
 a real code studio, supervised agents, media and research — delivered in five verified
 phases.
 
-> **Current build: `0.8.3` — Phase 5 + LAB + Round 3/4, with a Windows x64 release**
-> (`v0.8.3`; the phase notes below describe the shipped feature set)
+> **Current build: `0.9.0` — Phase 5 + LAB + Rounds 3–5, with a Windows x64 release**
+> (`v0.9.0`; the phase notes below describe the shipped feature set)
 > Chat streams from OpenRouter, memory and personality are real and editable, the Output
 > Studio keeps every revision, Code Studio opens real folders and runs real files, and the
 > agent acts **only** through twenty-two registered tools behind an approval gate. Phase 5
@@ -36,6 +36,16 @@ phases.
 > [`docs/NETWORK_TROUBLESHOOTING.md`](docs/NETWORK_TROUBLESHOOTING.md) or its
 > [Persian version](docs/NETWORK_TROUBLESHOOTING_FA.md).
 
+> **`0.9.0` — a second provider, at last, and a model list that behaves.** The
+> API page gained a **Provider** card: OpenRouter, OpenAI, Anthropic, Google
+> Gemini, Groq, DeepSeek, Mistral, a local Ollama/LM Studio server or any
+> OpenAI-compatible endpoint. Each service keeps its own key and URL, and the
+> chat, the agent and the usage page all follow the selection. The model
+> dropdown that covered half the window is now a compact popup with search and
+> a real scrollbar, capped at eight rows. See
+> [`docs/PROVIDERS.md`](docs/PROVIDERS.md) or its
+> [Persian version](docs/PROVIDERS_FA.md).
+
 > **`0.8.3` — the Windows test job is now readable, and its seven failures are
 > fixed.** The Windows runner was red on `v0.8.0` and `v0.8.2` while publishing
 > nothing about *why*: the reporter crashed on a cp1252 console before it could
@@ -52,7 +62,7 @@ phases.
 
 ## Download (Windows x64)
 
-[**MyAI Studio Ultimate 0.8.3 — Windows x64**](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.8.3/MyAIStudio-v0.8.3-windows-x64.zip) — about 59 MB.
+[**MyAI Studio Ultimate 0.9.0 — Windows x64**](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.9.0/MyAIStudio-v0.9.0-windows-x64.zip) — about 59 MB.
 
 Extract the zip and run `MyAIStudio.exe`; keep the `_internal` folder beside it.
 Data lives in `%APPDATA%\MyAIStudio`; projects default to `Documents\MyAI Studio Projects`. The build is produced by

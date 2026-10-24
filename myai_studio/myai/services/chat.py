@@ -162,6 +162,14 @@ class ChatService:
             network=options_from_settings(self._settings),
         )
 
+    def set_client_factory(self, factory: Callable[[], OpenRouterClient]) -> None:
+        """Install the provider-aware factory built by the composition root.
+
+        The client is rebuilt on every call so switching provider (or editing
+        its URL) takes effect for the very next message, without a restart.
+        """
+        self._client_factory = factory
+
     def client(self) -> OpenRouterClient:
         return self._client_factory()
 

@@ -9,9 +9,9 @@ APP_ID = "com.myaistudio.ultimate"
 
 # Phase-by-phase release train.  Bumped at the end of every completed phase,
 # and again for the capability round that followed Phase 5.
-VERSION = "0.8.3"
+VERSION = "0.9.0"
 PHASE = 6
-BUILD_CHANNEL = "Round 4 - Network / proxy, provider reachability + Windows test parity"
+BUILD_CHANNEL = "Round 5 - Multi-provider (OpenAI, Anthropic, Gemini, local) + searchable model picker"
 
 __all__ = [
     "APP_NAME",

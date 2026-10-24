@@ -102,16 +102,30 @@ class UsageService:
 
     # ------------------------------------------------------------------ prices
     def catalogue(self) -> dict[str, dict]:
-        cached = self._settings.get("ai.openrouter_cache", []) or []
+        """Prices from every provider's cached catalogue, merged by model id.
+
+        Only OpenRouter publishes prices. The other catalogues are included
+        anyway because their rows carry ``price_known=False`` and therefore no
+        price at all, so merging cannot invent a number — and it lets a model
+        that later gains a price be picked up without a code change.
+        """
+        cached = self._settings.get("ai.model_cache", {}) or {}
+        rows: list = []
+        if isinstance(cached, dict):
+            for value in cached.values():
+                if isinstance(value, list):
+                    rows.extend(value)
+        if not rows:
+            rows = self._settings.get("ai.openrouter_cache", []) or []
         result: dict[str, dict] = {}
-        for row in cached:
+        for row in rows:
             if isinstance(row, dict) and row.get("id"):
-                result[str(row["id"])] = row
+                result.setdefault(str(row["id"]), row)
         return result
 
     def _price(self, catalogue: dict[str, dict], model_id: str) -> tuple[float, float] | None:
         row = catalogue.get(model_id)
-        if row is None:
+        if row is None or row.get("price_known") is False:
             return None
         prompt = float(row.get("prompt_price") or 0.0)
         completion = float(row.get("completion_price") or 0.0)

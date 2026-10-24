@@ -31,6 +31,7 @@ from ...core.errors import AppError
 from ...i18n import tr
 from ...services.agent import MAX_STEPS_RANGE, AgentRun, AgentStep
 from ...services.projects import Project, ProjectService
+from ...services.providers import cached_models, current_provider, has_key
 from ...services.runner import Runner
 from ...services.tools import (
     EXECUTE,
@@ -446,8 +447,17 @@ class AgentPage(PageShell):
             thread.join(timeout=2.5)
 
     # ---------------------------------------------------------------- models
+    def _provider_ready(self) -> bool:
+        """Ready to run: the selected provider has whatever it needs."""
+        provider = current_provider(self.context.settings)
+        if not has_key(provider, self.context.secrets):
+            return False
+        # Tool calling is implemented for OpenAI-compatible endpoints only.
+        return provider.protocol == "openai"
+
     def _load_models(self) -> None:
-        cache = self.context.settings.get("ai.openrouter_cache", []) or []
+        provider = current_provider(self.context.settings)
+        cache = cached_models(self.context.settings, provider.id)
         models = [item for item in cache if isinstance(item, dict) and item.get("id")]
         models.sort(key=lambda item: (not bool(item.get("supports_tools")), str(item.get("name") or item["id"])))
         self._models = models
@@ -622,7 +632,7 @@ class AgentPage(PageShell):
         else:
             self.model_badge.setText(tr("agent.model_tools_unknown"))
             self.model_badge.set_tone("muted")
-        if not self.context.secrets.has_api_key():
+        if not self._provider_ready():
             self.model_badge.setToolTip(tr("agent.need_key"))
 
     def _refresh_runs(self) -> None:
@@ -775,15 +785,15 @@ class AgentPage(PageShell):
     # ------------------------------------------------------------------ run
     def _update_controls(self) -> None:
         running = self._thread is not None and self._thread.is_alive()
-        has_key = self.context.secrets.has_api_key()
-        can_run = bool(self.task_edit.toPlainText().strip()) and bool(self.model_select.value) and has_key
+        ready = self._provider_ready()
+        can_run = bool(self.task_edit.toPlainText().strip()) and bool(self.model_select.value) and ready
         self.run_button.setEnabled(can_run and not running)
         self.stop_button.setEnabled(running)
         self.task_edit.setReadOnly(running)
         self.model_select.setEnabled(not running)
         self.project_select.setEnabled(not running)
         self.refresh_tools_button.setEnabled(not running)
-        if not has_key:
+        if not ready:
             hint = tr("agent.need_key")
         elif not self.model_select.value:
             hint = tr("agent.need_model")
@@ -806,7 +816,7 @@ class AgentPage(PageShell):
         if not model_id:
             self._toast(tr("agent.need_model"), "warning")
             return
-        if not self.context.secrets.has_api_key():
+        if not self._provider_ready():
             self._toast(tr("agent.need_key"), "warning")
             return
         if self._thread is not None and self._thread.is_alive():

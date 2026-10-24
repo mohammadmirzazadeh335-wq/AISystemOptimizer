@@ -25,6 +25,7 @@ from ..theme import runtime
 from ..theme.icons import draw as draw_icon
 from .buttons import IconButton, ToggleSwitch
 from .foundation import Badge, repolish
+from .model_picker import Choice, ChoicePopup
 from .painting import paint_event
 
 
@@ -168,10 +169,19 @@ class SelectField(QAbstractButton):
         icon_name: str = "",
         compact: bool = False,
         empty_action: tuple[str, Callable[[], None]] | None = None,
+        searchable: bool = False,
+        search_placeholder: str = "",
+        choices: list | None = None,
     ) -> None:
         super().__init__(parent)
         self._items: list[tuple[str, str]] = list(items or [])
         self._empty_action = empty_action
+        # A QMenu with 300 entries grew past the window. Searchable fields open
+        # a compact popup with its own filter instead (see model_picker).
+        self._searchable = searchable
+        self._search_placeholder = search_placeholder
+        self._choices: list = list(choices or [])
+        self._popup = None
         self._value = ""
         self._placeholder = placeholder
         self._icon_name = icon_name
@@ -211,8 +221,33 @@ class SelectField(QAbstractButton):
         self._items = list(items)
         if self._value and self._value not in {v for v, _ in self._items}:
             self._value = ""
+        # Plain items replace any rich rows; otherwise the popup would keep
+        # showing a catalogue the field no longer has.
+        self._choices = [Choice(value, label) for value, label in self._items]
         self._recalc()
         self.update()
+
+    def set_choices(self, choices: Iterable, current: str = "") -> None:
+        """Rich rows: name, id and capability tags inside the popup."""
+        self._choices = list(choices)
+        self._items = [(choice.value, choice.label) for choice in self._choices]
+        if current:
+            self._value = current
+        self._recalc()
+        self.update()
+
+    @property
+    def searchable(self) -> bool:
+        return self._searchable
+
+    @property
+    def uses_popup(self) -> bool:
+        """A long list opens the searchable popup; a short one stays a menu."""
+        return self._searchable and len(self._items) > 6
+
+    def open_picker(self) -> None:
+        """Open the same list the mouse would (also used by tests)."""
+        self._show_menu()
 
     def set_value(self, value: str) -> None:
         self._value = value
@@ -230,6 +265,9 @@ class SelectField(QAbstractButton):
         self.update()
 
     def _show_menu(self) -> None:
+        if self.uses_popup:
+            self._show_picker()
+            return
         menu = QMenu(self)
         menu.setLayoutDirection(self.layoutDirection())
         if not self._items:
@@ -246,6 +284,18 @@ class SelectField(QAbstractButton):
             action.setChecked(value == self._value)
             action.triggered.connect(lambda _=False, v=value: self._select(v))
         menu.exec(self.mapToGlobal(QPoint(0, self.height() + 4)))
+
+    def _show_picker(self) -> None:
+        choices = list(self._choices) or [Choice(value, label) for value, label in self._items]
+        popup = ChoicePopup(
+            choices,
+            current=self._value,
+            placeholder=self._search_placeholder or tr("picker.search"),
+            parent=self.window(),
+        )
+        popup.chosen.connect(self._select)
+        self._popup = popup
+        popup.show_for(self, width=runtime.px(380))
 
     def _select(self, value: str) -> None:
         if value != self._value:

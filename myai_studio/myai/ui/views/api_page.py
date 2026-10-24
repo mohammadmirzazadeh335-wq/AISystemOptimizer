@@ -32,11 +32,32 @@ from ...services.net import (
     options_from_settings,
     resolve_proxy,
 )
-from ...services.openrouter import ConnectionTest, ModelInfo, OpenRouterClient
+from ...services.openrouter import (
+    ConnectionTest,
+    ModelInfo,
+    model_from_dict,
+    model_to_dict,
+)
+from ...services.providers import (
+    Provider,
+    ProviderClient,
+    all_providers,
+    base_url_for,
+    cached_models,
+    current_provider,
+    key_problem,
+    models_cache,
+    normalize_base_url,
+    save_base_url,
+)
+from ...services.providers import (
+    has_key as provider_has_key,
+)
 from ..theme import runtime
 from ..widgets.dialogs import ConfirmDialog
 from ..widgets.fields import FlowLayout, SelectField
 from ..widgets.foundation import Badge
+from ..widgets.model_picker import Choice, model_tags
 from .page_base import (
     PageShell,
     danger_button,
@@ -120,6 +141,7 @@ class ApiPage(PageShell):
     model_selected = Signal(str)
     models_updated = Signal(list)
     notify = Signal(str, str)
+    provider_changed = Signal(str)
 
     def __init__(self, context) -> None:  # noqa: ANN001
         super().__init__("api.title", "api.subtitle", icon_name="key")
@@ -127,17 +149,171 @@ class ApiPage(PageShell):
         self._models: list[ModelInfo] = []
         self._busy = False
         self._filter = ""
+        self._choices: list = []
+        self.provider: Provider = current_provider(context.settings)
         self._build()
         runtime.signals.changed.connect(lambda *_: self._restyle())
 
     # ------------------------------------------------------------------ build
     def _build(self) -> None:
+        self._build_provider_card()
         self._build_key_card()
         self._build_test_card()
         self._build_network_card()
         self._build_catalogue_card()
         self._build_sampling_card()
         self._refresh_key_state()
+        self._sync_provider_fields()
+
+    # --------------------------------------------------------------- provider
+    def _build_provider_card(self) -> None:
+        """Which service answers, and at which address.
+
+        Before 0.9 the endpoint was a constant: OpenRouter or nothing. The
+        selector is the whole feature, so it sits above the key and states what
+        the choice implies (key needed / local / custom URL).
+        """
+        card, layout = self.card("api.provider_card", "layers")
+        self.provider_hint = hint_label(tr("api.provider_hint"))
+        self.provider_hint.setWordWrap(True)
+        layout.addWidget(self.provider_hint)
+
+        host = QWidget()
+        row = FlowLayout(host, spacing=runtime.px(8))
+        layout.addWidget(host)
+        self.provider_label = field_label(tr("api.provider_label"))
+        row.addWidget(self.provider_label)
+        self.provider_select = SelectField(
+            [(item.id, tr(f"provider.{item.id}") if has_key(f"provider.{item.id}") else item.name)
+             for item in all_providers()],
+            placeholder=tr("api.provider_none"),
+            icon_name="layers",
+            searchable=True,
+            search_placeholder=tr("picker.provider_search"),
+        )
+        self.provider_select.set_value(self.provider.id)
+        self.provider_select.value_changed.connect(self._on_provider_selected)
+        row.addWidget(self.provider_select)
+        self.provider_badge_holder = QWidget()
+        self.provider_badge_layout = QHBoxLayout(self.provider_badge_holder)
+        self.provider_badge_layout.setContentsMargins(0, 0, 0, 0)
+        self.provider_badge_layout.addWidget(Badge(tr("api.key_required_badge"), "warning"))
+        row.addWidget(self.provider_badge_holder)
+        layout.addWidget(host)
+
+        self.provider_note = hint_label("")
+        self.provider_note.setWordWrap(True)
+        layout.addWidget(self.provider_note)
+
+        url_host = QWidget()
+        url_row = FlowLayout(url_host, spacing=runtime.px(8))
+        layout.addWidget(url_host)
+        self.base_url_label = field_label(tr("api.base_url"))
+        url_row.addWidget(self.base_url_label)
+        self.base_url_input = QLineEdit()
+        self.base_url_input.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
+        self.base_url_input.setPlaceholderText("https://…")
+        self.base_url_input.setAccessibleName(tr("api.base_url"))
+        self.base_url_input.setMinimumWidth(runtime.px(260))
+        self.base_url_input.setMaximumWidth(runtime.px(520))
+        self.base_url_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.base_url_input.textChanged.connect(lambda _text: self._sync_base_url_state())
+        url_row.addWidget(self.base_url_input)
+        self.base_url_save = primary_button(tr("api.save_url"), "check")
+        self.base_url_save.clicked.connect(self._save_base_url)
+        url_row.addWidget(self.base_url_save)
+        layout.addWidget(url_host)
+        self.base_url_hint = hint_label(tr("api.base_url_hint"))
+        self.base_url_hint.setWordWrap(True)
+        layout.addWidget(self.base_url_hint)
+
+    def _provider_badge(self) -> None:
+        while self.provider_badge_layout.count():
+            item = self.provider_badge_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.setParent(None)
+                widget.deleteLater()
+        if self.provider.local:
+            self.provider_badge_layout.addWidget(Badge(tr("api.key_local_badge"), "info"))
+        elif self.provider.key_required:
+            self.provider_badge_layout.addWidget(Badge(tr("api.key_required_badge"), "warning"))
+        else:
+            self.provider_badge_layout.addWidget(Badge(tr("api.key_local_badge"), "info"))
+
+    def _sync_provider_fields(self) -> None:
+        """Everything on the page follows the selected provider."""
+        self.provider = current_provider(self.context.settings)
+        self.provider_select.set_value(self.provider.id)
+        self.provider_note.setText(tr(self.provider.note_key) if self.provider.note_key else "")
+        self._provider_badge()
+        url = base_url_for(self.provider, self.context.settings)
+        if self.base_url_input.text().strip() != url:
+            self.base_url_input.setText(url)
+            # A QLineEdit shows the text around the cursor; a long URL set
+            # programmatically left the field scrolled to its tail ("erative…"),
+            # which reads like a corrupted address. Show the host from the start.
+            self.base_url_input.setCursorPosition(0)
+        self.base_url_input.setPlaceholderText(self.provider.base_url or "https://…")
+        self._sync_base_url_state()
+        self.endpoint_value.setText(url)
+        self.key_input.setPlaceholderText(self.provider.key_hint or "…")
+
+    def _sync_base_url_state(self) -> None:
+        saved = base_url_for(self.provider, self.context.settings)
+        typed = self.base_url_input.text().strip().rstrip("/")
+        self.base_url_save.setEnabled(typed != saved)
+        try:
+            normalize_base_url(typed, provider=self.provider)
+            valid = True
+            error = ""
+        except Exception as exc:  # noqa: BLE001 - the message is the point
+            valid = False
+            error = self._localized_error(exc) if isinstance(exc, AppError) else str(exc)
+        self.base_url_input.setToolTip(error)
+        self.base_url_hint.setText(tr("api.base_url_hint") if valid or not typed else error)
+
+    def _on_provider_selected(self, provider_id: str) -> None:
+        if not provider_id or provider_id == self.provider.id:
+            return
+        try:
+            self.context.settings.update({"ai.provider": provider_id})
+        except AppError as exc:
+            self.notify.emit(self._localized_error(exc), "error")
+            return
+        self.provider = current_provider(self.context.settings)
+        self._filter = ""
+        self.search.setText("")
+        self._sync_provider_fields()
+        self._refresh_key_state()
+        self._models = []
+        self._render_models()
+        self.models_updated.emit([])
+        self.provider_changed.emit(self.provider.id)
+        self.notify.emit(tr("api.provider_saved", name=self._provider_name()), "success")
+        if provider_has_key(self.provider, self.context.secrets):
+            self._load_models(refresh=True)
+        elif self.provider.local:
+            self._load_models(refresh=True)
+
+    def _provider_name(self) -> str:
+        key = f"provider.{self.provider.id}"
+        return tr(key) if has_key(key) else self.provider.name
+
+    def _save_base_url(self) -> None:
+        try:
+            clean = save_base_url(
+                self.context.settings, self.provider, self.base_url_input.text()
+            )
+        except AppError as exc:
+            self.notify.emit(self._localized_error(exc), "error")
+            return
+        self.base_url_input.setText(clean)
+        self.base_url_input.setCursorPosition(0)
+        self.endpoint_value.setText(clean)
+        self._sync_base_url_state()
+        self.notify.emit(tr("api.url_saved", name=self._provider_name()), "success")
+        self.provider_changed.emit(self.provider.id)
 
     def _build_key_card(self) -> None:
         card, layout = self.card("api.key_card", "lock")
@@ -152,7 +328,8 @@ class ApiPage(PageShell):
         self.key_input.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         self.key_input.setPlaceholderText("sk-or-v1-…")
         self.key_input.setMinimumHeight(runtime.px(34))
-        layout.addWidget(field_label(tr("api.key_label")))
+        self.key_label = field_label(tr("api.key_label"))
+        layout.addWidget(self.key_label)
         layout.addWidget(self.key_input)
 
         row = QHBoxLayout()
@@ -439,7 +616,12 @@ class ApiPage(PageShell):
         layout.addLayout(self.default_row)
         self.default_label = field_label(tr("api.default_model"))
         self.default_row.addWidget(self.default_label)
-        self.default_picker = SelectField([], placeholder=tr("api.no_default"))
+        self.default_picker = SelectField(
+            [],
+            placeholder=tr("api.no_default"),
+            searchable=True,
+            search_placeholder=tr("picker.search"),
+        )
         self.default_picker.value_changed.connect(self._choose_default)
         self.default_row.addWidget(self.default_picker)
         self.default_row.addStretch(1)
@@ -471,8 +653,10 @@ class ApiPage(PageShell):
 
     # ------------------------------------------------------------------- key
     def _refresh_key_state(self) -> None:
-        has_key = self.context.secrets.has_api_key()
+        has_key = provider_has_key(self.provider, self.context.secrets)
         masked = self._masked_key()
+        self.key_label.setText(f"{tr('api.key_label')} — {self._provider_name()}")
+        self.key_input.setPlaceholderText(self.provider.key_hint or "…")
         if has_key:
             self.key_state.setText(tr("api.key_stored", key=masked))
             self.key_state.setProperty("role", "success")
@@ -490,12 +674,14 @@ class ApiPage(PageShell):
         self.key_badge_layout.addWidget(
             Badge(tr("api.configured"), "success") if has_key else Badge(tr("api.not_configured"), "warning")
         )
-        self.delete_key.setEnabled(has_key)
+        self.delete_key.setEnabled(
+            bool(self.context.secrets.get_key(self.provider.id))
+        )
         if hasattr(self, "test_button"):
             self.test_button.setEnabled(has_key)
         self.key_input.clear()
         self._sync_key_button()
-        self.key_input.setPlaceholderText(masked if has_key else "sk-or-v1-…")
+        self.key_input.setPlaceholderText(masked if has_key else (self.provider.key_hint or "…"))
         self.save_key.setText(tr("api.replace_key") if has_key else tr("api.save_key"))
         if has_key:
             self.show_key.setEnabled(True)
@@ -504,7 +690,7 @@ class ApiPage(PageShell):
             self.show_key.setChecked(False)
 
     def _masked_key(self) -> str:
-        value = self.context.secrets.get_api_key() or ""
+        value = self.context.secrets.get_key(self.provider.id) or ""
         if len(value) <= 10:
             return "•" * len(value)
         return f"{value[:7]}…{value[-4:]}"
@@ -517,19 +703,22 @@ class ApiPage(PageShell):
         self.save_key.setEnabled(bool(self.key_input.text().strip()))
 
     def _save_key(self) -> None:
-        from ...services.openrouter import api_key_problem
-
         value = self.key_input.text().strip()
         if not value:
             self._set_key_error(tr("api.key_empty"))
             return
-        problem = api_key_problem(value)
+        problem = key_problem(self.provider, value)
         if problem is not None:
             # The message never echoes the key back into the window or the log.
-            self._set_key_error(tr(problem))
+            # "wrong format" is the only check that depends on the provider's
+            # prefix, so the sentence names it (sk-or-, sk-ant-, …).
+            if problem == "api.key_format" and self.provider.key_prefix:
+                self._set_key_error(tr("api.key_format_prefix", name=self._provider_name(), prefix=self.provider.key_prefix))
+            else:
+                self._set_key_error(tr(problem))
             return
         try:
-            self.context.secrets.set_api_key(value)
+            self.context.secrets.set_key(self.provider.id, value)
         except Exception as exc:  # noqa: BLE001 - surfaced to the user
             logger.exception("secret_store_failed")
             self._set_key_error(tr("api.key_store_failed", error=str(exc)))
@@ -537,7 +726,7 @@ class ApiPage(PageShell):
         self._set_key_error("")
         self._refresh_key_state()
         self.context.activity.record(key="api.key_saved", kind="settings")
-        self.notify.emit(tr("api.key_saved_toast"), "success")
+        self.notify.emit(tr("api.provider_key_saved", name=self._provider_name()), "success")
         # A stored key is not a verified key: fetch the catalogue to prove it.
         self._load_models(refresh=True)
 
@@ -557,17 +746,19 @@ class ApiPage(PageShell):
         )
         if not dialog.exec():
             return
-        self.context.secrets.set_api_key("")
+        self.context.secrets.set_key(self.provider.id, "")
         self._models = []
         self._render_models()
         self._refresh_key_state()
         self.notify.emit(tr("api.key_deleted_toast"), "info")
 
     # --------------------------------------------------------------- network
-    def client(self) -> OpenRouterClient:
-        return OpenRouterClient(
-            self.context.secrets.get_api_key,
-            base_url=str(self.context.settings.get("ai.base_url", "https://openrouter.ai/api/v1")),
+    def client(self) -> ProviderClient:
+        """A client for the selected provider, with that provider's own key."""
+        return ProviderClient(
+            lambda: self.context.secrets.get_key(self.provider.id),
+            provider=self.provider.id,
+            base_url=base_url_for(self.provider, self.context.settings),
             network=self._network_options(),
         )
 
@@ -592,7 +783,12 @@ class ApiPage(PageShell):
         assert isinstance(result, ConnectionTest)
         if result.ok:
             self.test_result.setText(
-                tr("api.test_ok", ms=result.latency_ms, count=result.model_count)
+                tr(
+                    "api.provider_test_ok",
+                    name=self._provider_name(),
+                    ms=result.latency_ms,
+                    count=result.model_count,
+                )
             )
             self.test_result.setProperty("role", "success")
             self.context.activity.record(key="api.connected", kind="settings")
@@ -635,8 +831,10 @@ class ApiPage(PageShell):
         self._restyle()
 
     def _load_models(self, *, refresh: bool = False) -> None:
-        if not self.context.secrets.has_api_key():
-            self.model_count.setText(tr("api.models_need_key"))
+        if not provider_has_key(self.provider, self.context.secrets):
+            self.model_count.setText(
+                tr("api.models_need_key") if self.provider.key_required else tr("api.models_none")
+            )
             return
         self.refresh_button.setEnabled(False)
         self.model_count.setText(tr("api.models_loading"))
@@ -654,6 +852,12 @@ class ApiPage(PageShell):
         self._models = list(models)
         self.context.chat.set_models(self._models)
         self.context.settings.set("ai.last_model_sync", datetime.now().isoformat(timespec="seconds"))
+        try:
+            cache = models_cache(self.context.settings)
+            cache[self.provider.id] = [model_to_dict(model) for model in self._models]
+            self.context.settings.update({"ai.model_cache": cache})
+        except AppError:
+            logger.exception("model_cache_write_failed")
         self._render_models()
         self.models_updated.emit(self._models)
         if self._models:
@@ -712,11 +916,29 @@ class ApiPage(PageShell):
             self.model_count.setText(
                 tr("api.models_loaded_short", count=len(self._models), shown=len(visible))
             )
+        elif self.provider.id == "custom":
+            self.models_empty.setText(tr("api.custom_models_note"))
         items = [(model.id, model.id) for model in self._models]
         self.default_picker.set_items(items)
         if current:
             self.default_picker.set_value(current)
         self.default_picker.set_placeholder(tr("api.no_default"))
+        choices = [
+            Choice(
+                model.id,
+                model.name or model.id,
+                detail=model.id,
+                tags=model_tags(
+                    model.context_length,
+                    free=model.is_free(),
+                    tools=model.supports_tools,
+                    vision=model.supports_vision,
+                ),
+            )
+            for model in visible[:400]
+        ]
+        self._choices = choices
+        self.default_picker.set_choices(choices, current)
 
     def _choose_default(self, model_id: str) -> None:
         if model_id:
@@ -731,6 +953,18 @@ class ApiPage(PageShell):
     def set_models(self, models: list[ModelInfo]) -> None:
         self._models = list(models)
         self._render_models()
+
+    def load_cached_models(self) -> None:
+        """Show the cached catalogue for the selected provider immediately."""
+        rows = cached_models(self.context.settings, self.provider.id)
+        models: list[ModelInfo] = []
+        for item in rows:
+            model = model_from_dict(item) if isinstance(item, dict) else None
+            if model is not None:
+                models.append(model)
+        if models:
+            self._models = models
+            self._render_models()
 
     # ---------------------------------------------------------------- sampling
     def _save_sampling(self) -> None:
@@ -761,6 +995,19 @@ class ApiPage(PageShell):
         self._refresh_key_state()
         self.default_label.setText(tr("api.default_model"))
         self.endpoint_label.setText(tr("api.base_url"))
+        self.provider_label.setText(tr("api.provider_label"))
+        self.base_url_label.setText(tr("api.base_url"))
+        self.base_url_save.setText(tr("api.save_url"))
+        self.base_url_hint.setText(tr("api.base_url_hint"))
+        self.provider_hint.setText(tr("api.provider_hint"))
+        self.provider_select.set_items(
+            [
+                (item.id, tr(f"provider.{item.id}") if has_key(f"provider.{item.id}") else item.name)
+                for item in all_providers()
+            ]
+        )
+        self._sync_provider_fields()
+        self._refresh_key_state()
         self.proxy_mode.set_items(
             [
                 ("system", tr("api.proxy_system")),
@@ -783,10 +1030,12 @@ class ApiPage(PageShell):
         self.sampling_status.hide()
 
     def refresh(self) -> None:
+        self._sync_provider_fields()
         self._refresh_key_state()
         self._load_proxy_fields()
-        self.endpoint_value.setText(str(self.context.settings.get("ai.base_url", "")))
-        if not self._models and self.context.secrets.has_api_key():
+        if not self._models:
+            self.load_cached_models()
+        if not self._models and provider_has_key(self.provider, self.context.secrets):
             self._load_models()
         else:
             self._render_models()

@@ -38,6 +38,7 @@ from .services.persona import PersonaService
 from .services.plugins import PluginService
 from .services.projects import ProjectService
 from .services.prompts import PromptService
+from .services.providers import build_client as build_provider_client
 from .services.search import SearchService
 from .services.settings import SettingsService
 from .services.tasks import TaskService
@@ -152,6 +153,9 @@ def build_context(home: str | Path | None = None, *, log: bool = True) -> AppCon
         attachments=attachments,
         api_key_reader=secrets.get_api_key,
     )
+    # One factory for chat and the agent: whichever provider is selected in the
+    # API page is the one every request goes to, with that provider's own key.
+    chat.set_client_factory(lambda: build_provider_client(settings, secrets))
     agent = AgentService(
         chat=chat,
         tools=tool_registry(),

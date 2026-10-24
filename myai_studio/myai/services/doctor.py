@@ -25,7 +25,7 @@ from ..core.timeutil import format_bytes
 from ..data.db import LATEST_SCHEMA, Database
 from ..i18n.translator import LOCALES_DIR
 from ..security.secrets import SecretStore
-from .openrouter import api_key_problem
+from . import providers
 from .settings import SettingsService
 
 logger = logging.getLogger(__name__)
@@ -253,7 +253,7 @@ def run_checks(
 
     # ------------------------------------------------------------ security
     def secrets_check() -> HealthCheck:
-        api_key: str | None = None
+        keys: list[str] = []
         raw = b""
         if paths.secrets_file.exists():
             try:
@@ -261,31 +261,47 @@ def run_checks(
             except OSError:
                 return HealthCheck("secrets", "security", FAIL, "unreadable", "doctor.fix_secrets")
         try:
-            api_key = secrets.get_api_key()
+            for provider_id in secrets.configured_providers():
+                value = secrets.get_key(provider_id)
+                if value:
+                    keys.append(value)
         except Exception:  # noqa: BLE001 - a damaged store is a finding, not a crash
-            api_key = None
+            keys = []
         # The envelope must never contain a credential in clear text — checked
         # by shape too, so this also works when decryption itself fails.
         raw_text = raw.decode("utf-8", "ignore")
         plaintext = find_secrets(raw_text)
-        if (api_key and contains_secret(raw_text, [api_key])) or plaintext:
+        if (keys and contains_secret(raw_text, keys)) or plaintext:
             return HealthCheck("secrets", "security", FAIL, "plaintext key on disk", "doctor.fix_secrets")
-        if not api_key:
+        if not keys:
             return HealthCheck("secrets", "security", WARN, "no key stored", "doctor.fix_key")
+        count = len(secrets.configured_providers())
         return HealthCheck(
-            "secrets", "security", OK, f"1 key · encrypted · {format_bytes(len(raw))}"
+            "secrets", "security", OK,
+            f"{count} key(s) · encrypted · {format_bytes(len(raw))}",
         )
 
     checks.append(_timed("secrets", "security", secrets_check))
 
     def api_key_check() -> HealthCheck:
-        api_key = secrets.get_api_key()
-        if not api_key:
+        configured = secrets.configured_providers()
+        if not configured:
             return HealthCheck("api_key", "security", SKIP, "no key", "doctor.fix_key")
-        problem = api_key_problem(api_key)
-        if problem:
-            return HealthCheck("api_key", "security", FAIL, problem, "doctor.fix_key")
-        return HealthCheck("api_key", "security", OK, f"{len(api_key)} chars · sk-or- prefix")
+        # The first stored keyed provider is the one the app will use by
+        # default, so its problem is reported on its own: the check stays a
+        # single line, the way the diagnostics page renders it.
+        ordered = sorted(configured, key=lambda item: item != "openrouter")
+        for provider_id in ordered:
+            value = secrets.get_key(provider_id) or ""
+            problem = providers.key_problem(providers.get_provider(provider_id), value)
+            if problem:
+                return HealthCheck("api_key", "security", FAIL, problem, "doctor.fix_key")
+        provider = providers.get_provider(ordered[0])
+        suffix = f"{provider.key_prefix} prefix" if provider.key_prefix else "no fixed prefix"
+        extra = f", +{len(ordered) - 1} more" if len(ordered) > 1 else ""
+        return HealthCheck(
+            "api_key", "security", OK, f"{len(value)} chars · {suffix} · {provider.name}{extra}"
+        )
 
     checks.append(_timed("api_key", "security", api_key_check))
 
