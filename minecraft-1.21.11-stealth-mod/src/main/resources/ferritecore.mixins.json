@@ -1,0 +1,37 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "malte0811.ferritecore.mixin",
+  "plugin": "malte0811.ferritecore.impl.DeduplicationConfig",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "AtmosphericFogEnvironmentMixin",
+    "BlockCollisionsMixin",
+    "BlockEntityRenderDispatcherMixin",
+    "BlockMixin",
+    "BlockStateBaseMixin",
+    "CameraMixin",
+    "ClientPacketListenerMixin",
+    "ClientTelemetryManagerMixin",
+    "ConnectionMixin",
+    "EntityMixin",
+    "EntityRendererMixin",
+    "FogRendererMixin",
+    "GameRendererMixin",
+    "IndigoBlockRenderInfoMixin",
+    "KeyboardHandlerMixin",
+    "LiquidBlockRendererMixin",
+    "LocalPlayerMixin",
+    "MinecraftMixin",
+    "ModelBlockRendererMixin",
+    "OptionInstanceMixin",
+    "SectionOcclusionGraphMixin",
+    "SodiumBlockRenderContextMixin",
+    "SodiumFluidRendererMixin",
+    "SodiumRenderSectionManagerMixin",
+    "SystemReportMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
