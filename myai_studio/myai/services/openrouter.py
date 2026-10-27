@@ -399,9 +399,13 @@ class OpenRouterClient:
                 details="HTTP 429",
             )
         if status == 404:
+            # Two very different causes share this code: a model id the provider
+            # does not have, and a base URL whose path is wrong (the usual one
+            # being a missing "/v1"). The hint points at the address field.
             raise ProviderError(
                 detail or "Model or endpoint not found",
                 message_key="error.api_model",
+                hint_key="api.base_url_hint",
                 details="HTTP 404",
             )
         if status >= 500:

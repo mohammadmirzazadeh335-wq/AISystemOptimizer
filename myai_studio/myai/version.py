@@ -9,9 +9,9 @@ APP_ID = "com.myaistudio.ultimate"
 
 # Phase-by-phase release train.  Bumped at the end of every completed phase,
 # and again for the capability round that followed Phase 5.
-VERSION = "0.9.0"
+VERSION = "0.9.1"
 PHASE = 6
-BUILD_CHANNEL = "Round 5 - Multi-provider (OpenAI, Anthropic, Gemini, local) + searchable model picker"
+BUILD_CHANNEL = "Round 5.1 - Tooken Club provider, hand-typed model ids, honest key state"
 
 __all__ = [
     "APP_NAME",

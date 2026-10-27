@@ -244,3 +244,98 @@ def _anchor():  # noqa: ANN202
     widget.resize(runtime.px(300), runtime.px(32))
     widget.show()
     return widget
+
+
+# --------------------------------------------------- a model id typed by hand
+def test_a_model_id_typed_by_hand_becomes_the_default(ui) -> None:  # noqa: ANN001
+    """An endpoint that publishes no catalogue still has to be usable.
+
+    The user's gateway may answer /v1/models with 404 or with names the app
+    cannot list; without this row the provider could be configured and then be
+    impossible to use.
+    """
+    window, context, _theme = ui
+    page = window.api_page
+    page._on_provider_selected("custom")
+    pump()
+    page.model_id_input.setText("vendor/model-typed")
+    page.model_id_button.click()
+    pump()
+    assert context.settings.get("ai.default_model") == "vendor/model-typed"
+    assert page.default_picker.value == "vendor/model-typed"
+    # It is offered by the picker too, not only stored in settings.
+    offered = [value for value, _label in page.default_picker._items]
+    assert "vendor/model-typed" in offered
+    # The typed row is marked as such, so it cannot be mistaken for a listing.
+    rows = [
+        page.models_layout.itemAt(index).widget()
+        for index in range(page.models_layout.count())
+        if page.models_layout.itemAt(index).widget() is not None
+    ]
+    typed = [row for row in rows if row.model.id == "vendor/model-typed"]
+    assert typed, "the typed model is missing from the catalogue card"
+    assert typed[0].model.price_known is False
+    assert page.model_id_input.text() == ""
+
+
+def test_the_default_model_survives_a_restart(ui) -> None:  # noqa: ANN001
+    """The id is kept in settings, so reopening the app must still show it."""
+    window, context, _theme = ui
+    page = window.api_page
+    page._on_provider_selected("custom")
+    pump()
+    page.model_id_input.setText("only/this-one")
+    page.model_id_button.click()
+    pump()
+    page.set_models([])
+    page.set_default_model("only/this-one")
+    pump()
+    assert page.default_picker.value == "only/this-one"
+
+
+def test_a_typed_model_id_with_a_space_is_refused(ui) -> None:  # noqa: ANN001
+    window, context, _theme = ui
+    page = window.api_page
+    page._on_provider_selected("custom")
+    pump()
+    before = context.settings.get("ai.default_model")
+    page.model_id_input.setText("gpt 4")
+    page.model_id_button.click()
+    pump()
+    assert context.settings.get("ai.default_model") == before
+    assert page.model_id_hint.property("role") == "danger"
+
+
+def test_a_keyless_provider_never_claims_a_stored_key(ui) -> None:  # noqa: ANN001
+    """The card used to render "a key is stored: ''" for a provider with no key."""
+    window, context, _theme = ui
+    page = window.api_page
+    page._on_provider_selected("custom")
+    pump()
+    assert "''" not in page.key_state.text()
+    assert page.save_key.text() != ""
+    badges = [
+        page.key_badge_layout.itemAt(index).widget().text()
+        for index in range(page.key_badge_layout.count())
+        if page.key_badge_layout.itemAt(index).widget() is not None
+    ]
+    assert badges  # exactly one badge for the state
+    assert page.show_key.isEnabled() is False
+
+
+def test_the_tooken_provider_is_offered_with_its_own_url(ui) -> None:  # noqa: ANN001
+    window, context, _theme = ui
+    page = window.api_page
+    page._on_provider_selected("tooken")
+    pump()
+    assert page.base_url_input.text() == "https://tooken.club/v1"
+    assert context.settings.get("ai.provider") == "tooken"
+    page.key_input.setText("tc_live_" + "f" * 48)
+    page.save_key.click()
+    pump()
+    assert context.secrets.get_key("tooken") == "tc_live_" + "f" * 48
+    # A key from the wrong service is refused before it is stored.
+    page.key_input.setText("sk-or-v1-" + "a" * 64)
+    page.save_key.click()
+    pump()
+    assert context.secrets.get_key("tooken") == "tc_live_" + "f" * 48

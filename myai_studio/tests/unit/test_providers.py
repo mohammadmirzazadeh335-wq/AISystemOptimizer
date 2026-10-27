@@ -18,12 +18,17 @@ from myai.security.secrets import SecretStore
 from myai.services import providers
 from myai.services.net import NetworkOptions
 from myai.services.providers import (
+    MODEL_ID_MAX,
+    PROTOCOL_OPENAI,
     ProviderClient,
     base_url_for,
     build_client,
     cached_models,
     get_provider,
+    has_key,
+    has_stored_key,
     key_problem,
+    model_id_problem,
     models_cache,
     network_for,
     normalize_base_url,
@@ -597,3 +602,97 @@ def test_a_keyless_custom_provider_builds_headers_without_authorization(ctx) -> 
     headers = client._headers()
     assert headers["Content-Type"] == "application/json"
     assert "Authorization" not in headers
+
+
+# ---------------------------------------------------------------- tooken club
+def test_tooken_is_a_first_class_openai_compatible_provider() -> None:
+    """A relay the user actually has a key for must not need a hand-built URL."""
+    spec = get_provider("tooken")
+    assert spec.id == "tooken"
+    assert spec.protocol == PROTOCOL_OPENAI
+    assert spec.base_url == "https://tooken.club/v1"
+    assert spec.key_required is True
+    assert spec.local is False
+    assert spec.base_url.startswith("https://")
+    assert "tooken" in provider_ids()
+
+
+def test_tooken_key_prefix_is_checked_offline() -> None:
+    spec = get_provider("tooken")
+    assert spec.key_prefix == "tc_live_"
+    assert key_problem(spec, "tc_live_" + "a" * 48) is None
+    assert key_problem(spec, "sk-or-v1-" + "a" * 64) == "api.key_format"
+    assert key_problem(spec, "") == "error.api_key_missing"
+
+
+def test_a_keyless_provider_is_ready_but_has_no_stored_key(ctx) -> None:  # noqa: ANN001
+    """Two different questions: may the app talk to it, and is a key really stored?
+
+    The API page used to answer both with one flag, so a keyless endpoint showed
+    "a key is stored: ''" — a claim about data that does not exist.
+    """
+    store = SecretStore(ctx.paths.secrets_file, ctx.paths.secret_key_file)
+    custom = get_provider("custom")
+    assert has_key(custom, store) is True
+    assert has_stored_key(custom, store) is False
+
+    tooken = get_provider("tooken")
+    assert has_key(tooken, store) is False
+    assert has_stored_key(tooken, store) is False
+    store.set_key("tooken", "tc_live_" + "b" * 48)
+    assert has_key(tooken, store) is True
+    assert has_stored_key(tooken, store) is True
+
+
+def test_a_hand_typed_model_id_is_validated_offline() -> None:
+    assert model_id_problem("gpt-4o-mini") is None
+    assert model_id_problem("  vendor/model-1  ") is None
+    assert model_id_problem("") == "api.model_id_empty"
+    assert model_id_problem("   ") == "api.model_id_empty"
+    assert model_id_problem("two words") == "api.model_id_invalid_chars"
+    assert model_id_problem("line\nbreak") == "api.model_id_invalid_chars"
+    assert model_id_problem("x" * (MODEL_ID_MAX + 1)) == "api.model_id_too_long"
+
+
+def test_a_404_points_at_the_base_url_as_well_as_the_model() -> None:
+    """The same status covers a wrong model id and a missing "/v1" in the URL."""
+    client = _client("tooken", key="tc_live_" + "c" * 48)
+    response = httpx.Response(
+        404, json={"error": {"message": "not found"}}, request=httpx.Request("GET", "https://tooken.club/v1/models")
+    )
+    with pytest.raises(ProviderError) as caught:
+        client._raise_for_status(response)
+    error = caught.value
+    assert error.message_key == "error.api_model"
+    assert error.hint_key == "api.base_url_hint"
+
+
+def test_tooken_requests_carry_the_bearer_key_at_its_own_base_url() -> None:
+    spec = get_provider("tooken")
+    client = _client("tooken", key="tc_live_" + "d" * 48)
+    headers = client._headers()
+    assert headers["Authorization"] == "Bearer tc_live_" + "d" * 48
+    assert client.base_url == spec.base_url
+    assert "HTTP-Referer" not in headers
+
+
+def test_tooken_catalogue_rows_are_read_like_any_openai_list() -> None:
+    """The relay answers /v1/models in the OpenAI shape; prices are not invented."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "tooken.club"
+        assert request.url.path == "/v1/models"
+        return httpx.Response(
+            200,
+            json={
+                "object": "list",
+                "data": [
+                    {"id": "gpt-4o-mini", "object": "model"},
+                    {"id": "claude-sonnet-4", "object": "model"},
+                ],
+            },
+        )
+
+    models = _client("tooken", key="tc_live_" + "e" * 48, handler=handler).list_models(refresh=True)
+    assert [model.id for model in models] == ["claude-sonnet-4", "gpt-4o-mini"]
+    assert all(model.price_known is False for model in models)

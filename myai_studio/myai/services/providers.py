@@ -165,6 +165,16 @@ PROVIDERS: tuple[Provider, ...] = (
         note_key="provider.note_openai_compatible",
     ),
     Provider(
+        id="tooken",
+        name="Tooken Club",
+        protocol=PROTOCOL_OPENAI,
+        base_url="https://tooken.club/v1",
+        key_hint="tc_live_…",
+        key_prefix="tc_live_",
+        docs_url="https://tooken.club/dashboard",
+        note_key="provider.note_tooken",
+    ),
+    Provider(
         id="ollama",
         name="Ollama (local)",
         protocol=PROTOCOL_OPENAI,
@@ -322,12 +332,45 @@ def validate_key(provider: Provider, value: str | None) -> str:
 
 
 def has_key(provider: Provider, secrets) -> bool:  # noqa: ANN001
-    if not provider.key_required and provider.local:
+    """Whether this provider can be used right now.
+
+    A provider whose key is optional (a local server, or a custom gateway behind
+    another authentication layer) counts as ready even with an empty vault:
+    blocking the chat would be a guess, and the endpoint's own 401 is the
+    truthful answer. ``has_stored_key`` is what the UI uses to avoid claiming a
+    key is configured when none is.
+    """
+    if not provider.key_required:
         return True
     try:
         return bool(secrets.has_key(provider.id))
     except Exception:  # noqa: BLE001 - a broken vault must not crash a page
         return False
+
+
+def has_stored_key(provider: Provider, secrets) -> bool:  # noqa: ANN001
+    try:
+        return bool(secrets.has_key(provider.id))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+#: A model id is what the provider calls the model: ``vendor/name``,
+#: ``claude-sonnet-4``, ``gemini-2.5-pro``. Typed by hand for endpoints that
+#: publish no catalogue, so it is validated before it reaches a request body.
+MODEL_ID_MAX = 200
+
+
+def model_id_problem(value: str | None) -> str | None:
+    """Offline check for a hand-typed model id (never the provider's verdict)."""
+    model = (value or "").strip()
+    if not model:
+        return "api.model_id_empty"
+    if len(model) > MODEL_ID_MAX:
+        return "api.model_id_too_long"
+    if any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in model):
+        return "api.model_id_invalid_chars"
+    return None
 
 
 def models_cache(settings) -> dict[str, list[dict]]:  # noqa: ANN001

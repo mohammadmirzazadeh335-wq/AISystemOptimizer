@@ -1,8 +1,9 @@
 # More than one provider, and a model picker that stays out of the way
 
-Version 0.9.0. Two changes the app had been missing: it can now talk to services
-other than OpenRouter, and the model list is a small searchable popup instead of
-a menu that covered half the window.
+Version 0.9.0 introduced both changes; **0.9.1** adds a first-class relay entry
+(Tooken Club) and a way to use a model the provider does not list. They are the
+same two ideas: the app talks to services other than OpenRouter, and the model
+list is a small searchable popup instead of a menu that covered half the window.
 
 ## 1. Providers
 
@@ -15,8 +16,29 @@ a menu that covered half the window.
 | Anthropic | Messages API | `sk-ant-…` | System prompt is hoisted to its own field; temperature 0–1. |
 | Google Gemini | generateContent / stream | `AIza…` | Embedding models are filtered out of the picker. |
 | Groq, DeepSeek, Mistral | OpenAI-compatible | vendor key | Same code path as OpenAI. |
+| Tooken Club | OpenAI-compatible | `tc_live_…` | A reseller gateway: one key for GPT, Claude, DeepSeek, Gemini, Kimi, GLM and Grok. Its catalogue needs a key, so an id can also be typed by hand. |
 | Ollama, LM Studio | OpenAI-compatible | none | Local, so the system proxy is bypassed on purpose. |
 | Custom | OpenAI-compatible | optional | Any base URL; `http` is allowed only on the loopback interface. |
+
+### Example: entering a relay key (Tooken Club)
+
+`API page → Provider → Tooken Club`. The base URL field already holds
+`https://tooken.club/v1`, and the key field expects a `tc_live_…` value.
+
+1. Paste the key into **API key** and press **Save key**. It is written to the
+   encrypted vault under `ai.key.tooken`, never to a settings file, a log or an
+   export. The page only ever shows a masked version afterwards.
+2. Press **Load models**. That is one request: `GET https://tooken.club/v1/models`
+   with `Authorization: Bearer <key>`.
+3. Choose a model — type in the default-model list to filter it, or press
+   **Use model** on any row. The id is stored in `ai.default_model` and becomes
+   the model of the open chat.
+4. If the catalogue comes back empty, or the model you want is not in it, type
+   its exact id next to **Model id** and press **Use model**. The row is marked
+   *typed by hand*, so it is never mistaken for something the provider listed.
+
+A wrong or revoked key comes back as `401 invalid_api_key`, and the page reports
+it as an authentication error; nothing is retried and no tokens are spent.
 
 ### Where the switch is
 
@@ -35,6 +57,8 @@ reset: every provider keeps its own key and its own URL.
 
 ### Rules that did not change
 
+- **A provider with no key is usable without pretending one is stored.** A local
+  server or an open gateway shows "no key needed" instead of "a key is stored: ''".
 - **A key is only checked for its shape**, never declared "valid" offline.
   The server still decides; the app only prevents obvious mistakes (spaces,
   line breaks, a prefix from a different vendor).
@@ -47,7 +71,12 @@ reset: every provider keeps its own key and its own URL.
   run button with a stated reason instead of failing mid-run.
 - **Live calls were not tested from this sandbox.** Every network path here is
   driven through `httpx.MockTransport` and local servers; see the test section
-  of the release notes.
+  of the release notes. One exception is worth stating precisely: an
+  unauthenticated `GET https://tooken.club/v1/models` was performed and answered
+  `401 invalid_api_key` in the OpenAI error shape, which proves the host, the
+  TLS path and the `/v1` route exist — it says nothing about a *valid* key or
+  about the models a real account can see, because no authenticated request was
+  made here.
 
 ## 2. The model picker
 
@@ -80,5 +109,5 @@ menu, where a search box would be noise.
   catalogue and default-model controls.
 - `myai/ui/main_window.py` — provider-aware bootstrap and cache, and the rich
   choices handed to the composer and header chips.
-- Tests: `tests/unit/test_providers.py` (42), `tests/ui/test_model_picker.py`
-  (13), plus updated expectations in `test_phase2_pages`, `test_doctor`.
+- Tests: `tests/unit/test_providers.py` (49), `tests/ui/test_model_picker.py`
+  (18), plus updated expectations in `test_phase2_pages`, `test_doctor`.

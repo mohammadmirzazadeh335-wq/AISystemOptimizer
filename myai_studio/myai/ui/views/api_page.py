@@ -45,7 +45,9 @@ from ...services.providers import (
     base_url_for,
     cached_models,
     current_provider,
+    has_stored_key,
     key_problem,
+    model_id_problem,
     models_cache,
     normalize_base_url,
     save_base_url,
@@ -75,7 +77,13 @@ logger = logging.getLogger(__name__)
 class ModelRow(QFrame):
     chosen = Signal(str)
 
-    def __init__(self, model: ModelInfo, current: str, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        model: ModelInfo,
+        current: str,
+        parent: QWidget | None = None,
+        manual: bool = False,
+    ) -> None:
         super().__init__(parent)
         self.model = model
         self.setObjectName("ModelRow")
@@ -98,6 +106,11 @@ class ModelRow(QFrame):
 
         badges = QHBoxLayout()
         badges.setSpacing(runtime.px(5))
+        if manual:
+            # A row the user typed is not a provider claim; say so on the row.
+            typed = Badge(tr("api.model_id_manual_badge"), "warning")
+            typed.setToolTip(tr("api.model_id_complexity", model=model.id))
+            badges.addWidget(typed)
         if model.context_length:
             badges.addWidget(Badge(model.context_label(), "outline"))
         if model.is_free():
@@ -150,6 +163,7 @@ class ApiPage(PageShell):
         self._busy = False
         self._filter = ""
         self._choices: list = []
+        self._manual_models: dict[str, ModelInfo] = {}
         self.provider: Provider = current_provider(context.settings)
         self._build()
         runtime.signals.changed.connect(lambda *_: self._restyle())
@@ -235,11 +249,11 @@ class ApiPage(PageShell):
                 widget.setParent(None)
                 widget.deleteLater()
         if self.provider.local:
-            self.provider_badge_layout.addWidget(Badge(tr("api.key_local_badge"), "info"))
+            self.provider_badge_layout.addWidget(Badge(tr("api.key_local_badge"), "muted"))
         elif self.provider.key_required:
             self.provider_badge_layout.addWidget(Badge(tr("api.key_required_badge"), "warning"))
         else:
-            self.provider_badge_layout.addWidget(Badge(tr("api.key_local_badge"), "info"))
+            self.provider_badge_layout.addWidget(Badge(tr("api.key_local_badge"), "muted"))
 
     def _sync_provider_fields(self) -> None:
         """Everything on the page follows the selected provider."""
@@ -626,6 +640,55 @@ class ApiPage(PageShell):
         self.default_row.addWidget(self.default_picker)
         self.default_row.addStretch(1)
 
+        # Some endpoints publish no usable catalogue (a reseller gateway, a
+        # self-hosted proxy, or a /models route behind a path the app cannot
+        # guess). Without a way to type the id, such a provider could be
+        # configured but never used, so this row is always available.
+        self.model_id_host = QWidget()
+        self.model_id_row = FlowLayout(self.model_id_host, spacing=runtime.px(8))
+        layout.addWidget(self.model_id_host)
+        self.model_id_label = field_label(tr("api.model_id"))
+        self.model_id_row.addWidget(self.model_id_label)
+        self.model_id_input = QLineEdit()
+        self.model_id_input.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
+        # An id is always Latin; left alignment keeps the caret where the text is.
+        self.model_id_input.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.model_id_input.setPlaceholderText(tr("api.model_id_placeholder"))
+        self.model_id_input.setAccessibleName(tr("api.model_id"))
+        self.model_id_input.setMinimumWidth(runtime.px(220))
+        self.model_id_input.setMaximumWidth(runtime.px(360))
+        self.model_id_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.model_id_input.returnPressed.connect(self._use_typed_model)
+        self.model_id_row.addWidget(self.model_id_input)
+        self.model_id_button = secondary_button(tr("api.use_model"), "check")
+        self.model_id_button.clicked.connect(self._use_typed_model)
+        self.model_id_row.addWidget(self.model_id_button)
+        self.model_id_hint = hint_label(tr("api.model_id_hint"))
+        self.model_id_hint.setWordWrap(True)
+        layout.addWidget(self.model_id_hint)
+
+    def _use_typed_model(self) -> None:
+        """Accept a model id typed by hand and make it the default."""
+        typed = self.model_id_input.text().strip()
+        problem = model_id_problem(typed)
+        if problem is not None:
+            self.model_id_hint.setText(tr(problem))
+            self.model_id_hint.setProperty("role", "danger")
+            self.model_id_hint.style().unpolish(self.model_id_hint)
+            self.model_id_hint.style().polish(self.model_id_hint)
+            return
+        self.model_id_hint.setText(tr("api.model_id_hint"))
+        self.model_id_hint.setProperty("role", "faint")
+        self.model_id_hint.style().unpolish(self.model_id_hint)
+        self.model_id_hint.style().polish(self.model_id_hint)
+        # Keep it in this page's own picker even if the catalogue never
+        # mentions it, so reopening the popup still offers what is in use.
+        if all(model.id != typed for model in self._models):
+            self._manual_models[typed] = ModelInfo(id=typed, name=typed, price_known=False)
+            self._render_models()
+        self.model_selected.emit(typed)
+        self.model_id_input.clear()
+
     def _build_sampling_card(self) -> None:
         card, layout = self.card("api.sampling_card", "sliders")
         row = QHBoxLayout()
@@ -653,13 +716,19 @@ class ApiPage(PageShell):
 
     # ------------------------------------------------------------------- key
     def _refresh_key_state(self) -> None:
-        has_key = provider_has_key(self.provider, self.context.secrets)
+        ready = provider_has_key(self.provider, self.context.secrets)
+        stored = has_stored_key(self.provider, self.context.secrets)
         masked = self._masked_key()
         self.key_label.setText(f"{tr('api.key_label')} — {self._provider_name()}")
         self.key_input.setPlaceholderText(self.provider.key_hint or "…")
-        if has_key:
+        if stored:
             self.key_state.setText(tr("api.key_stored", key=masked))
             self.key_state.setProperty("role", "success")
+        elif ready:
+            # Usable without a key (a local server or an open gateway). Saying
+            # "a key is stored: ''" here would be a lie.
+            self.key_state.setText(tr("api.key_not_required"))
+            self.key_state.setProperty("role", "muted")
         else:
             self.key_state.setText(tr("api.key_missing"))
             self.key_state.setProperty("role", "warning")
@@ -671,22 +740,23 @@ class ApiPage(PageShell):
             if widget:
                 widget.setParent(None)
                 widget.deleteLater()
-        self.key_badge_layout.addWidget(
-            Badge(tr("api.configured"), "success") if has_key else Badge(tr("api.not_configured"), "warning")
-        )
+        if stored:
+            self.key_badge_layout.addWidget(Badge(tr("api.configured"), "success"))
+        elif ready:
+            self.key_badge_layout.addWidget(Badge(tr("api.key_local_badge"), "muted"))
+        else:
+            self.key_badge_layout.addWidget(Badge(tr("api.not_configured"), "warning"))
         self.delete_key.setEnabled(
             bool(self.context.secrets.get_key(self.provider.id))
         )
         if hasattr(self, "test_button"):
-            self.test_button.setEnabled(has_key)
+            self.test_button.setEnabled(ready)
         self.key_input.clear()
         self._sync_key_button()
-        self.key_input.setPlaceholderText(masked if has_key else (self.provider.key_hint or "…"))
-        self.save_key.setText(tr("api.replace_key") if has_key else tr("api.save_key"))
-        if has_key:
-            self.show_key.setEnabled(True)
-        else:
-            self.show_key.setEnabled(False)
+        self.key_input.setPlaceholderText(masked if stored else (self.provider.key_hint or "…"))
+        self.save_key.setText(tr("api.replace_key") if stored else tr("api.save_key"))
+        self.show_key.setEnabled(stored)
+        if not stored:
             self.show_key.setChecked(False)
 
     def _masked_key(self) -> str:
@@ -891,6 +961,11 @@ class ApiPage(PageShell):
         self._filter = text.strip().casefold()
         self._render_models()
 
+    def _all_models(self) -> list[ModelInfo]:
+        """Catalogue plus any id typed by hand that the catalogue omits."""
+        listed = {model.id for model in self._models}
+        return [*self._models, *(model for key, model in self._manual_models.items() if key not in listed)]
+
     def _render_models(self) -> None:
         while self.models_layout.count():
             item = self.models_layout.takeAt(0)
@@ -899,26 +974,30 @@ class ApiPage(PageShell):
                 widget.setParent(None)
                 widget.deleteLater()
         current = str(self.context.settings.get("ai.default_model", ""))
+        listed = {model.id for model in self._models}
         visible = [
             model
-            for model in self._models
+            for model in self._all_models()
             if not self._filter
             or self._filter in model.id.casefold()
             or self._filter in (model.name or "").casefold()
         ]
         for model in visible[:60]:
-            row = ModelRow(model, current)
+            row = ModelRow(
+                model, current, manual=model.id in self._manual_models and model.id not in listed
+            )
             row.chosen.connect(self.model_selected)
             self.models_layout.addWidget(row)
-        self.models_empty.setVisible(not self._models or not visible)
-        if self._models:
+        everything = self._all_models()
+        self.models_empty.setVisible(not everything or not visible)
+        if everything:
             self.models_empty.setText(tr("api.models_no_match") if not visible else "")
             self.model_count.setText(
-                tr("api.models_loaded_short", count=len(self._models), shown=len(visible))
+                tn("api.models_loaded_short", len(everything), shown=len(visible))
             )
         elif self.provider.id == "custom":
             self.models_empty.setText(tr("api.custom_models_note"))
-        items = [(model.id, model.id) for model in self._models]
+        items = [(model.id, model.id) for model in self._all_models()]
         self.default_picker.set_items(items)
         if current:
             self.default_picker.set_value(current)
@@ -945,7 +1024,13 @@ class ApiPage(PageShell):
             self.model_selected.emit(model_id)
 
     def set_default_model(self, model_id: str) -> None:
-        items = [(model.id, model.id) for model in self._models]
+        if model_id and model_id not in {model.id for model in self._models}:
+            # A model chosen by hand must stay visible; otherwise the picker
+            # shows "no model" while the app is happily using that id.
+            self._manual_models[model_id] = ModelInfo(
+                id=model_id, name=model_id, price_known=False
+            )
+        items = [(model.id, model.id) for model in self._all_models()]
         self.default_picker.set_items(items)
         self.default_picker.set_value(model_id)
         self._render_models()
@@ -998,6 +1083,10 @@ class ApiPage(PageShell):
         self.provider_label.setText(tr("api.provider_label"))
         self.base_url_label.setText(tr("api.base_url"))
         self.base_url_save.setText(tr("api.save_url"))
+        self.model_id_label.setText(tr("api.model_id"))
+        self.model_id_button.setText(tr("api.use_model"))
+        self.model_id_input.setPlaceholderText(tr("api.model_id_placeholder"))
+        self.model_id_hint.setText(tr("api.model_id_hint"))
         self.base_url_hint.setText(tr("api.base_url_hint"))
         self.provider_hint.setText(tr("api.provider_hint"))
         self.provider_select.set_items(
