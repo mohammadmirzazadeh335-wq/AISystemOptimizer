@@ -81,6 +81,9 @@ class Provider:
     publishes_prices: bool = False
     #: i18n key for the one-line note under the provider selector.
     note_key: str = ""
+    #: True for an endpoint the user added on the API page. Custom endpoints are
+    #: stored in settings, not in this module, and can be removed by their owner.
+    custom: bool = False
 
     @property
     def needs_key(self) -> bool:
@@ -95,6 +98,7 @@ class Provider:
             "local": self.local,
             "key_required": self.key_required,
             "docs_url": self.docs_url,
+            "custom": self.custom,
         }
 
 
@@ -165,6 +169,15 @@ PROVIDERS: tuple[Provider, ...] = (
         note_key="provider.note_openai_compatible",
     ),
     Provider(
+        id="gapgpt",
+        name="GapGPT",
+        protocol=PROTOCOL_OPENAI,
+        base_url="https://api.gapgpt.app/v1",
+        key_hint="…",
+        docs_url="https://gapgpt.app",
+        note_key="provider.note_gapgpt",
+    ),
+    Provider(
         id="tooken",
         name="Tooken Club",
         protocol=PROTOCOL_OPENAI,
@@ -207,13 +220,146 @@ PROVIDERS: tuple[Provider, ...] = (
 _BY_ID = {provider.id: provider for provider in PROVIDERS}
 DEFAULT_PROVIDER = "openrouter"
 
+#: Ids of endpoints the user added start here. The vault accepts only
+#: ``^[a-z][a-z0-9_-]{0,30}$`` as a provider id, so ``custom:<name>`` is not an
+#: option — and a fixed prefix keeps a user endpoint from shadowing a built-in.
+CUSTOM_PREFIX = "cx-"
+SETTING_CUSTOM_ENDPOINTS = "ai.custom_endpoints"
+PROTOCOLS = (PROTOCOL_OPENAI, PROTOCOL_ANTHROPIC, PROTOCOL_GEMINI)
+
+#: Registered custom endpoints, in insertion order. Kept in a module-level map
+#: because every layer already asks ``get_provider(id)`` without settings.
+_CUSTOM: dict[str, Provider] = {}
+
+
+def slugify_endpoint_id(name: str) -> str:
+    """A stable, vault-safe id from a display name (``My Gateway`` → ``cx-my-gateway``)."""
+    slug = "".join(
+        character if character.isalnum() else "-"
+        for character in (name or "").strip().lower()
+    )
+    slug = "-".join(part for part in slug.split("-") if part)
+    if not slug:
+        slug = "endpoint"
+    if not slug[0].isalpha():
+        slug = f"e{slug}"
+    # The prefix costs three characters of the 31 the vault allows.
+    return f"{CUSTOM_PREFIX}{slug[:28]}"
+
+
+def custom_provider(
+    *,
+    name: str,
+    base_url: str,
+    protocol: str = PROTOCOL_OPENAI,
+    key_required: bool = True,
+    endpoint_id: str = "",
+) -> Provider:
+    """Build the :class:`Provider` described by one saved custom endpoint."""
+    clean_name = (name or "").strip() or "Custom endpoint"
+    identifier = (endpoint_id or "").strip().lower() or slugify_endpoint_id(clean_name)
+    return Provider(
+        id=identifier,
+        name=clean_name,
+        protocol=protocol if protocol in PROTOCOLS else PROTOCOL_OPENAI,
+        base_url=(base_url or "").strip().rstrip("/"),
+        key_hint="…",
+        key_required=bool(key_required),
+        note_key="",
+        custom=True,
+        publishes_prices=False,
+    )
+
+
+def register_custom_endpoints(rows: list[dict] | None) -> tuple[Provider, ...]:
+    """Replace the custom-endpoint registry (called after settings load/save)."""
+    _CUSTOM.clear()
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        provider = custom_provider(
+            name=str(row.get("name", "")),
+            base_url=str(row.get("base_url", "")),
+            protocol=str(row.get("protocol", PROTOCOL_OPENAI)),
+            key_required=bool(row.get("key_required", True)),
+            endpoint_id=str(row.get("id", "")),
+        )
+        if provider.base_url:
+            _CUSTOM[provider.id] = provider
+    return tuple(_CUSTOM.values())
+
+
+def custom_endpoints(settings) -> list[dict]:  # noqa: ANN001 - settings is duck-typed
+    raw = settings.get(SETTING_CUSTOM_ENDPOINTS, []) or []
+    return [dict(row) for row in raw if isinstance(row, dict)]
+
+
+def sync_custom_endpoints(settings) -> tuple[Provider, ...]:  # noqa: ANN001
+    return register_custom_endpoints(custom_endpoints(settings))
+
+
+def save_custom_endpoint(settings, row: dict) -> Provider:  # noqa: ANN001
+    """Add or replace one custom endpoint and make it the active provider."""
+    provider = custom_provider(
+        name=str(row.get("name", "")),
+        base_url=str(row.get("base_url", "")),
+        protocol=str(row.get("protocol", PROTOCOL_OPENAI)),
+        key_required=bool(row.get("key_required", True)),
+        endpoint_id=str(row.get("id", "")),
+    )
+    if not provider.base_url:
+        raise ValidationError(
+            "A custom endpoint needs a base URL", message_key="api.base_url_required"
+        )
+    # Same https rule as every other remote host; loopback may stay http.
+    provider = replace(
+        provider, base_url=normalize_base_url(provider.base_url, provider=provider)
+    )
+    rows = [entry for entry in custom_endpoints(settings) if entry.get("id") != provider.id]
+    rows.append(
+        {
+            "id": provider.id,
+            "name": provider.name,
+            "base_url": provider.base_url,
+            "protocol": provider.protocol,
+            "key_required": provider.key_required,
+        }
+    )
+    # Register before saving: the settings layer validates ``ai.provider``
+    # against the registry, so the new id has to exist by then.
+    register_custom_endpoints(rows)
+    settings.update({SETTING_CUSTOM_ENDPOINTS: rows, "ai.provider": provider.id})
+    return provider
+
+
+def delete_custom_endpoint(settings, endpoint_id: str) -> bool:  # noqa: ANN001
+    """Remove one custom endpoint (and its stored URL). Returns True if it existed."""
+    rows = custom_endpoints(settings)
+    kept = [row for row in rows if str(row.get("id", "")) != endpoint_id]
+    if len(kept) == len(rows):
+        return False
+    urls = settings.get("ai.base_urls", {}) or {}
+    urls = (
+        {key: value for key, value in urls.items() if key != endpoint_id}
+        if isinstance(urls, dict)
+        else {}
+    )
+    updates: dict[str, Any] = {SETTING_CUSTOM_ENDPOINTS: kept, "ai.base_urls": urls}
+    if str(settings.get("ai.provider", "")) == endpoint_id:
+        updates["ai.provider"] = DEFAULT_PROVIDER
+    register_custom_endpoints(kept)
+    settings.update(updates)
+    return True
+
 
 def all_providers() -> tuple[Provider, ...]:
-    return PROVIDERS
+    """Built-in services first, then the endpoints the user added (by name)."""
+    custom = sorted(_CUSTOM.values(), key=lambda provider: provider.name.casefold())
+    return (*PROVIDERS, *custom)
 
 
 def provider_ids() -> tuple[str, ...]:
-    return tuple(provider.id for provider in PROVIDERS)
+    return tuple(provider.id for provider in all_providers())
 
 
 def get_provider(provider_id: str | None) -> Provider:
@@ -224,6 +370,8 @@ def get_provider(provider_id: str | None) -> Provider:
     default provider and the URL it is actually using.
     """
     key = (provider_id or "").strip().lower()
+    if key in _CUSTOM:
+        return _CUSTOM[key]
     return _BY_ID.get(key, _BY_ID[DEFAULT_PROVIDER])
 
 
@@ -249,7 +397,7 @@ def normalize_base_url(value: str | None, *, provider: Provider | None = None) -
     """
     raw = (value or "").strip()
     if not raw:
-        if provider is not None and provider.id == "custom":
+        if provider is not None and (provider.id == "custom" or provider.custom):
             raise ValidationError(
                 "A custom provider needs a base URL",
                 message_key="api.base_url_required",
@@ -542,7 +690,9 @@ class ProviderClient(OpenRouterClient):
         model = parse_model(row)
         if not model.id:
             return None
-        return replace(model, price_known=self.spec.publishes_prices)
+        # Trust a price the row really carries; otherwise only a provider that
+        # documents per-token pricing may claim the price is known.
+        return replace(model, price_known=model.price_known or self.spec.publishes_prices)
 
     def _anthropic_models(self) -> list[ModelInfo]:
         models: list[ModelInfo] = []

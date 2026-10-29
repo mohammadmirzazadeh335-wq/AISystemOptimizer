@@ -78,7 +78,9 @@ def test_the_registry_grew_by_exactly_seven() -> None:
         spec = reg.get(tool_id)
         assert spec is not None, tool_id
         assert spec.risk == risk
-    assert len(reg.specs()) == 22
+    # 22 after the tool round, plus the six creative generators (chart, PDF,
+    # resize, contact sheet, zip, probe).
+    assert len(reg.specs()) == 28
 
 
 def test_project_map_counts_real_languages_and_entry_points(tctx: ToolContext) -> None:

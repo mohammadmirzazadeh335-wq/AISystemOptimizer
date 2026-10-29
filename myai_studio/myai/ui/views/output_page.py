@@ -8,6 +8,7 @@ same widgets serve every artefact kind; only the preview mode changes.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QFontMetrics
@@ -190,6 +191,10 @@ class OutputPage(PageShell):
         self.export_button = secondary_button(tr("studio.export"), "download")
         self.export_button.clicked.connect(self._export)
         actions.addWidget(self.export_button)
+        self.pdf_button = ghost_button(tr("studio.export_pdf"), "file")
+        self.pdf_button.setToolTip(tr("studio.export_pdf_hint"))
+        self.pdf_button.clicked.connect(self._export_pdf)
+        actions.addWidget(self.pdf_button)
         self.delete_button = danger_button(tr("studio.delete"), "trash")
         self.delete_button.clicked.connect(self._delete)
         actions.addWidget(self.delete_button)
@@ -530,6 +535,35 @@ class OutputPage(PageShell):
             saved = self.context.outputs.save_to_file(self._current_id, path)
         except (AppError, OSError) as exc:
             self.notify.emit(exc.message if isinstance(exc, AppError) else str(exc), "error")
+            return
+        self.notify.emit(tr("studio.exported", path=str(saved)), "success")
+
+    def _export_pdf(self) -> None:
+        """Render the open draft to a real PDF (Qt's own writer, no service)."""
+        if not self._current_id:
+            return
+        text = self.editor.toPlainText()
+        if not text.strip():
+            self.notify.emit(tr("studio.empty"), "warning")
+            return
+        suggested = str(
+            self.context.paths.outputs_dir / f"{Path(self.name_input.text()).stem}.pdf"
+        )
+        path, _ = QFileDialog.getSaveFileName(
+            self.window(), tr("studio.export_pdf"), suggested, "PDF (*.pdf)"
+        )
+        if not path:
+            return
+        try:
+            from ...services import creative
+
+            saved = creative.render_pdf(text, path, title=self.name_input.text())
+        except AppError as exc:
+            self.notify.emit(exc.message, "error")
+            return
+        except Exception as exc:  # noqa: BLE001 - Qt may be missing a writer
+            logger.exception("output_pdf_failed")
+            self.notify.emit(tr("studio.export_pdf_failed", error=str(exc)), "error")
             return
         self.notify.emit(tr("studio.exported", path=str(saved)), "success")
 

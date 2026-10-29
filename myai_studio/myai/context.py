@@ -39,6 +39,7 @@ from .services.plugins import PluginService
 from .services.projects import ProjectService
 from .services.prompts import PromptService
 from .services.providers import build_client as build_provider_client
+from .services.providers import sync_custom_endpoints
 from .services.search import SearchService
 from .services.settings import SettingsService
 from .services.tasks import TaskService
@@ -83,6 +84,10 @@ class AppContext:
         if self._booted:
             return self
         settings = self.settings.load()
+        # Custom endpoints live in settings but every layer resolves providers
+        # without them, so the registry is filled once, here, before any page,
+        # the chat client or the agent asks which providers exist.
+        sync_custom_endpoints(settings)
         set_language(settings.get("ui.language", "fa"))
         self.conversations.set_default_model(settings.get("ai.default_model", ""))
         self.prompts.seed()

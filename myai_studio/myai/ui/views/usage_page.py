@@ -13,6 +13,7 @@ import logging
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QDoubleValidator
 from PySide6.QtWidgets import (
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...core.errors import AppError
 from ...i18n import is_rtl, tr
 from ...services.usage import CURRENCY, RANGES, UsageReport
 from ..theme import runtime
@@ -82,6 +84,10 @@ class UsagePage(PageShell):
         self.refresh_button = ghost_button(tr("usage.refresh"), "refresh")
         self.refresh_button.clicked.connect(self.refresh)
         self.actions_row.addWidget(self.refresh_button)
+        self.export_button = ghost_button(tr("usage.export_csv"), "download")
+        self.export_button.setToolTip(tr("usage.export_hint"))
+        self.export_button.clicked.connect(self.export_csv)
+        self.actions_row.addWidget(self.export_button)
         self.actions_row.addStretch(1)
 
         # ------------------------------------------------------------- hero
@@ -231,6 +237,49 @@ class UsagePage(PageShell):
         if hasattr(self, "range_control"):
             self.range_control.set_value(str(self.range_days), animate=False)
         self.refresh()
+
+    def export_csv(self) -> None:
+        """Write the same numbers the page shows to a CSV the user can keep.
+
+        The rows come from the live report, so the file can never disagree with
+        the screen; the cost column says "unpriced" where the catalogue had no
+        price instead of inventing a zero.
+        """
+        try:
+            report = self.context.usage.report(self.range_days)
+        except AppError as exc:
+            self.notify.emit(exc.message, "error")
+            return
+        suggested = str(
+            self.context.paths.outputs_dir / f"usage-{report.start}-to-{report.end}.csv"
+        )
+        path, _ = QFileDialog.getSaveFileName(
+            self.window(), tr("usage.export_csv"), suggested, "CSV (*.csv)"
+        )
+        if not path:
+            return
+        import csv
+
+        try:
+            with open(path, "w", encoding="utf-8", newline="") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(["model", "requests", "input_tokens", "output_tokens", "cost_usd", "priced"])
+                for row in report.models:
+                    writer.writerow(
+                        [row.model_id, row.requests, row.input_tokens, row.output_tokens,
+                         f"{row.cost:.6f}", "yes" if row.priced else "no"]
+                    )
+                writer.writerow([])
+                writer.writerow(["day", "requests", "input_tokens", "output_tokens", "cost_usd"])
+                for day in report.slices:
+                    writer.writerow(
+                        [day.day.isoformat(), day.requests, day.input_tokens,
+                         day.output_tokens, f"{day.cost:.6f}"]
+                    )
+        except OSError as exc:
+            self.notify.emit(tr("usage.export_failed", error=str(exc)), "error")
+            return
+        self.notify.emit(tr("usage.exported", path=path), "success")
 
     def _range_changed(self, key: str) -> None:
         try:

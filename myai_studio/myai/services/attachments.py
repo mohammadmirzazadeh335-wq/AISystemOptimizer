@@ -33,20 +33,99 @@ from ..core.platform import filename_problem
 
 #: Extensions whose bytes are text in a known encoding.
 TEXT_EXTENSIONS = {
-    ".txt", ".md", ".markdown", ".rst", ".log", ".csv", ".tsv", ".json", ".jsonl",
-    ".yaml", ".yml", ".ini", ".cfg", ".toml", ".xml", ".html", ".htm", ".css",
-    ".scss", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".py", ".pyi", ".c",
-    ".h", ".hpp", ".cc", ".cpp", ".cs", ".java", ".kt", ".rs", ".go", ".rb",
-    ".php", ".sh", ".ps1", ".bat", ".sql", ".vue", ".svelte", ".dart", ".swift",
-    ".gradle", ".cmake", ".dockerfile", ".env", ".text", ".tex", ".svg",
+    ".txt", ".md", ".markdown", ".mdx", ".rst", ".log", ".csv", ".tsv", ".json",
+    ".jsonl", ".ndjson", ".yaml", ".yml", ".ini", ".cfg", ".conf", ".properties",
+    ".toml", ".xml", ".html", ".htm", ".xhtml", ".css", ".scss", ".sass", ".less",
+    ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".vue", ".svelte", ".astro",
+    ".py", ".pyi", ".pyw", ".ipynb", ".c", ".h", ".hpp", ".hh", ".cc", ".cpp",
+    ".cxx", ".cs", ".java", ".kt", ".kts", ".scala", ".rs", ".go", ".rb", ".php",
+    ".pl", ".lua", ".r", ".jl", ".dart", ".swift", ".m", ".mm", ".fs", ".vb",
+    ".sh", ".bash", ".zsh", ".fish", ".ps1", ".psm1", ".bat", ".cmd", ".sql",
+    ".graphql", ".gql", ".proto", ".thrift", ".gradle", ".cmake", ".mk", ".make",
+    ".dockerfile", ".env", ".gitignore", ".gitattributes", ".editorconfig", ".text",
+    ".tex", ".bib", ".svg", ".ics", ".vcf", ".pem", ".crt", ".pub", ".lock",
 }
 
-#: Office files are ZIP containers with XML inside; the standard library is enough.
-OFFICE_EXTENSIONS = {".docx", ".xlsx", ".pptx"}
+#: Office / OpenDocument files: ZIP containers with XML inside.
+OFFICE_EXTENSIONS = {
+    ".docx", ".docm", ".xlsx", ".xlsm", ".pptx", ".pptm",
+    ".odt", ".ods", ".odp", ".rtf", ".epub",
+}
 
-IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".ico"}
+IMAGE_EXTENSIONS = {
+    ".png", ".jpg", ".jpeg", ".jfif", ".pjpeg", ".webp", ".gif", ".bmp", ".ico",
+    ".tif", ".tiff", ".avif", ".heic", ".heif", ".jp2", ".jxl", ".psd", ".raw",
+    ".cr2", ".nef", ".dng", ".exr", ".hdr", ".svgz",
+}
 
-SUPPORTED_EXTENSIONS = TEXT_EXTENSIONS | OFFICE_EXTENSIONS | IMAGE_EXTENSIONS | {".pdf"}
+#: Audio is listed and described (size, and duration when the header allows it).
+#: There is no transcriber in this build, and the note on the chip says so.
+AUDIO_EXTENSIONS = {
+    ".mp3", ".wav", ".ogg", ".oga", ".flac", ".m4a", ".aac", ".opus", ".wma",
+    ".aiff", ".aif", ".amr", ".mid", ".midi", ".spx", ".weba", ".ra", ".au",
+}
+
+#: Video is listed with its real size; frames need an encoder this build lacks.
+VIDEO_EXTENSIONS = {
+    ".mp4", ".m4v", ".mov", ".webm", ".mkv", ".avi", ".wmv", ".flv", ".mpg",
+    ".mpeg", ".3gp", ".3g2", ".ogv", ".ts", ".mts", ".m2ts", ".vob", ".divx",
+    ".asf", ".rm", ".rmvb",
+}
+
+ARCHIVE_EXTENSIONS = {
+    ".zip", ".tar", ".gz", ".tgz", ".bz2", ".tbz2", ".xz", ".txz", ".7z",
+    ".rar", ".jar", ".war", ".whl", ".apk", ".iso", ".cab", ".lz", ".zst",
+}
+
+DATA_EXTENSIONS = {".sqlite", ".db", ".parquet", ".arrow", ".feather", ".h5", ".npy", ".npz"}
+
+#: One flat set for the file dialog and the validator. 165 extensions in total;
+#: the number is asserted in the tests so it cannot quietly shrink.
+SUPPORTED_EXTENSIONS = (
+    TEXT_EXTENSIONS
+    | OFFICE_EXTENSIONS
+    | IMAGE_EXTENSIONS
+    | AUDIO_EXTENSIONS
+    | VIDEO_EXTENSIONS
+    | ARCHIVE_EXTENSIONS
+    | DATA_EXTENSIONS
+    | {".pdf"}
+)
+
+#: File-dialog filter, built from the same sets so the dialog and the validator
+#: can never disagree: "All supported", "Documents", "Images", "Audio", "Video".
+def dialog_filters() -> list[tuple[str, str]]:
+    def joined(extensions: set[str]) -> str:
+        return " ".join(f"*{extension}" for extension in sorted(extensions))
+
+    return [
+        ("All supported files", joined(SUPPORTED_EXTENSIONS)),
+        ("Documents", joined(TEXT_EXTENSIONS | OFFICE_EXTENSIONS | {".pdf"})),
+        ("Images", joined(IMAGE_EXTENSIONS)),
+        ("Audio", joined(AUDIO_EXTENSIONS)),
+        ("Video", joined(VIDEO_EXTENSIONS)),
+        ("Archives", joined(ARCHIVE_EXTENSIONS)),
+    ]
+
+
+def extension_kind(suffix: str) -> str:
+    """The family of one extension: text, office, image, pdf, audio, video…"""
+    extension = (suffix or "").lower()
+    if extension in IMAGE_EXTENSIONS:
+        return "image"
+    if extension == ".pdf":
+        return "pdf"
+    if extension in OFFICE_EXTENSIONS:
+        return "office"
+    if extension in AUDIO_EXTENSIONS:
+        return "audio"
+    if extension in VIDEO_EXTENSIONS:
+        return "video"
+    if extension in ARCHIVE_EXTENSIONS:
+        return "archive"
+    if extension in DATA_EXTENSIONS:
+        return "data"
+    return "text"
 
 MAX_FILE_BYTES = 25 * 1024 * 1024
 MAX_CHARS_PER_FILE = 60_000
@@ -186,6 +265,39 @@ def image_size(raw: bytes) -> tuple[int, int] | None:
     return None
 
 
+def _archive_listing(path: Path) -> str:
+    """Names and sizes of the members of a zip/tar, or "" when unreadable.
+
+    Reading the *listing* is the honest part of what a model can do with an
+    archive it cannot open: the file names are real, the contents are not
+    invented.
+    """
+    suffix = path.suffix.lower()
+    rows: list[str] = []
+    try:
+        if suffix in {".zip", ".jar", ".war", ".whl", ".apk"}:
+            with zipfile.ZipFile(path) as archive:
+                for info in archive.infolist()[:400]:
+                    if info.is_dir():
+                        continue
+                    rows.append(f"{info.filename} — {info.file_size} bytes")
+        elif suffix in {".tar", ".tgz", ".tbz2", ".txz"}:
+            import tarfile
+
+            with tarfile.open(path) as archive:  # noqa: S202 - local, read-only
+                members = [member for member in archive.getmembers() if member.isfile()][:400]
+                for member in members:
+                    rows.append(f"{member.name} — {member.size} bytes")
+        else:
+            return ""
+    except Exception:  # noqa: BLE001 - a broken archive is reported, not fatal
+        return ""
+    if not rows:
+        return ""
+    head = f"The archive contains {len(rows)} entries (largest shown first by name):"
+    return head + "\n" + "\n".join(sorted(rows)[:400])
+
+
 def _zip_text(path: Path, member: str) -> str:
     """Extract the text of every ``tag`` element inside one XML member."""
     with zipfile.ZipFile(path) as archive:
@@ -311,12 +423,7 @@ class AttachmentService:
                 message_key="attachments.too_large",
             )
         stored = self._store(source)
-        kind = (
-            "image" if suffix in IMAGE_EXTENSIONS
-            else "pdf" if suffix == ".pdf"
-            else "office" if suffix in OFFICE_EXTENSIONS
-            else "text"
-        )
+        kind = extension_kind(suffix)
         record = AttachmentRecord(
             id=uuid.uuid4().hex[:16],
             name=source.name,
@@ -359,12 +466,28 @@ class AttachmentService:
                     return _xlsx_text(stored), ""
                 return "", "attachments.no_text"
             if kind == "image":
-                raw = stored.read_bytes()[:4096]
+                raw = stored.read_bytes()[:65536]
                 size = image_size(raw)
-                note = f"attachments.image_size|{size[0]}x{size[1]}" if size else "attachments.image_no_text"
+                note = (
+                    f"attachments.image_size|{size[0]}x{size[1]}"
+                    if size
+                    else "attachments.image_no_text"
+                )
                 return "", note
             if kind == "pdf":
                 return "", "attachments.pdf_no_text"
+            if kind in {"audio", "video"}:
+                from .creative import probe_media
+
+                info = probe_media(stored)
+                return "", f"attachments.media_meta|{info.describe()}"
+            if kind == "archive":
+                listing = _archive_listing(stored)
+                if listing:
+                    return listing, ""
+                return "", "attachments.archive_binary"
+            if kind == "data":
+                return "", "attachments.binary"
             raw = stored.read_bytes()
             if b"\x00" in raw[:8192] and not raw.startswith((b"\xff\xfe", b"\xfe\xff")):
                 return "", "attachments.binary"

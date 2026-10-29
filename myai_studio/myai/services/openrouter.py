@@ -97,6 +97,20 @@ class ModelInfo:
             and self.completion_price == 0
         )
 
+    def is_paid(self) -> bool:
+        """True only when the catalogue said so — not because a price is missing."""
+        return self.price_known and (
+            self.prompt_price > 0 or self.completion_price > 0
+        )
+
+    def price_state(self) -> str:
+        """``"free"``, ``"paid"`` or ``"unknown"`` for the badge next to a model."""
+        if self.is_free():
+            return "free"
+        if self.is_paid():
+            return "paid"
+        return "unknown"
+
 
 def parse_model(payload: dict[str, Any]) -> ModelInfo:
     """Normalise one catalogue entry.
@@ -117,6 +131,10 @@ def parse_model(payload: dict[str, Any]) -> ModelInfo:
 
     modality = str(architecture.get("modality") or "text")
     inputs = architecture.get("input_modalities") or []
+    # A price is *known* only when the row actually carries one. Several relays
+    # publish OpenRouter-style pricing; plain OpenAI does not. Reading
+    # "no price" as "free" would put a green badge on a paid model.
+    has_price = any(key in pricing for key in ("prompt", "completion"))
     return ModelInfo(
         id=str(payload.get("id", "")),
         name=str(payload.get("name", "")),
@@ -127,6 +145,7 @@ def parse_model(payload: dict[str, Any]) -> ModelInfo:
         supports_vision="image" in inputs or modality in {"multimodal", "image->text"},
         supports_streaming=True,
         modality=modality,
+        price_known=has_price,
     )
 
 

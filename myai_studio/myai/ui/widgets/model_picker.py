@@ -38,6 +38,7 @@ from ..theme import runtime
 
 #: A tag is (text, tone); the tone names a theme colour.
 TAG_FREE = ("free", "success")
+TAG_PAID = ("paid", "warning")
 TAG_TOOLS = ("tools", "violet")
 TAG_VISION = ("vision", "accent")
 
@@ -505,15 +506,22 @@ class ChoicePopup(QFrame):
 
 
 def model_tags(
-    context_length: int, *, free: bool, tools: bool, vision: bool
+    context_length: int, *, free: bool, tools: bool, vision: bool, paid: bool = False
 ) -> tuple[tuple[str, str], ...]:
-    """The badges a catalogue row shows, in display order."""
+    """The badges a catalogue row shows, in display order.
+
+    ``paid`` is passed only when the catalogue stated a non-zero price. A model
+    whose price nobody published gets neither badge: guessing "free" would be a
+    lie and guessing "paid" would be a guess.
+    """
     tags: list[tuple[str, str]] = []
     if context_length:
         text = f"{context_length // 1000}k" if context_length >= 1000 else str(context_length)
         tags.append((text, "info"))
     if free:
         tags.append((tr("api.free"), TAG_FREE[1]))
+    elif paid:
+        tags.append((tr("api.paid"), TAG_PAID[1]))
     if tools:
         tags.append((tr("api.tools"), TAG_TOOLS[1]))
     if vision:

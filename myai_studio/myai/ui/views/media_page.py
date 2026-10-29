@@ -10,17 +10,28 @@ date and can be opened or deleted.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QPixmap
-from PySide6.QtWidgets import QDialog, QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QDialog,
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QVBoxLayout,
+    QWidget,
+)
 
 from ...core.errors import AppError
 from ...core.timeutil import format_bytes, format_datetime
 from ...i18n import current_language, tn, tr
+from ...services import creative
+from ...services.attachments import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from ...services.media import IMAGE_PROVIDER_NOTE, VIDEO_PROVIDER_NOTE, MediaItem
 from ..theme import runtime
-from ..widgets.dialogs import ConfirmDialog
+from ..widgets.dialogs import ConfirmDialog, PromptDialog
 from ..widgets.foundation import Badge, ElidedLabel
 from .page_base import PageShell, ghost_button, hint_label
 
@@ -123,16 +134,32 @@ class MediaPage(PageShell):
         self.provider_badge = Badge(tr("images.no_provider"), "muted")
         status.addWidget(self.provider_badge)
         status.addStretch(1)
-        self.generate_button = ghost_button(tr("images.generate"), "sparkles")
-        self.generate_button.setEnabled(False)
-        status.addWidget(self.generate_button)
         layout.addLayout(status)
 
         note = QLabel(tr("images.reason", note=self.PROVIDER_NOTE))
         note.setProperty("role", "muted")
         note.setWordWrap(True)
         layout.addWidget(note)
-        layout.addWidget(hint_label(tr("images.what_would_unlock")))
+
+        # What *is* possible without any provider: real files, made here.
+        _tools_card, tools_layout = self.card("images.tools_title", "wand")
+        tools_note = hint_label(tr("images.tools_hint"))
+        tools_note.setWordWrap(True)
+        tools_layout.addWidget(tools_note)
+        row = QHBoxLayout()
+        row.setSpacing(runtime.px(8))
+        self.convert_button = ghost_button(tr("images.tool_resize"), "scale")
+        self.convert_button.clicked.connect(self._convert_selected)
+        self.sheet_button = ghost_button(tr("images.tool_sheet"), "layers")
+        self.sheet_button.clicked.connect(self._make_sheet)
+        self.probe_button = ghost_button(tr("images.tool_probe"), "info")
+        self.probe_button.clicked.connect(self._probe_file)
+        for button in (self.convert_button, self.sheet_button, self.probe_button):
+            row.addWidget(button)
+        row.addStretch(1)
+        tools_layout.addLayout(row)
+        self.convert_button.setVisible(self.KIND == "images")
+        self.sheet_button.setVisible(self.KIND == "images")
 
         _library_card, library_layout = self.card("", "layers")
         head = QHBoxLayout()
@@ -209,13 +236,101 @@ class MediaPage(PageShell):
         self.refresh()
         self.notify.emit(tr("media.deleted", name=item.name), "info")
 
+    # ------------------------------------------------------------ real tools
+    def _generated_dir(self):
+        folder = self.context.paths.outputs_dir / ("images" if self.KIND == "images" else "videos")
+        folder.mkdir(parents=True, exist_ok=True)
+        return folder
+
+    def _pick_image(self) -> str:
+        patterns = " ".join(f"*{suffix}" for suffix in sorted(IMAGE_EXTENSIONS | VIDEO_EXTENSIONS))
+        path, _ = QFileDialog.getOpenFileName(
+            self.window(), tr("images.tool_probe"), str(self.context.paths.outputs_dir), patterns
+        )
+        return path
+
+    def _probe_file(self) -> None:
+        """Report the real size, pixels and duration of one file."""
+        path = self._pick_image()
+        if not path:
+            return
+        try:
+            info = creative.probe_media(path)
+        except AppError as exc:
+            self.notify.emit(exc.message, "error")
+            return
+        except Exception as exc:  # noqa: BLE001 - a bad file must not crash the page
+            logger.exception("probe_failed")
+            self.notify.emit(str(exc), "error")
+            return
+        self.notify.emit(f"{Path(path).name} — {info.describe()}", "info")
+
+    def _convert_selected(self) -> None:
+        path = self._pick_image()
+        if not path:
+            return
+        dialog = PromptDialog(
+            self.window(),
+            tr("images.tool_resize"),
+            tr("images.tool_width"),
+            value="1024",
+            confirm_text=tr("dialog.save"),
+            cancel_text=tr("dialog.cancel"),
+            required_text=tr("dialog.required"),
+        )
+        if not dialog.exec():
+            return
+        try:
+            width = int(dialog.value().strip())
+        except ValueError:
+            self.notify.emit(tr("api.invalid_number"), "error")
+            return
+        target = creative.unique_path(
+            self._generated_dir(), f"{Path(path).stem}-{width}px.jpg"
+        )
+        try:
+            written = creative.convert_image(path, target, width=width, fmt="jpg")
+        except AppError as exc:
+            self.notify.emit(exc.message, "error")
+            return
+        except Exception as exc:  # noqa: BLE001 - Qt may lack a codec
+            logger.exception("image_convert_failed")
+            self.notify.emit(tr("images.tool_failed", error=str(exc)), "error")
+            return
+        self.refresh()
+        self.notify.emit(tr("images.tool_done", name=written.name), "success")
+
+    def _make_sheet(self) -> None:
+        patterns = " ".join(f"*{suffix}" for suffix in sorted(IMAGE_EXTENSIONS))
+        paths, _ = QFileDialog.getOpenFileNames(
+            self.window(), tr("images.tool_sheet"), str(self.context.paths.outputs_dir), patterns
+        )
+        if len(paths) < 2:
+            if paths:
+                self.notify.emit(tr("images.tool_need_two"), "warning")
+            return
+        name = creative.suggested_name("sheet", ".png")
+        target = creative.unique_path(self._generated_dir(), name)
+        try:
+            written = creative.contact_sheet(paths, target, columns=4)
+        except AppError as exc:
+            self.notify.emit(exc.message, "error")
+            return
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("contact_sheet_failed")
+            self.notify.emit(tr("images.tool_failed", error=str(exc)), "error")
+            return
+        self.refresh()
+        self.notify.emit(tr("images.tool_done", name=written.name), "success")
+
     # -------------------------------------------------------------- translate
     def retranslate(self) -> None:
         super().retranslate()
         self.status_badge.setText(tr("images.unavailable"))
         self.provider_badge.setText(tr("images.no_provider"))
-        self.generate_button.setText(tr("images.generate"))
-        self.generate_button.setToolTip(tr("images.generate_disabled", note=self.PROVIDER_NOTE))
+        self.convert_button.setText(tr("images.tool_resize"))
+        self.sheet_button.setText(tr("images.tool_sheet"))
+        self.probe_button.setText(tr("images.tool_probe"))
         self.library_title.setText(tr(self.SECTION_KEY))
         self.refresh_button.setAccessibleName(tr("performance.refresh"))
         self.refresh_button.setToolTip(tr("performance.refresh"))

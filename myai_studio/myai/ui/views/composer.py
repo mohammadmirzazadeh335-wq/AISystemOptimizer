@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 
 from ...i18n import tr
 from ...services.attachments import MAX_FILE_BYTES as ATTACHMENT_MAX_BYTES
-from ...services.attachments import SUPPORTED_EXTENSIONS
+from ...services.attachments import SUPPORTED_EXTENSIONS, dialog_filters
 from ..theme import runtime
 from ..widgets.buttons import IconButton, SendButton
 from ..widgets.fields import AttachmentChip, PillToggle, SelectField
@@ -282,11 +282,17 @@ class Composer(QWidget):
         self._pick_files()
 
     def _pick_files(self) -> None:
+        # The dialog lists the same extensions the validator accepts, grouped by
+        # family, so a file the dialog offers can never be rejected a second later.
+        filters = ";;".join(
+            f"{tr('composer.filter_all') if index == 0 else name} ({patterns})"
+            for index, (name, patterns) in enumerate(dialog_filters())
+        )
         paths, _ = QFileDialog.getOpenFileNames(
             self.window(),
             tr("chat.attach_file"),
             str(Path.home()),
-            "Text, code & images (*.txt *.md *.py *.js *.ts *.json *.yaml *.html *.css *.c *.cpp *.cs *.java *.rs *.go *.png *.jpg *.jpeg *.webp *.svg);;All files (*)",
+            f"{filters};;{tr('composer.filter_everything')} (*)",
         )
         for path in paths:
             self._add_attachment(path)

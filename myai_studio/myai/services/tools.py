@@ -18,6 +18,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -54,6 +55,10 @@ REASON_TEXT = {
     "agent.reason_no_endpoint": "No search endpoint is configured (web.search_url).",
     "agent.reason_no_token": "No GitHub token is stored (Settings → Agent → GitHub token).",
     "agent.reason_no_web": "No page reader is available in this build.",
+    "agent.reason_no_pdf": (
+        "PDF and image generation need the Qt runtime, and this build has none."
+    ),
+    "agent.reason_no_paths": "The workspace folders are not available in this tool context.",
     "agent.reason_no_image": (
         "No image provider is configured. OpenRouter text models cannot create images, "
         "so this tool is unavailable rather than simulated."
@@ -125,6 +130,8 @@ class ToolContext:
     cancel: threading.Event | None = None
     #: ``myai.services.web.WebService``; only ``fetch()`` is used here.
     web: Any = None
+    #: ``myai.core.paths.AppPaths``; generated files land under its outputs dir.
+    paths: Any = None
     http_transport: httpx.BaseTransport | None = None
     timeout_seconds: float = 20.0
 
@@ -563,6 +570,160 @@ def _tool_generate_image(ctx: ToolContext, args: dict[str, Any]) -> ToolResult: 
     raise ToolUnavailable(REASON_TEXT["agent.reason_no_image"])
 
 
+
+
+# ------------------------------------------------------------- creative tools
+def _outputs_dir(ctx: ToolContext):
+    """Where generated files go: ``<outputs>`` under the app workspace."""
+    paths = getattr(ctx, "paths", None)
+    if paths is None:
+        outputs = getattr(ctx, "outputs", None)
+        paths = getattr(outputs, "_paths", None)
+    if paths is None:
+        raise ToolUnavailable(REASON_TEXT["agent.reason_no_paths"])
+    folder = Path(paths.outputs_dir) / "generated"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
+def _qt_reason(ctx: ToolContext) -> tuple[str, dict[str, Any]] | None:  # noqa: ARG001
+    from . import creative
+
+    if not creative.available()["pdf"]:
+        return "agent.reason_no_pdf", {}
+    return None
+
+
+def _tool_create_chart(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+    """A real SVG chart from numbers the model supplies."""
+    from . import creative
+
+    kind = str(args.get("kind", "bar")).strip().lower()
+    title = str(args.get("title", "") or "")
+    labels = [str(item) for item in (args.get("labels") or [])]
+    values = [float(item) for item in (args.get("values") or [])]
+    if values and labels and len(labels) != len(values):
+        raise ToolError("labels and values must be the same length")
+    series = [creative.Series(labels[index] if labels else f"#{index + 1}", [value]) for index, value in enumerate(values)]
+    if kind != "pie":
+        series = [creative.Series(str(args.get("series_name", "value")), values)] if values else []
+    folder = _outputs_dir(ctx)
+    name = str(args.get("name", "")).strip() or creative.suggested_name("chart", ".svg")
+    target = creative.unique_path(folder, creative.safe_name(name, "chart.svg"))
+    if not str(target).lower().endswith(".svg"):
+        target = target.with_suffix(".svg")
+    written = creative.render_chart(
+        kind=kind, series=series, path=target, title=title,
+        width=int(args.get("width", 900) or 900), height=int(args.get("height", 520) or 520),
+    )
+    return ToolResult(
+        ok=True,
+        output=f"Chart written: {written}",
+        data={"path": str(written), "kind": "chart", "points": len(values)},
+    )
+
+
+def _tool_export_pdf(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+    from . import creative
+
+    text = str(args.get("content", "") or "").strip()
+    if not text:
+        raise ToolError("The document is empty")
+    folder = _outputs_dir(ctx)
+    name = str(args.get("name", "")).strip() or creative.suggested_name("document", ".pdf")
+    target = creative.unique_path(folder, creative.safe_name(name, "document.pdf"))
+    if not str(target).lower().endswith(".pdf"):
+        target = target.with_suffix(".pdf")
+    try:
+        written = creative.render_pdf(text, target, title=str(args.get("title", "") or ""))
+    except creative.CreativeUnavailable as exc:
+        raise ToolUnavailable(str(exc)) from exc
+    return ToolResult(ok=True, output=f"PDF written: {written}", data={"path": str(written), "kind": "pdf"})
+
+
+def _tool_resize_image(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+    from . import creative
+
+    source = str(args.get("path", "") or "")
+    if not source:
+        raise ToolError("A source image is required")
+    folder = _outputs_dir(ctx)
+    name = str(args.get("name", "")).strip() or creative.suggested_name("image", ".png")
+    target = creative.unique_path(folder, creative.safe_name(name, "image.png"))
+    try:
+        written = creative.convert_image(
+            source, target,
+            width=int(args.get("width", 0) or 0),
+            height=int(args.get("height", 0) or 0),
+            fmt=str(args.get("format", "") or ""),
+        )
+    except creative.CreativeUnavailable as exc:
+        raise ToolUnavailable(str(exc)) from exc
+    width, height = creative.image_size(written)
+    return ToolResult(
+        ok=True,
+        output=f"Image written: {written} ({width}x{height})",
+        data={"path": str(written), "kind": "image", "width": width, "height": height},
+    )
+
+
+def _tool_make_contact_sheet(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+    from . import creative
+
+    sources = [str(item) for item in (args.get("paths") or []) if str(item).strip()]
+    if not sources:
+        raise ToolError("At least one image is required")
+    folder = _outputs_dir(ctx)
+    name = str(args.get("name", "")).strip() or creative.suggested_name("sheet", ".png")
+    target = creative.unique_path(folder, creative.safe_name(name, "sheet.png"))
+    try:
+        written = creative.contact_sheet(
+            sources, target, columns=int(args.get("columns", 4) or 4)
+        )
+    except creative.CreativeUnavailable as exc:
+        raise ToolUnavailable(str(exc)) from exc
+    return ToolResult(
+        ok=True,
+        output=f"Contact sheet written: {written} ({len(sources)} images)",
+        data={"path": str(written), "kind": "image", "count": len(sources)},
+    )
+
+
+def _tool_zip_files(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+    from . import creative
+
+    sources = [str(item) for item in (args.get("paths") or []) if str(item).strip()]
+    if not sources:
+        raise ToolError("Nothing to compress")
+    folder = _outputs_dir(ctx)
+    name = str(args.get("name", "")).strip() or creative.suggested_name("bundle", ".zip")
+    target = creative.unique_path(folder, creative.safe_name(name, "bundle.zip"))
+    written = creative.zip_bundle(sources, target, base=args.get("base") or None)
+    return ToolResult(
+        ok=True,
+        output=f"Archive written: {written} ({len(sources)} files)",
+        data={"path": str(written), "kind": "archive", "count": len(sources)},
+    )
+
+
+def _tool_describe_file(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:  # noqa: ARG001
+    from . import creative
+
+    source = str(args.get("path", "") or "")
+    if not source:
+        raise ToolError("A path is required")
+    info = creative.probe_media(source)
+    return ToolResult(
+        ok=True,
+        output=info.describe(),
+        data={
+            "kind": info.kind,
+            "bytes": info.size_bytes,
+            "width": info.width,
+            "height": info.height,
+            "seconds": info.duration_seconds,
+        },
+    )
 
 
 # ---------------------------------------------------------- new agent tools
@@ -1219,6 +1380,120 @@ def default_specs() -> list[ToolSpec]:
             risk=NETWORK,
             handler=_tool_fetch_url,
             availability=_web_reason,
+        ),
+        ToolSpec(
+            id="create_chart",
+            label_key="agent.tool_create_chart",
+            description=(
+                "Draw a real SVG chart (bar, line or pie) from numbers you supply and save it "
+                "to the outputs folder. Use it whenever the user asks for a diagram, a "
+                "comparison or a graph; never describe a chart you did not draw."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "kind": {"type": "string", "enum": ["bar", "line", "pie"]},
+                    "title": {"type": "string", "maxLength": 120},
+                    "labels": {"type": "array", "items": {"type": "string"}},
+                    "values": {"type": "array", "items": {"type": "number"}},
+                    "series_name": {"type": "string", "maxLength": 60},
+                    "name": {"type": "string", "maxLength": 120},
+                    "width": {"type": "integer", "minimum": 320, "maximum": 2400},
+                    "height": {"type": "integer", "minimum": 220, "maximum": 1600},
+                },
+                "required": ["kind", "values"],
+            },
+            risk=WRITE,
+            handler=_tool_create_chart,
+        ),
+        ToolSpec(
+            id="export_pdf",
+            label_key="agent.tool_export_pdf",
+            description=(
+                "Render Markdown or plain text into a real PDF file in the outputs folder."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "content": {"type": "string", "maxLength": 200_000},
+                    "title": {"type": "string", "maxLength": 120},
+                    "name": {"type": "string", "maxLength": 120},
+                },
+                "required": ["content"],
+            },
+            risk=WRITE,
+            handler=_tool_export_pdf,
+            availability=_qt_reason,
+        ),
+        ToolSpec(
+            id="resize_image",
+            label_key="agent.tool_resize_image",
+            description=(
+                "Resize and/or re-encode a picture (png, jpg, webp, bmp) and save the copy in "
+                "the outputs folder."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "maxLength": 1000},
+                    "name": {"type": "string", "maxLength": 120},
+                    "width": {"type": "integer", "minimum": 0, "maximum": 8192},
+                    "height": {"type": "integer", "minimum": 0, "maximum": 8192},
+                    "format": {"type": "string", "maxLength": 8},
+                },
+                "required": ["path"],
+            },
+            risk=WRITE,
+            handler=_tool_resize_image,
+            availability=_qt_reason,
+        ),
+        ToolSpec(
+            id="contact_sheet",
+            label_key="agent.tool_contact_sheet",
+            description="Arrange several images into one captioned grid image.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "paths": {"type": "array", "items": {"type": "string"}},
+                    "name": {"type": "string", "maxLength": 120},
+                    "columns": {"type": "integer", "minimum": 1, "maximum": 8},
+                },
+                "required": ["paths"],
+            },
+            risk=WRITE,
+            handler=_tool_make_contact_sheet,
+            availability=_qt_reason,
+        ),
+        ToolSpec(
+            id="zip_files",
+            label_key="agent.tool_zip_files",
+            description="Compress one or more files into a single zip archive.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "paths": {"type": "array", "items": {"type": "string"}},
+                    "name": {"type": "string", "maxLength": 120},
+                    "base": {"type": "string", "maxLength": 1000},
+                },
+                "required": ["paths"],
+            },
+            risk=WRITE,
+            handler=_tool_zip_files,
+        ),
+        ToolSpec(
+            id="describe_file",
+            label_key="agent.tool_describe_file",
+            description=(
+                "Report the real size, pixel dimensions and duration of one file, so you can "
+                "decide what to do with it instead of guessing."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {"path": {"type": "string", "maxLength": 1000}},
+                "required": ["path"],
+            },
+            risk=READ,
+            handler=_tool_describe_file,
         ),
         ToolSpec(
             id="generate_image",

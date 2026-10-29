@@ -608,6 +608,7 @@ class AgentPage(PageShell):
             secrets=self.context.secrets,
             conversation_id=None,
             web=self.context.web,
+            paths=self.context.paths,
         )
 
     def _on_network_toggled(self, checked: bool) -> None:

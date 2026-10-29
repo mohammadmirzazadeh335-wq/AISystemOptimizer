@@ -250,7 +250,10 @@ def test_image_studio_is_honest_and_lists_files(ui) -> None:
     window._navigate("images")
     pump()
     page = window.images_page
-    assert not page.generate_button.isEnabled(), "nothing may pretend to generate images"
+    # The page no longer shows a disabled "generate" button at all; it offers the
+    # tools that do work offline instead.
+    assert not hasattr(page, "generate_button")
+    assert page.convert_button.isVisibleTo(page) and page.sheet_button.isVisibleTo(page)
     assert tr("images.unavailable") in texts(page)
     assert page.grid_host.isVisible() is False
     assert page.empty.isVisible()
@@ -268,7 +271,11 @@ def test_video_studio_is_honest_and_lists_files(ui) -> None:
     window._navigate("video")
     pump()
     page = window.video_page
-    assert not page.generate_button.isEnabled()
+    # Video generation is still honestly unavailable — and the video page offers
+    # a real file probe rather than a dead generate button.
+    assert not hasattr(page, "generate_button")
+    assert page.probe_button.isVisibleTo(page)
+    assert not page.convert_button.isVisibleTo(page)
     assert page.empty.isVisible()
 
     (ctx.paths.videos_dir / "clip.mp4").write_bytes(b"mp4")

@@ -14,6 +14,7 @@ from datetime import datetime
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -45,12 +46,16 @@ from ...services.providers import (
     base_url_for,
     cached_models,
     current_provider,
+    custom_endpoints,
+    delete_custom_endpoint,
+    get_provider,
     has_stored_key,
     key_problem,
     model_id_problem,
     models_cache,
     normalize_base_url,
     save_base_url,
+    save_custom_endpoint,
 )
 from ...services.providers import (
     has_key as provider_has_key,
@@ -141,11 +146,16 @@ class ModelRow(QFrame):
 
     @staticmethod
     def _price_text(model: ModelInfo) -> str:
-        if model.is_free():
-            return "$0"
-        if not model.prompt_price and not model.completion_price:
-            return "—"
-        return f"${model.prompt_price:g} / ${model.completion_price:g}"
+        state = model.price_state()
+        if state == "free":
+            return tr("api.free")
+        if state == "paid":
+            if not model.prompt_price and not model.completion_price:
+                return tr("api.paid")
+            return f"${model.prompt_price:g} / ${model.completion_price:g}"
+        # The catalogue published no price. Saying "free" here would be a lie;
+        # saying "paid" would be a guess.
+        return tr("api.price_unknown")
 
 
 class ApiPage(PageShell):
@@ -171,6 +181,7 @@ class ApiPage(PageShell):
     # ------------------------------------------------------------------ build
     def _build(self) -> None:
         self._build_provider_card()
+        self._build_custom_card()
         self._build_key_card()
         self._build_test_card()
         self._build_network_card()
@@ -198,8 +209,7 @@ class ApiPage(PageShell):
         self.provider_label = field_label(tr("api.provider_label"))
         row.addWidget(self.provider_label)
         self.provider_select = SelectField(
-            [(item.id, tr(f"provider.{item.id}") if has_key(f"provider.{item.id}") else item.name)
-             for item in all_providers()],
+            self._provider_items(),
             placeholder=tr("api.provider_none"),
             icon_name="layers",
             searchable=True,
@@ -259,7 +269,12 @@ class ApiPage(PageShell):
         """Everything on the page follows the selected provider."""
         self.provider = current_provider(self.context.settings)
         self.provider_select.set_value(self.provider.id)
-        self.provider_note.setText(tr(self.provider.note_key) if self.provider.note_key else "")
+        if self.provider.note_key:
+            self.provider_note.setText(tr(self.provider.note_key))
+        elif self.provider.custom:
+            self.provider_note.setText(tr("api.custom_note", name=self.provider.name))
+        else:
+            self.provider_note.setText("")
         self._provider_badge()
         url = base_url_for(self.provider, self.context.settings)
         if self.base_url_input.text().strip() != url:
@@ -297,6 +312,9 @@ class ApiPage(PageShell):
             return
         self.provider = current_provider(self.context.settings)
         self._filter = ""
+        # A model id typed for the previous service is meaningless for this one;
+        # keeping it would offer a row that cannot answer.
+        self._manual_models.clear()
         self.search.setText("")
         self._sync_provider_fields()
         self._refresh_key_state()
@@ -328,6 +346,196 @@ class ApiPage(PageShell):
         self._sync_base_url_state()
         self.notify.emit(tr("api.url_saved", name=self._provider_name()), "success")
         self.provider_changed.emit(self.provider.id)
+
+    def _provider_items(self) -> list[tuple[str, str]]:
+        return [
+            (
+                item.id,
+                tr(f"provider.{item.id}") if has_key(f"provider.{item.id}") else item.name,
+            )
+            for item in all_providers()
+        ]
+
+    def _refresh_provider_select(self) -> None:
+        """Rebuild the selector after an endpoint was added or removed."""
+        self.provider_select.set_items(self._provider_items())
+        self.provider_select.set_value(self.provider.id)
+
+    def _build_custom_card(self) -> None:
+        """Add any endpoint by address — the built-in list is a shortcut, not a cage.
+
+        A relay that speaks the OpenAI wire protocol is configured with three
+        facts: a name, a base URL and whether it wants a key. Everything else in
+        the app (chat, agent, catalogue, usage) already follows the selected
+        provider, so one saved endpoint is a first-class service here.
+        """
+        card, layout = self.card("api.custom_card", "plug")
+        hint = hint_label(tr("api.custom_hint"))
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        host = QWidget()
+        row = FlowLayout(host, spacing=runtime.px(8))
+        layout.addWidget(host)
+        self.custom_name = QLineEdit()
+        self.custom_name.setPlaceholderText(tr("api.custom_name_placeholder"))
+        self.custom_name.setAccessibleName(tr("api.custom_name"))
+        self.custom_name.setMinimumWidth(runtime.px(150))
+        self.custom_name.setMaximumWidth(runtime.px(240))
+        row.addWidget(self.custom_name)
+
+        self.custom_url = QLineEdit()
+        self.custom_url.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
+        self.custom_url.setPlaceholderText(tr("api.custom_url_placeholder"))
+        self.custom_url.setAccessibleName(tr("api.custom_url"))
+        self.custom_url.setMinimumWidth(runtime.px(240))
+        self.custom_url.setMaximumWidth(runtime.px(430))
+        self.custom_url.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        row.addWidget(self.custom_url)
+
+        self.custom_protocol = SelectField(
+            [
+                ("openai", tr("api.protocol_openai")),
+                ("anthropic", tr("api.protocol_anthropic")),
+                ("gemini", tr("api.protocol_gemini")),
+            ],
+            placeholder=tr("api.protocol_openai"),
+        )
+        self.custom_protocol.set_value("openai")
+        row.addWidget(self.custom_protocol)
+
+        self.custom_key_required = QCheckBox(tr("api.custom_key_required"))
+        self.custom_key_required.setChecked(True)
+        row.addWidget(self.custom_key_required)
+
+        self.custom_add = primary_button(tr("api.custom_add"), "plus")
+        self.custom_add.clicked.connect(self._save_custom_endpoint)
+        row.addWidget(self.custom_add)
+        layout.addWidget(host)
+
+        self.custom_message = hint_label("")
+        self.custom_message.setWordWrap(True)
+        layout.addWidget(self.custom_message)
+
+        self.custom_list_host = QWidget()
+        self.custom_list = QVBoxLayout(self.custom_list_host)
+        self.custom_list.setContentsMargins(0, 0, 0, 0)
+        self.custom_list.setSpacing(runtime.px(6))
+        layout.addWidget(self.custom_list_host)
+        self._render_custom_endpoints()
+
+    def _render_custom_endpoints(self) -> None:
+        while self.custom_list.count():
+            item = self.custom_list.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+        rows = [row for row in custom_endpoints(self.context.settings) if row.get("id")]
+        if not rows:
+            empty = hint_label(tr("api.custom_empty"))
+            empty.setWordWrap(True)
+            self.custom_list.addWidget(empty)
+            return
+        for row in rows:
+            provider = get_provider(str(row.get("id")))
+            frame = QFrame()
+            frame.setProperty("panel", "row")
+            line = QHBoxLayout(frame)
+            line.setContentsMargins(runtime.px(10), runtime.px(6), runtime.px(10), runtime.px(6))
+            line.setSpacing(runtime.px(8))
+            name = QLabel(provider.name)
+            name.setStyleSheet("font-weight: 600;")
+            line.addWidget(name)
+            address = QLabel(f"{provider.base_url} · {provider.protocol}")
+            address.setProperty("role", "faint")
+            address.setProperty("mono", True)
+            address.setStyleSheet(f"font-size: {runtime.px(9)}px;")
+            line.addWidget(address, 1)
+            if provider.id == self.provider.id:
+                line.addWidget(Badge(tr("api.custom_active"), "success"))
+            use = ghost_button(tr("api.custom_use"), "check")
+            use.clicked.connect(lambda _=False, pid=provider.id: self._use_custom(pid))
+            line.addWidget(use)
+            remove = ghost_button(tr("api.custom_delete"), "trash")
+            remove.clicked.connect(lambda _=False, pid=provider.id: self._delete_custom(pid))
+            line.addWidget(remove)
+            self.custom_list.addWidget(frame)
+
+    def _save_custom_endpoint(self) -> None:
+        name = self.custom_name.text().strip() or self.custom_url.text().strip()
+        url = self.custom_url.text().strip()
+        if not url:
+            self._set_custom_message(tr("api.base_url_required"), danger=True)
+            self.custom_url.setFocus()
+            return
+        try:
+            provider = save_custom_endpoint(
+                self.context.settings,
+                {
+                    "name": name,
+                    "base_url": url,
+                    "protocol": self.custom_protocol.value or "openai",
+                    "key_required": self.custom_key_required.isChecked(),
+                },
+            )
+        except AppError as exc:
+            # The user's own text (a URL, a name) is not echoed into a log; the
+            # error's translation key is enough and stays localised.
+            self._set_custom_message(tr(exc.message_key or "error.settings"), danger=True)
+            return
+        self.provider = provider
+        self._refresh_provider_select()
+        self.custom_name.clear()
+        self.custom_url.clear()
+        self.custom_message.setText("")
+        self._render_custom_endpoints()
+        self._sync_provider_fields()
+        self._refresh_key_state()
+        self.provider_changed.emit(provider.id)
+        self.notify.emit(tr("api.custom_saved", name=provider.name), "success")
+
+    def _use_custom(self, provider_id: str) -> None:
+        self.context.settings.set("ai.provider", provider_id)
+        self.provider = get_provider(provider_id)
+        self._refresh_provider_select()
+        self._render_custom_endpoints()
+        self._sync_provider_fields()
+        self._refresh_key_state()
+        self.provider_changed.emit(provider_id)
+
+    def _delete_custom(self, provider_id: str) -> None:
+        provider = get_provider(provider_id)
+        dialog = ConfirmDialog(
+            self,
+            tr("api.custom_delete_title"),
+            tr("api.custom_delete_body", name=provider.name),
+            confirm_text=tr("api.custom_delete"),
+            cancel_text=tr("dialog.cancel"),
+            danger=True,
+            icon="trash",
+        )
+        if not dialog.exec():
+            return
+        try:
+            self.context.secrets.delete(self.context.secrets.key_name(provider_id))
+        except Exception:  # noqa: BLE001 - a missing key is not a failure here
+            logger.debug("custom_endpoint_key_delete_failed", exc_info=True)
+        delete_custom_endpoint(self.context.settings, provider_id)
+        if self.provider.id == provider_id:
+            self.provider = current_provider(self.context.settings)
+        self._refresh_provider_select()
+        self._render_custom_endpoints()
+        self._sync_provider_fields()
+        self._refresh_key_state()
+        self.provider_changed.emit(self.provider.id)
+        self.notify.emit(tr("api.custom_deleted", name=provider.name), "info")
+
+    def _set_custom_message(self, text: str, *, danger: bool = False) -> None:
+        self.custom_message.setText(text)
+        self.custom_message.setProperty("role", "danger" if danger else "faint")
+        self.custom_message.style().unpolish(self.custom_message)
+        self.custom_message.style().polish(self.custom_message)
 
     def _build_key_card(self) -> None:
         card, layout = self.card("api.key_card", "lock")
@@ -377,7 +585,9 @@ class ApiPage(PageShell):
         layout.addWidget(self.key_error)
 
     def _build_test_card(self) -> None:
-        card, layout = self.card("api.test_card", "activity")
+        card, layout = self.collapsible_card(
+            "api.test_card", "activity", key="api.card.test", open_by_default=False
+        )
         layout.addWidget(hint_label(tr("api.test_hint")))
         self.network_note = hint_label(tr("api.test_network_note"))
         layout.addWidget(self.network_note)
@@ -433,7 +643,9 @@ class ApiPage(PageShell):
 
     def _build_network_card(self) -> None:
         """Proxy/VPN settings — the usual reason a key works for nobody."""
-        card, layout = self.card("api.network_card", "globe")
+        card, layout = self.collapsible_card(
+            "api.network_card", "globe", key="api.card.network", open_by_default=False
+        )
         self.proxy_hint = hint_label(tr("api.proxy_hint"))
         self.proxy_hint.setWordWrap(True)
         layout.addWidget(self.proxy_hint)
@@ -690,7 +902,9 @@ class ApiPage(PageShell):
         self.model_id_input.clear()
 
     def _build_sampling_card(self) -> None:
-        card, layout = self.card("api.sampling_card", "sliders")
+        card, layout = self.collapsible_card(
+            "api.sampling_card", "sliders", key="api.card.sampling", open_by_default=False
+        )
         row = QHBoxLayout()
         row.setSpacing(runtime.px(14))
         self.temperature = QLineEdit(str(self.context.settings.get("ai.temperature", 0.7)))
@@ -1010,6 +1224,7 @@ class ApiPage(PageShell):
                 tags=model_tags(
                     model.context_length,
                     free=model.is_free(),
+                    paid=model.is_paid(),
                     tools=model.supports_tools,
                     vision=model.supports_vision,
                 ),
@@ -1073,6 +1288,20 @@ class ApiPage(PageShell):
             label.style().unpolish(label)
             label.style().polish(label)
 
+    def window_context(self, key: str, default: bool) -> bool:  # noqa: D102 - see PageShell
+        stored = self.context.settings.get("ui.cards_open", {}) or {}
+        if isinstance(stored, dict) and key in stored:
+            return bool(stored[key])
+        return default
+
+    def remember_collapsed(self, key: str, is_open: bool) -> None:  # noqa: D102
+        stored = self.context.settings.get("ui.cards_open", {}) or {}
+        stored = dict(stored) if isinstance(stored, dict) else {}
+        if stored.get(key) == is_open:
+            return
+        stored[key] = is_open
+        self.context.settings.set("ui.cards_open", stored)
+
     def retranslate(self) -> None:
         super().retranslate()
         if self._models:
@@ -1089,6 +1318,18 @@ class ApiPage(PageShell):
         self.model_id_hint.setText(tr("api.model_id_hint"))
         self.base_url_hint.setText(tr("api.base_url_hint"))
         self.provider_hint.setText(tr("api.provider_hint"))
+        self.custom_name.setPlaceholderText(tr("api.custom_name_placeholder"))
+        self.custom_url.setPlaceholderText(tr("api.custom_url_placeholder"))
+        self.custom_add.setText(tr("api.custom_add"))
+        self.custom_key_required.setText(tr("api.custom_key_required"))
+        self.custom_protocol.set_items(
+            [
+                ("openai", tr("api.protocol_openai")),
+                ("anthropic", tr("api.protocol_anthropic")),
+                ("gemini", tr("api.protocol_gemini")),
+            ]
+        )
+        self._render_custom_endpoints()
         self.provider_select.set_items(
             [
                 (item.id, tr(f"provider.{item.id}") if has_key(f"provider.{item.id}") else item.name)

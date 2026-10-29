@@ -242,11 +242,15 @@ class ChatService:
                     messages.append({"role": "user", "content": block})
                 else:
                     last["content"] = f"{last['content']}\n\n{block}".strip()
+            self._attach_images(messages, attachments)
 
         window = self.context_window(conversation.model_id or str(self._settings.get("ai.default_model", "")))
         system_tokens = estimate_tokens(messages[0]["content"])
         memory_tokens = estimate_tokens(memory_block) if bool(self._settings.get("memory.enabled", True)) else 0
-        history_tokens = sum(estimate_tokens(m["content"]) for m in messages[1:])
+        history_tokens = sum(
+            estimate_tokens(m["content"]) if isinstance(m["content"], str) else 0
+            for m in messages[1:]
+        )
         total = system_tokens + history_tokens
         diagnostics = PromptDiagnostics(
             system_tokens=system_tokens,
@@ -261,6 +265,61 @@ class ChatService:
             usage_ratio=min(1.0, total / window) if window else 0.0,
         )
         return messages, diagnostics
+
+    #: Images are base64 in the request body, so four is already a large payload.
+    MAX_IMAGES_PER_TURN = 4
+    MAX_IMAGE_BYTES = 6 * 1024 * 1024
+
+    def _attach_images(self, messages: list[dict[str, Any]], records: list["AttachmentRecord"]) -> None:
+        """Send pictures as real image parts when the provider can read them.
+
+        A text model cannot open a JPEG, so sending one as base64 would only
+        waste tokens. The rule is therefore explicit: the OpenAI-compatible
+        protocol gets ``image_url`` parts, and only when the user allows it
+        (``ai.attach_images``). Anthropic and Gemini are not converted here —
+        their wire formats differ and a half-converted body would fail mid-stream.
+        """
+        if not records:
+            return
+        try:
+            from .providers import PROTOCOL_OPENAI, current_provider
+
+            provider = current_provider(self._settings)
+            if provider.protocol != PROTOCOL_OPENAI:
+                return
+            if not bool(self._settings.get("ai.attach_images", True)):
+                return
+        except Exception:  # noqa: BLE001 - a broken settings row must not block a reply
+            logger.debug("attach_images_provider_lookup_failed", exc_info=True)
+            return
+        import base64
+        from pathlib import Path
+
+        parts: list[dict[str, Any]] = []
+        for record in records:
+            if record.kind != "image" or len(parts) >= self.MAX_IMAGES_PER_TURN:
+                continue
+            try:
+                file = Path(record.path)
+                if file.stat().st_size > self.MAX_IMAGE_BYTES:
+                    continue
+                encoded = base64.b64encode(file.read_bytes()).decode("ascii")
+            except OSError:
+                logger.warning("attach_image_unreadable name=%s", record.name)
+                continue
+            mime = record.mime if record.mime.startswith("image/") else "image/png"
+            parts.append(
+                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{encoded}"}}
+            )
+        if not parts:
+            return
+        for message in reversed(messages):
+            if message.get("role") != "user":
+                continue
+            content = message.get("content")
+            text = content if isinstance(content, str) else ""
+            message["content"] = [{"type": "text", "text": text}, *parts]
+            return
 
     def _system_blocks(self, conversation: Conversation) -> tuple[str, str, str]:
         """Base instruction, persona block and memory block, in send order."""

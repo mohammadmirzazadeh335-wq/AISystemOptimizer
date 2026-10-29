@@ -69,7 +69,8 @@ def record_text(service: AttachmentService, source: Path) -> str:
 
 
 def test_unknown_extension_is_refused(service: AttachmentService, tmp_path: Path) -> None:
-    source = write(tmp_path, "archive.iso", b"\x00\x01")
+    # ``.iso`` is a supported archive now; an extension nobody claims still is not.
+    source = write(tmp_path, "mystery.zzz", b"\x00\x01")
     with pytest.raises(ValidationError) as excinfo:
         service.ingest(source)
     assert excinfo.value.message_key == "attachments.unsupported"

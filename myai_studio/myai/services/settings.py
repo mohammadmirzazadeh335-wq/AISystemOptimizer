@@ -43,12 +43,18 @@ DEFAULTS: dict[str, Any] = {
     "ai.base_url": "https://openrouter.ai/api/v1",
     #: provider id -> base URL, so switching providers does not lose either URL.
     "ai.base_urls": {},
+    #: Endpoints the user added on the API page: name, base URL, protocol.
+    "ai.custom_endpoints": [],
+    #: Which collapsible cards the user left open, by card key.
+    "ui.cards_open": {},
     #: provider id -> cached catalogue (see services.providers.cached_models).
     "ai.model_cache": {},
     "ai.default_model": "",
     "ai.temperature": 0.7,
     "ai.max_tokens": 4096,
     "ai.stream": True,
+    #: Send pictures as real image parts to an OpenAI-compatible provider.
+    "ai.attach_images": True,
     "ai.persona_enabled": False,
     "ai.persona_text": "",
     "ai.language_preference": "auto",

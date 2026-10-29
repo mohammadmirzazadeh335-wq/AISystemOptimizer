@@ -129,6 +129,71 @@ class PageShell(QWidget):
         self.body.insertWidget(self.body.count() - 1, card)
         return card, layout
 
+    def collapsible_card(
+        self, title_key: str, icon_name: str = "", *, key: str = "", open_by_default: bool = False
+    ) -> tuple[QFrame, QVBoxLayout]:
+        """A card whose body hides behind its header.
+
+        The API page stacked seven cards, and four of them are only needed when
+        something goes wrong (proxy, connection test, sampling). Collapsing is a
+        way to make the page calmer without deleting a single control: the
+        header still names the card, and the open/closed state is remembered.
+        """
+        card = QFrame()
+        card.setProperty("panel", "card")
+        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        outer = QVBoxLayout(card)
+        outer.setContentsMargins(runtime.px(16), runtime.px(11), runtime.px(16), runtime.px(12))
+        outer.setSpacing(runtime.px(8))
+
+        head = QHBoxLayout()
+        head.setSpacing(runtime.px(7))
+        if icon_name:
+            icon_widget = QLabel()
+            icon_widget.setPixmap(runtime.icons().px(icon_name, 14, "muted"))
+            head.addWidget(icon_widget)
+        label = QLabel(tr(title_key))
+        label.setProperty("role", "section")
+        head.addWidget(label)
+        head.addStretch(1)
+        toggle = ghost_button("", "chevron-down")
+        toggle.setCheckable(True)
+        toggle.setAccessibleName(tr(title_key))
+        head.addWidget(toggle)
+        outer.addLayout(head)
+
+        holder = QWidget()
+        body = QVBoxLayout(holder)
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(runtime.px(9))
+        outer.addWidget(holder)
+
+        stored = bool(self.window_context(key, open_by_default)) if key else open_by_default
+
+        def apply(open_: bool) -> None:
+            holder.setVisible(open_)
+            toggle.setChecked(open_)
+            toggle.setProperty("role", "" if open_ else "muted")
+            toggle.setAccessibleName(
+                tr("page.collapse") if open_ else tr("page.expand")
+            )
+            if key:
+                self.remember_collapsed(key, open_)
+
+        toggle.clicked.connect(lambda checked: apply(checked))
+        apply(stored)
+        self.body.insertWidget(self.body.count() - 1, card)
+        self._collapsible = getattr(self, "_collapsible", [])
+        self._collapsible.append((title_key, label, toggle))
+        return card, body
+
+    #: Overridden by pages that persist UI state; the base keeps it in memory.
+    def window_context(self, key: str, default: bool) -> bool:  # noqa: ARG002
+        return default
+
+    def remember_collapsed(self, key: str, is_open: bool) -> None:  # noqa: ARG002
+        return
+
     def add_widget(self, widget: QWidget) -> None:
         self.body.insertWidget(self.body.count() - 1, widget)
 

@@ -278,6 +278,10 @@ class MainWindow(QMainWindow):
         self.header.stop_requested.connect(self._stop_generation)
         self.header.mode_changed.connect(self._on_mode_changed)
         self.header.model_changed.connect(self._on_model_changed)
+        # Before 0.10 the composer chip was decorative: choosing a model there
+        # changed the label and nothing else, and the next message went to the
+        # conversation's old model. Both chips now share one handler.
+        self.composer.model_chip.value_changed.connect(self._on_model_changed)
         self.header.new_chat_requested.connect(self.new_chat)
         self.header.rename_requested.connect(self._rename_current)
         self.header.export_requested.connect(self._export_current)
@@ -488,7 +492,15 @@ class MainWindow(QMainWindow):
             self._go_chat()
 
     def _on_model_changed(self, model_id: str) -> None:
+        """The single place a model change lands, whichever chip sent it.
+
+        Order matters: settings and the conversation are written first, because
+        ``open_conversation`` rebuilds both chips from the conversation row. If
+        the save fails the chips are left untouched and the toast says why.
+        """
         if not model_id:
+            return
+        if self._current is None and str(self.context.settings.get("ai.default_model", "")) == model_id:
             return
         try:
             self.context.settings.set("ai.default_model", model_id)
@@ -498,9 +510,11 @@ class MainWindow(QMainWindow):
         except AppError as exc:
             self._show_toast(str(exc), "error")
             return
-        self.composer.set_models(
-            [(m.id, m.name or m.id) for m in self._ai_models], model_id
-        )
+        items = [(m.id, m.name or m.id) for m in self._ai_models]
+        # set_value() does not emit, so this cannot bounce between the two chips.
+        self.composer.set_models(items, model_id)
+        self.header.set_models(items, model_id)
+        self.api_page.set_default_model(model_id)
         self._refresh_context_usage()
 
     def _use_suggestion(self, prompt: str) -> None:
@@ -648,7 +662,11 @@ class MainWindow(QMainWindow):
                 conversation = self.context.conversations.create(title=title, select=False)
             elif not conversation.title.strip():
                 conversation = self.context.conversations.rename(conversation.id, title)
-            model_id = conversation.model_id or str(self.context.settings.get("ai.default_model", ""))
+            model_id = (
+                self.composer.model_value()
+                or conversation.model_id
+                or str(self.context.settings.get("ai.default_model", ""))
+            )
             self.composer.mark_sent()
             if not model_id:
                 self.context.conversations.add_message(
@@ -880,9 +898,38 @@ class MainWindow(QMainWindow):
                 models.append(model)
         self._ai_models = models
         self.context.chat.set_models(models)
+        self._reconcile_conversation_model(provider.name)
         self._apply_models_to_ui()
         if has_key(provider, self.context.secrets):
             self._fetch_models_async()
+
+    def _reconcile_conversation_model(self, provider_name: str) -> None:
+        """Keep the open chat on a model the *new* service actually has.
+
+        Before this, switching provider left the conversation on the previous
+        service's model id, and the next message was sent to a provider that had
+        never heard of it — a 404 the user could not explain.
+        """
+        if self._current is None:
+            return
+        known = {model.id for model in self._ai_models}
+        current = (self._current.model_id or "").strip()
+        if not known:
+            # No catalogue yet: clearing is the honest state, and the composer
+            # asks for a model instead of sending a wrong one.
+            if current:
+                self._current = self.context.conversations.set_model(self._current.id, "")
+                self._show_toast(tr("chat.model_reset_empty", provider=provider_name), "warning")
+            return
+        if current in known:
+            return
+        fallback = str(self.context.settings.get("ai.default_model", "") or "")
+        if fallback not in known:
+            fallback = sorted(known)[0]
+        self._current = self.context.conversations.set_model(self._current.id, fallback)
+        self._show_toast(
+            tr("chat.model_reset", provider=provider_name, model=fallback), "info"
+        )
 
     def _fetch_models_async(self) -> None:
         # The provider-aware client: whichever service is selected is the one
@@ -930,6 +977,7 @@ class MainWindow(QMainWindow):
                 tags=model_tags(
                     model.context_length,
                     free=model.is_free(),
+                    paid=model.is_paid(),
                     tools=model.supports_tools,
                     vision=model.supports_vision,
                 ),
