@@ -4,8 +4,8 @@ A premium, local-first AI desktop workspace for Windows 11: multi-model chat, me
 a real code studio, supervised agents, media and research — delivered in five verified
 phases.
 
-> **Current build: `0.9.1` — Phase 5 + LAB + Rounds 3–5, with a Windows x64 release**
-> (`v0.9.1`; the phase notes below describe the shipped feature set)
+> **Current build: `0.10.0` — Phase 5 + LAB + Rounds 3–6, with a Windows x64 release**
+> (`v0.10.0`; the phase notes below describe the shipped feature set)
 > Chat streams from OpenRouter, memory and personality are real and editable, the Output
 > Studio keeps every revision, Code Studio opens real folders and runs real files, and the
 > agent acts **only** through twenty-two registered tools behind an approval gate. Phase 5
@@ -35,6 +35,18 @@ phases.
 > failed (proxy → DNS → TCP → TLS → HTTP) and retries once. See
 > [`docs/NETWORK_TROUBLESHOOTING.md`](docs/NETWORK_TROUBLESHOOTING.md) or its
 > [Persian version](docs/NETWORK_TROUBLESHOOTING_FA.md).
+
+> **`0.10.0` — any endpoint, labels that do not lie, and files the app really makes.**
+> Providers are no longer a fixed list: **Custom endpoints** adds a relay by name
+> and address, and **GapGPT** is built in. Every model row says **free**, **paid**
+> or *nothing when the catalogue published no price* — a missing price used to
+> read as "free". The model chip above the send button now really switches the
+> model (it was decoration). Chat accepts **197 file types**, and a picture
+> reaches a vision model as a real image part. Six **creative tools** — chart,
+> PDF, image resize, contact sheet, zip, file probe — let a text model produce
+> real files, exposed as buttons in the Image/Video studios, Output Studio and
+> the Usage page. See [`docs/PROVIDERS.md`](docs/PROVIDERS.md) or its
+> [Persian version](docs/PROVIDERS_FA.md).
 
 > **`0.9.1` — a relay key works on the first try, and a model the provider does
 > not list is still usable.** First-class **Tooken Club** entry
@@ -70,7 +82,7 @@ phases.
 
 ## Download (Windows x64)
 
-[**MyAI Studio Ultimate 0.9.1 — Windows x64**](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.9.1/MyAIStudio-v0.9.1-windows-x64.zip) — about 59 MB.
+[**MyAI Studio Ultimate 0.10.0 — Windows x64**](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.10.0/MyAIStudio-v0.10.0-windows-x64.zip) — about 59 MB.
 
 Extract the zip and run `MyAIStudio.exe`; keep the `_internal` folder beside it.
 Data lives in `%APPDATA%\MyAIStudio`; projects default to `Documents\MyAI Studio Projects`. The build is produced by
