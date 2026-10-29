@@ -285,8 +285,7 @@ class Composer(QWidget):
         # The dialog lists the same extensions the validator accepts, grouped by
         # family, so a file the dialog offers can never be rejected a second later.
         filters = ";;".join(
-            f"{tr('composer.filter_all') if index == 0 else name} ({patterns})"
-            for index, (name, patterns) in enumerate(dialog_filters())
+            f"{tr(key)} ({patterns})" for key, patterns in dialog_filters()
         )
         paths, _ = QFileDialog.getOpenFileNames(
             self.window(),

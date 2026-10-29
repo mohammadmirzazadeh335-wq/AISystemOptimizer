@@ -98,13 +98,15 @@ def dialog_filters() -> list[tuple[str, str]]:
     def joined(extensions: set[str]) -> str:
         return " ".join(f"*{extension}" for extension in sorted(extensions))
 
+    # The first element is an i18n key, not English text: the dialog is built by
+    # the UI layer, which translates it like every other string on screen.
     return [
-        ("All supported files", joined(SUPPORTED_EXTENSIONS)),
-        ("Documents", joined(TEXT_EXTENSIONS | OFFICE_EXTENSIONS | {".pdf"})),
-        ("Images", joined(IMAGE_EXTENSIONS)),
-        ("Audio", joined(AUDIO_EXTENSIONS)),
-        ("Video", joined(VIDEO_EXTENSIONS)),
-        ("Archives", joined(ARCHIVE_EXTENSIONS)),
+        ("composer.filter_all", joined(SUPPORTED_EXTENSIONS)),
+        ("attachments.family_documents", joined(TEXT_EXTENSIONS | OFFICE_EXTENSIONS | {".pdf"})),
+        ("attachments.family_images", joined(IMAGE_EXTENSIONS)),
+        ("attachments.family_audio", joined(AUDIO_EXTENSIONS)),
+        ("attachments.family_video", joined(VIDEO_EXTENSIONS)),
+        ("attachments.family_archives", joined(ARCHIVE_EXTENSIONS)),
     ]
 
 

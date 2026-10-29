@@ -502,11 +502,20 @@ class MainWindow(QMainWindow):
             return
         if self._current is None and str(self.context.settings.get("ai.default_model", "")) == model_id:
             return
+        self._apply_model_choice(model_id)
+
+    def _apply_model_choice(self, model_id: str, *, notify: bool = False) -> None:
+        """Persist a model choice and refresh every place that shows it.
+
+        The conversation is updated in place instead of being reopened: a full
+        ``open_conversation`` re-renders the transcript, so changing the model
+        scrolled the user back to the top of a long chat and flickered.
+        """
         try:
             self.context.settings.set("ai.default_model", model_id)
             if self._current is not None:
-                self.context.conversations.set_model(self._current.id, model_id)
-                self.open_conversation(self._current.id)
+                self._current = self.context.conversations.set_model(self._current.id, model_id)
+                self.header.set_conversation(self._current)
         except AppError as exc:
             self._show_toast(str(exc), "error")
             return
@@ -514,8 +523,12 @@ class MainWindow(QMainWindow):
         # set_value() does not emit, so this cannot bounce between the two chips.
         self.composer.set_models(items, model_id)
         self.header.set_models(items, model_id)
+        self.composer.set_model_ready(True)
+        self.composer.set_notice_visibility(False)
         self.api_page.set_default_model(model_id)
         self._refresh_context_usage()
+        if notify:
+            self._show_toast(tr("api.default_saved", model=model_id), "success")
 
     def _use_suggestion(self, prompt: str) -> None:
         self.composer.set_text(prompt)
@@ -1001,17 +1014,7 @@ class MainWindow(QMainWindow):
     def _on_api_model_selected(self, model_id: str) -> None:
         if not model_id:
             return
-        self.context.settings.set("ai.default_model", model_id)
-        self.api_page.set_default_model(model_id)
-        try:
-            if self._current is not None:
-                self.context.conversations.set_model(self._current.id, model_id)
-                self.open_conversation(self._current.id)
-        except AppError as exc:
-            self._show_toast(str(exc), "error")
-            return
-        self._apply_models_to_ui()
-        self._show_toast(tr("api.default_saved", model=model_id), "success")
+        self._apply_model_choice(model_id, notify=True)
 
     def _refresh_context_usage(self) -> None:
         if self._current is None or not self._current.model_id:

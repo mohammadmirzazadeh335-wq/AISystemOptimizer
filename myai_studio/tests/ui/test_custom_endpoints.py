@@ -116,9 +116,8 @@ def test_models_are_labelled_free_or_paid_only_when_known(ui) -> None:  # noqa: 
     unknown = ModelInfo(id="relay/model", name="Relay", price_known=False)
     page.set_models([free, paid, unknown])
     pump()
-    from myai.ui.views.api_page import ModelRow
-
     from myai.i18n import tr
+    from myai.ui.views.api_page import ModelRow
 
     assert ModelRow._price_text(free) == tr("api.free")
     assert "3" in ModelRow._price_text(paid) and "15" in ModelRow._price_text(paid)
@@ -164,3 +163,86 @@ def test_the_composer_chip_switches_the_model_for_the_next_message(ui) -> None: 
     window.composer.input.setPlainText("hello")
     window._handle_send("hello", [])
     assert captured["model"] == "beta/model"
+
+
+def test_a_custom_endpoint_survives_a_restart(home) -> None:  # noqa: ANN001
+    """Settings are the only store, so a fresh context must resolve it again."""
+    from myai.context import build_context
+    from myai.services.providers import save_custom_endpoint
+
+    first = build_context(home, log=False).boot()
+    saved = save_custom_endpoint(
+        first.settings, {"name": "My Hub", "base_url": "https://hub.example/v1"}
+    )
+    first.shutdown()
+
+    second = build_context(home, log=False).boot()
+    try:
+        assert saved.id in [provider.id for provider in all_providers()]
+        assert get_provider(saved.id).base_url == "https://hub.example/v1"
+        assert second.settings.get("ai.provider") == saved.id
+    finally:
+        second.shutdown()
+
+
+def test_usage_can_be_exported_as_csv(ui, tmp_path, monkeypatch) -> None:  # noqa: ANN001
+    """The export button must write the same numbers the page shows."""
+    import csv
+
+    from PySide6.QtWidgets import QFileDialog
+
+    window, context, _theme = ui
+    page = window.usage_page
+    target = tmp_path / "usage.csv"
+    monkeypatch.setattr(
+        QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: (str(target), ""))
+    )
+    page.export_csv()
+    pump()
+    assert target.is_file()
+    rows = list(csv.reader(target.read_text(encoding="utf-8").splitlines()))
+    header = rows[0]
+    assert header[:3] == ["model", "requests", "input_tokens"]
+    assert "cost_usd" in header
+
+
+def test_the_output_studio_writes_a_real_pdf(ui, tmp_path, monkeypatch) -> None:  # noqa: ANN001
+    from PySide6.QtWidgets import QFileDialog
+
+    window, context, _theme = ui
+    page = window.studio_page
+    created = context.outputs.create(
+        name="note.md", content="# Heading\n\nBody text.", language="markdown"
+    )
+    page.open_output(created.id)
+    pump()
+    target = tmp_path / "note.pdf"
+    monkeypatch.setattr(
+        QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: (str(target), ""))
+    )
+    page._export_pdf()
+    pump()
+    assert target.is_file()
+    assert target.read_bytes().startswith(b"%PDF-")
+
+
+def test_a_read_page_can_be_kept_as_a_real_note(ui) -> None:  # noqa: ANN001
+    """Reading a page used to end at a text view: no way to keep what was read."""
+    window, context, _theme = ui
+    page = window.web_page
+    window._navigate("web")
+    pump()
+    assert page.note_button.isEnabled() is False
+    page.url_edit.setText("https://example.com/guide")
+    page.title_label.setText("A Guide")
+    page.title_label.setVisible(True)
+    page.text_view.setPlainText("The real text of the page.")
+    page._last_text = "The real text of the page."
+    page.note_button.setEnabled(True)
+    page.save_as_note()
+    pump()
+    entries = [entry for entry in context.outputs.list() if entry.name.startswith("A Guide")]
+    assert entries, "the note was not written"
+    saved = context.outputs.get(entries[0].id)
+    assert "https://example.com/guide" in saved.content
+    assert "The real text of the page." in saved.content

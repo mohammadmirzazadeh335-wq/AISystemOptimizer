@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from myai.core.errors import ValidationError
 from myai.i18n import tr
 from myai.services import creative
 from myai.services.attachments import (
@@ -47,7 +48,7 @@ def test_every_extension_is_classified_once() -> None:
 
 
 def test_the_file_dialog_and_the_validator_cannot_disagree() -> None:
-    patterns = " ".join(pattern for _label, pattern in dialog_filters())
+    patterns = " ".join(pattern for _key, pattern in dialog_filters())
     for suffix in (".docx", ".mp4", ".zip", ".pdf"):
         assert f"*{suffix}" in patterns
 
@@ -140,8 +141,9 @@ def test_a_pie_chart_divides_a_full_circle(tmp_path: Path) -> None:
 
 
 def test_a_chart_without_numbers_is_refused(tmp_path: Path) -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError) as caught:
         creative.render_chart(kind="bar", series=[], path=tmp_path / "x.svg")
+    assert caught.value.message_key == "creative.no_data"
 
 
 # ------------------------------------------------------------------ archives
@@ -190,7 +192,9 @@ def test_create_chart_writes_into_the_outputs_folder(ctx) -> None:  # noqa: ANN0
 
 def test_a_tool_without_paths_says_so_instead_of_crashing() -> None:
     tools = registry()
-    with pytest.raises(Exception):
+    from myai.services.tools import ToolUnavailable
+
+    with pytest.raises(ToolUnavailable):
         tools.execute(
             "create_chart",
             {"kind": "bar", "values": [1]},

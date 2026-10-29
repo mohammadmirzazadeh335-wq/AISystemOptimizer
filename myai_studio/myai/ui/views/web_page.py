@@ -112,9 +112,17 @@ class WebPageView(PageShell):
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(self._save)
         actions.addWidget(self.save_button)
+        self.note_button = ghost_button(tr("web.save_note"), "library")
+        self.note_button.setEnabled(False)
+        self.note_button.setToolTip(tr("web.save_note_hint"))
+        self.note_button.clicked.connect(self.save_as_note)
+        actions.addWidget(self.note_button)
         read_layout.addLayout(actions)
 
     # ------------------------------------------------------------------- data
+    #: Readable text of the last fetch, so it can be kept as a real note.
+    _last_text = ""
+
     def refresh(self) -> None:
         available = self.service.search_available
         self.search_field.setEnabled(available)
@@ -122,6 +130,35 @@ class WebPageView(PageShell):
         self.search_reason.setText(
             tr("web.search_ready") if available else tr("web.search_unavailable")
         )
+        # Saving is only meaningful once a page has actually been read.
+        if hasattr(self, "note_button"):
+            self.note_button.setEnabled(bool(self._last_text.strip()))
+
+    def save_as_note(self) -> None:
+        """Keep the page that was just read as an Output Studio draft.
+
+        Reading a page and then having no way to keep it was a dead end: the app
+        already has a real notes/outputs service, so this writes a Markdown file
+        there (title, source URL, then the extracted text) instead of a new store.
+        """
+        text = self._last_text.strip()
+        if not text:
+            self.notify.emit(tr("web.nothing_to_save"), "warning")
+            return
+        title = self.title_label.text().strip() if self.title_label.isVisible() else ""
+        source = self.url_edit.text().strip()
+        name = f"{title or 'page'}.md"[:80]
+        body = f"# {title or source}\n\n> {source}\n\n{text}"
+        try:
+            entry = self.context.outputs.create(name=name, content=body, language="markdown")
+        except AppError as exc:
+            self.notify.emit(exc.message, "error")
+            return
+        except Exception as exc:  # noqa: BLE001 - a write failure must not crash the page
+            logger.exception("web_note_failed")
+            self.notify.emit(str(exc), "error")
+            return
+        self.notify.emit(tr("web.saved_note", name=entry.name), "success")
 
     # ---------------------------------------------------------------- actions
     def fetch_page(self) -> None:
@@ -165,6 +202,8 @@ class WebPageView(PageShell):
         self.title_label.setToolTip(page.final_url)  # type: ignore[attr-defined]
         self.title_label.setVisible(True)
         self.text_view.setPlainText(page.text)  # type: ignore[attr-defined]
+        self._last_text = str(page.text or "")  # type: ignore[attr-defined]
+        self.note_button.setEnabled(bool(self._last_text.strip()))
         self.copy_button.setEnabled(bool(page.text))  # type: ignore[attr-defined]
         self.save_button.setEnabled(bool(page.text))  # type: ignore[attr-defined]
 
@@ -216,4 +255,6 @@ class WebPageView(PageShell):
         self.text_view.setPlaceholderText(tr("web.no_result"))
         self.copy_button.setText(tr("web.copy"))
         self.save_button.setText(tr("web.save"))
+        self.note_button.setText(tr("web.save_note"))
+        self.note_button.setToolTip(tr("web.save_note_hint"))
         self.refresh()

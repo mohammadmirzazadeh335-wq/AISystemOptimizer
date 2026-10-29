@@ -29,7 +29,13 @@ from ...core.timeutil import format_bytes, format_datetime
 from ...i18n import current_language, tn, tr
 from ...services import creative
 from ...services.attachments import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
-from ...services.media import IMAGE_PROVIDER_NOTE, VIDEO_PROVIDER_NOTE, MediaItem
+from ...services.media import (
+    IMAGE_PROVIDER_KEY,
+    IMAGE_PROVIDER_NOTE,
+    VIDEO_PROVIDER_KEY,
+    VIDEO_PROVIDER_NOTE,
+    MediaItem,
+)
 from ..theme import runtime
 from ..widgets.dialogs import ConfirmDialog, PromptDialog
 from ..widgets.foundation import Badge, ElidedLabel
@@ -115,6 +121,7 @@ class MediaPage(PageShell):
     SECTION_KEY = "images.library_title"
     EMPTY_KEY = "images.empty"
     PROVIDER_NOTE = IMAGE_PROVIDER_NOTE
+    PROVIDER_KEY = IMAGE_PROVIDER_KEY
 
     def __init__(self, context) -> None:  # noqa: ANN001
         super().__init__(self.TITLE_KEY, self.SUBTITLE_KEY, icon_name=self.ICON)
@@ -136,10 +143,10 @@ class MediaPage(PageShell):
         status.addStretch(1)
         layout.addLayout(status)
 
-        note = QLabel(tr("images.reason", note=self.PROVIDER_NOTE))
-        note.setProperty("role", "muted")
-        note.setWordWrap(True)
-        layout.addWidget(note)
+        self.reason_label = QLabel(tr("images.reason", note=tr(self.PROVIDER_KEY)))
+        self.reason_label.setProperty("role", "muted")
+        self.reason_label.setWordWrap(True)
+        layout.addWidget(self.reason_label)
 
         # What *is* possible without any provider: real files, made here.
         _tools_card, tools_layout = self.card("images.tools_title", "wand")
@@ -326,6 +333,8 @@ class MediaPage(PageShell):
     # -------------------------------------------------------------- translate
     def retranslate(self) -> None:
         super().retranslate()
+        self.reason_label.setText(tr("images.reason", note=tr(self.PROVIDER_KEY)))
+        self.reason_label.setAccessibleName(tr(self.PROVIDER_KEY))
         self.status_badge.setText(tr("images.unavailable"))
         self.provider_badge.setText(tr("images.no_provider"))
         self.convert_button.setText(tr("images.tool_resize"))
@@ -356,3 +365,4 @@ class VideoPage(MediaPage):
     SECTION_KEY = "video.library_title"
     EMPTY_KEY = "video.empty"
     PROVIDER_NOTE = VIDEO_PROVIDER_NOTE
+    PROVIDER_KEY = VIDEO_PROVIDER_KEY

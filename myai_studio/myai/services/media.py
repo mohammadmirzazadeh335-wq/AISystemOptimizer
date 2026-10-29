@@ -30,6 +30,10 @@ VIDEO_PROVIDER_NOTE = (
     "No video provider is configured. This build has no video generation service and "
     "does not simulate one."
 )
+#: i18n keys for the same two reasons. The UI must translate them: a Persian page
+#: showing an English sentence was a real bug, not a label.
+IMAGE_PROVIDER_KEY = "images.reason_no_provider"
+VIDEO_PROVIDER_KEY = "video.reason_no_provider"
 
 
 @dataclass(frozen=True)
