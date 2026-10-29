@@ -218,3 +218,103 @@ def test_zip_and_describe_need_no_gui(tmp_path: Path) -> None:
 def test_the_reason_for_a_missing_generator_is_translatable() -> None:
     assert tr("agent.reason_no_pdf")
     assert tr("agent.reason_no_paths")
+
+
+# ---------------------------------------------------------------- image parts
+def _chat_with(ctx, handler, models):  # noqa: ANN001
+    import httpx
+
+    from myai.services.chat import ChatService
+    from myai.services.openrouter import OpenRouterClient
+
+    service = ChatService(
+        db=ctx.db,
+        bus=ctx.bus,
+        conversations=ctx.conversations,
+        settings=ctx.settings,
+        memory=ctx.memory,
+        persona=ctx.persona,
+        client_factory=lambda: OpenRouterClient(
+            lambda: "sk-or-v1-" + "a" * 64,
+            transport=httpx.MockTransport(handler),
+            timeout=5.0,
+        ),
+        attachments=ctx.attachments,
+    )
+    service.set_models(models)
+    return service
+
+
+def test_a_picture_reaches_a_vision_model_as_an_image_part(ctx, tmp_path: Path) -> None:  # noqa: ANN001
+    """Images used to be reduced to "attached: photo.png". A vision model can do better."""
+    import base64
+    import json
+
+    from myai.services.openrouter import ModelInfo
+
+    ctx.settings.update({"ai.provider": "openrouter", "ai.attach_images": True})
+    png = tmp_path / "pixel.png"
+    png.write_bytes(
+        base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+        )
+    )
+    captured: dict = {}
+
+    def handler(request) -> object:  # noqa: ANN001
+        import httpx
+
+        captured["body"] = json.loads(request.content)
+        body = (
+            'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\n'
+            'data: [DONE]\n\n'
+        )
+        return httpx.Response(200, content=body.encode(), headers={"content-type": "text/event-stream"})
+
+    service = _chat_with(
+        ctx,
+        handler,
+        [ModelInfo(id="vision/model", name="Vision", context_length=8000, supports_vision=True)],
+    )
+    conversation = ctx.conversations.create(title="pic", select=False)
+    ctx.conversations.set_model(conversation.id, "vision/model")
+    service.send(conversation.id, "what is this?", model_id="vision/model",
+                 attachments=[{"name": png.name, "path": str(png)}])
+    first_user = next(m for m in captured["body"]["messages"] if m["role"] == "user")
+    assert isinstance(first_user["content"], list)
+    assert any(part.get("type") == "image_url" for part in first_user["content"])
+
+
+def test_a_text_only_model_does_not_receive_base64(ctx, tmp_path: Path) -> None:  # noqa: ANN001
+    import base64
+    import json
+
+    from myai.services.openrouter import ModelInfo
+
+    ctx.settings.update({"ai.provider": "openrouter", "ai.attach_images": True})
+    png = tmp_path / "pixel.png"
+    png.write_bytes(
+        base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+        )
+    )
+    captured: dict = {}
+
+    def handler(request) -> object:  # noqa: ANN001
+        import httpx
+
+        captured["body"] = json.loads(request.content)
+        body = 'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n'
+        return httpx.Response(200, content=body.encode(), headers={"content-type": "text/event-stream"})
+
+    service = _chat_with(
+        ctx,
+        handler,
+        [ModelInfo(id="text/model", name="Text", context_length=8000, supports_vision=False)],
+    )
+    conversation = ctx.conversations.create(title="txt", select=False)
+    ctx.conversations.set_model(conversation.id, "text/model")
+    service.send(conversation.id, "look", model_id="text/model",
+                 attachments=[{"name": png.name, "path": str(png)}])
+    first_user = next(m for m in captured["body"]["messages"] if m["role"] == "user")
+    assert isinstance(first_user["content"], str)

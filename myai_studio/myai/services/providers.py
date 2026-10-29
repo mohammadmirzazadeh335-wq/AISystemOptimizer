@@ -488,6 +488,7 @@ def has_key(provider: Provider, secrets) -> bool:  # noqa: ANN001
     truthful answer. ``has_stored_key`` is what the UI uses to avoid claiming a
     key is configured when none is.
     """
+    # Local servers and "no key" endpoints need no vault entry to be usable.
     if not provider.key_required:
         return True
     try:

@@ -142,6 +142,7 @@ class ChatService:
         self._memory = memory
         self._persona = persona
         self._attachments = attachments
+        self._current_send_model = ""
         self._client_factory = client_factory or (lambda: OpenRouterClient(self._api_key))
         self._cancel = threading.Event()
         self._lock = threading.Lock()
@@ -286,6 +287,17 @@ class ChatService:
 
             provider = current_provider(self._settings)
             if provider.protocol != PROTOCOL_OPENAI:
+                return
+            # A text-only model rejects an image part with a 400 that reads like a
+            # broken request. Sending base64 to it is also pure waste, so the
+            # catalogue has to say the model sees images before one is attached.
+            model_id = str(
+                getattr(self, "_current_send_model", "")
+                or self._settings.get("ai.default_model", "")
+            )
+            info = self.model_info(model_id) if model_id else None
+            if info is not None and not info.supports_vision:
+                logger.info("attach_images_skipped reason=no_vision model=%s", model_id)
                 return
             if not bool(self._settings.get("ai.attach_images", True)):
                 return
@@ -478,6 +490,7 @@ class ChatService:
                     self._attachments.remember(user_message.id, prepared)
                 except Exception:  # noqa: BLE001 - a chip must not break a reply
                     logger.exception("attachment_rows_failed")
+            self._current_send_model = chosen_model
             messages, diagnostics = self.build_messages(conversation, attachments=prepared)
             outcome.diagnostics = diagnostics
             self._bus.emit(Events.STREAM_STARTED, conversation_id=conversation_id, diagnostics=diagnostics.to_dict())
