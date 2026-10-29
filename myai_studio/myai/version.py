@@ -9,9 +9,9 @@ APP_ID = "com.myaistudio.ultimate"
 
 # Phase-by-phase release train.  Bumped at the end of every completed phase,
 # and again for the capability round that followed Phase 5.
-VERSION = "0.9.1"
+VERSION = "0.10.0"
 PHASE = 6
-BUILD_CHANNEL = "Round 5.1 - Tooken Club provider, hand-typed model ids, honest key state"
+BUILD_CHANNEL = "Round 6 - Custom endpoints, free/paid badges, 197 formats, creative tools"
 
 __all__ = [
     "APP_NAME",
