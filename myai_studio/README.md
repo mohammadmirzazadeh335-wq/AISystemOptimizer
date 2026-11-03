@@ -4,8 +4,8 @@ A premium, local-first AI desktop workspace for Windows 11: multi-model chat, me
 a real code studio, supervised agents, media and research — delivered in five verified
 phases.
 
-> **Current build: `0.10.0` — Phase 5 + LAB + Rounds 3–6, with a Windows x64 release**
-> (`v0.10.0`; the phase notes below describe the shipped feature set)
+> **Current build: `0.11.0` — Phase 5 + LAB + Rounds 3–7, with a Windows x64 release**
+> (`v0.11.0`; the phase notes below describe the shipped feature set)
 > Chat streams from OpenRouter, memory and personality are real and editable, the Output
 > Studio keeps every revision, Code Studio opens real folders and runs real files, and the
 > agent acts **only** through twenty-two registered tools behind an approval gate. Phase 5
@@ -35,6 +35,19 @@ phases.
 > failed (proxy → DNS → TCP → TLS → HTTP) and retries once. See
 > [`docs/NETWORK_TROUBLESHOOTING.md`](docs/NETWORK_TROUBLESHOOTING.md) or its
 > [Persian version](docs/NETWORK_TROUBLESHOOTING_FA.md).
+
+> **`0.11.0` — it opens in a quarter of the time, and the interface stopped being a list.**
+> The window used to build all nineteen pages before the first paint; now a page is
+> built the moment it is opened, and the five toolchain probes that blocked the
+> first frame run on a worker. Measured cold start on this machine: **2.12 s → 0.56 s**.
+> The left column is no longer nineteen flat rows: destinations are **two-column
+> tiles grouped into foldable sections**, there is a **tool filter** (English or
+> Persian), and opening a page from a folded group unfolds it. The Chat/Agent pill
+> that duplicated the navigation is gone from the top bar. **Arena.ai** ships as a
+> provider (`https://api.arena.ai/v1`), and the new **Endpoints** page adds *any*
+> API — URL, protocol, key and an optional model list — with a real
+> "test before you save" and per-row use/test/delete.
+> See [`docs/PROVIDERS.md`](docs/PROVIDERS.md).
 
 > **`0.10.0` — any endpoint, labels that do not lie, and files the app really makes.**
 > Providers are no longer a fixed list: **Custom endpoints** adds a relay by name
@@ -82,7 +95,7 @@ phases.
 
 ## Download (Windows x64)
 
-[**MyAI Studio Ultimate 0.10.0 — Windows x64**](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.10.0/MyAIStudio-v0.10.0-windows-x64.zip) — about 59 MB.
+[**MyAI Studio Ultimate 0.11.0 — Windows x64**](https://github.com/mohammadmirzazadeh335-wq/AISystemOptimizer/releases/download/v0.11.0/MyAIStudio-v0.11.0-windows-x64.zip) — about 59 MB.
 
 Extract the zip and run `MyAIStudio.exe`; keep the `_internal` folder beside it.
 Data lives in `%APPDATA%\MyAIStudio`; projects default to `Documents\MyAI Studio Projects`. The build is produced by

@@ -134,7 +134,9 @@ def test_language_switch_updates_direction_and_text(ui, language: str) -> None:
     expected = Qt.LayoutDirection.RightToLeft if language == "fa" else Qt.LayoutDirection.LeftToRight
     assert QApplication.layoutDirection() == expected
     assert window.sidebar.new_chat_button.text() == tr("nav.new_chat")
-    assert window.header.mode._items[0][1] == tr("header.chat")
+    # The top bar carries no Chat/Agent pill any more: navigation is the only
+    # place a mode is chosen, so what has to translate is the model chip.
+    assert window.header.model_chip._placeholder == tr("header.no_model")
 
 
 def test_navigation_to_code_studio_and_back(ui) -> None:

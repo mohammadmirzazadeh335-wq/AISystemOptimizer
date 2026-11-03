@@ -425,6 +425,8 @@ class ApiPage(PageShell):
         self._render_custom_endpoints()
 
     def _render_custom_endpoints(self) -> None:
+        if not hasattr(self, "custom_list"):
+            return
         while self.custom_list.count():
             item = self.custom_list.takeAt(0)
             widget = item.widget()
@@ -1360,6 +1362,7 @@ class ApiPage(PageShell):
         self.sampling_status.hide()
 
     def refresh(self) -> None:
+        self._render_custom_endpoints()
         self._sync_provider_fields()
         self._refresh_key_state()
         self._load_proxy_fields()

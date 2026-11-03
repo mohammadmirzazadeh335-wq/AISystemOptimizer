@@ -899,9 +899,7 @@ def test_pill_toggle_label_never_underlaps_its_icon(ui) -> None:
 
 
 def test_chrome_sizes_follow_the_font_scale(ui) -> None:
-    """Chat/Agent and the model chip overlapped at 1.5x in the DPI capture."""
-    from PySide6.QtGui import QFontMetrics
-
+    """Chrome overlaps at 1.5x unless every fixed size follows the scale."""
     from myai.ui.theme import runtime
 
     window, ctx, theme = ui
@@ -911,12 +909,6 @@ def test_chrome_sizes_follow_the_font_scale(ui) -> None:
             pump()
             window.resize(int(1440 / scale), int(900 / scale))
             pump()
-            metrics = QFontMetrics(runtime.ui_font(12, 500))
-            needed = sum(
-                metrics.horizontalAdvance(label) + runtime.px(24)
-                for _, label in window.header.mode._items
-            ) + runtime.px(8)
-            assert window.header.mode.width() >= needed, (scale, window.header.mode.width(), needed)
             chip = window.header.model_chip
             assert chip.width() >= runtime.px(92), (scale, chip.width())
             assert chip.height() == runtime.px(30), (scale, chip.height())

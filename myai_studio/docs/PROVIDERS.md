@@ -1,10 +1,14 @@
 # Any endpoint, any model, and the tools that make real files
 
 Version 0.9.0 made the provider a choice; **0.9.1** added a relay entry and a
-hand-typed model id; **0.10.0** finishes the idea:
+hand-typed model id; **0.10.0** finished the idea; **0.11.0** adds Arena.ai and
+a page of its own for anything that is not in the list:
 
 * **any endpoint** can be added by address — name, base URL, protocol and
   whether it wants a key — and then behaves exactly like a built-in service;
+* **Arena.ai** is a first-class entry (`https://api.arena.ai/v1`, OpenAI-compatible);
+* **Endpoints** is a dedicated page where *any* API can be added — base URL,
+  protocol, key and an optional model list — and managed row by row;
 * **GapGPT** is a first-class entry (`https://api.gapgpt.app/v1`);
 * every model row says **free**, **paid**, or *nothing* when the catalogue
   published no price;
@@ -25,14 +29,25 @@ hand-typed model id; **0.10.0** finishes the idea:
 | Anthropic | Messages API | `sk-ant-…` | System prompt is hoisted to its own field; temperature 0–1. |
 | Google Gemini | generateContent / stream | `AIza…` | Embedding models are filtered out of the picker. |
 | Groq, DeepSeek, Mistral | OpenAI-compatible | vendor key | Same code path as OpenAI. |
+| Arena.ai | OpenAI-compatible | your Arena key | Arena's own gateway; the address is editable, so a preview or self-hosted endpoint also works. |
 | Tooken Club | OpenAI-compatible | `tc_live_…` | A reseller gateway: one key for GPT, Claude, DeepSeek, Gemini, Kimi, GLM and Grok. Its catalogue needs a key, so an id can also be typed by hand. |
 | Ollama, LM Studio | OpenAI-compatible | none | Local, so the system proxy is bypassed on purpose. |
 | Custom | OpenAI-compatible | optional | Any base URL; `http` is allowed only on the loopback interface. |
 
 ### Adding your own endpoint
 
-`API page → Custom endpoints`. Fill in a name, the base URL and the protocol,
-then press **Save endpoint**. The endpoint is stored in `ai.custom_endpoints`,
+Two ways, same registry:
+
+1. **Endpoints page** (left navigation) — the full form: name, base URL,
+   protocol, key, and the model ids the endpoint should offer. **Test what I
+   typed** asks the address for its catalogue *before* saving, so a wrong URL
+   is caught in the form instead of in a chat. Each saved row has **Use**,
+   **Test** and **Delete**.
+2. **API page → Custom endpoints** — the same operation as a compact row, kept
+   for when you are already on the provider screen.
+
+In both cases you fill in a name, the base URL and the protocol, then press
+**Save endpoint**. The endpoint is stored in `ai.custom_endpoints`,
 registered at boot before any page asks which providers exist, and appears in
 the provider list under its own name. It keeps its own vault key
 (`ai.key.<slug>`), its own catalogue cache and its own models.
@@ -45,6 +60,9 @@ the provider list under its own name. It keeps its own vault key
   selection back to OpenRouter if it was active. Conversations are untouched.
 - Three protocols are offered: OpenAI-compatible (chat, tool calling),
   Anthropic Messages and Google Gemini. Anything else is not guessed.
+- **Model ids** are optional but useful: many gateways have no `/models`
+  endpoint, and then the typed list is the catalogue. They carry no price and no
+  capability claims — exactly like every other row whose catalogue is silent.
 
 ### Free or paid — said only when known
 

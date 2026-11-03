@@ -178,6 +178,15 @@ PROVIDERS: tuple[Provider, ...] = (
         note_key="provider.note_gapgpt",
     ),
     Provider(
+        id="arena",
+        name="Arena.ai",
+        protocol=PROTOCOL_OPENAI,
+        base_url="https://api.arena.ai/v1",
+        key_hint="…",
+        docs_url="https://platform.arena.ai",
+        note_key="provider.note_arena",
+    ),
+    Provider(
         id="tooken",
         name="Tooken Club",
         protocol=PROTOCOL_OPENAI,
@@ -254,8 +263,14 @@ def custom_provider(
     protocol: str = PROTOCOL_OPENAI,
     key_required: bool = True,
     endpoint_id: str = "",
+    models: tuple[str, ...] = (),
 ) -> Provider:
-    """Build the :class:`Provider` described by one saved custom endpoint."""
+    """Build the :class:`Provider` described by one saved custom endpoint.
+
+    ``models`` is the optional list the user typed on the Endpoints page. Many
+    gateways answer ``/chat/completions`` but have no ``/models`` endpoint, and
+    without this the chat would sit on an empty catalogue with no way forward.
+    """
     clean_name = (name or "").strip() or "Custom endpoint"
     identifier = (endpoint_id or "").strip().lower() or slugify_endpoint_id(clean_name)
     return Provider(
@@ -268,6 +283,7 @@ def custom_provider(
         note_key="",
         custom=True,
         publishes_prices=False,
+        fallback_models=tuple(models),
     )
 
 
@@ -283,6 +299,7 @@ def register_custom_endpoints(rows: list[dict] | None) -> tuple[Provider, ...]:
             protocol=str(row.get("protocol", PROTOCOL_OPENAI)),
             key_required=bool(row.get("key_required", True)),
             endpoint_id=str(row.get("id", "")),
+            models=tuple(str(item) for item in row.get("models") or ()),
         )
         if provider.base_url:
             _CUSTOM[provider.id] = provider
@@ -306,6 +323,7 @@ def save_custom_endpoint(settings, row: dict) -> Provider:  # noqa: ANN001
         protocol=str(row.get("protocol", PROTOCOL_OPENAI)),
         key_required=bool(row.get("key_required", True)),
         endpoint_id=str(row.get("id", "")),
+        models=tuple(str(item) for item in row.get("models") or ()),
     )
     if not provider.base_url:
         raise ValidationError(
@@ -323,6 +341,7 @@ def save_custom_endpoint(settings, row: dict) -> Provider:  # noqa: ANN001
             "base_url": provider.base_url,
             "protocol": provider.protocol,
             "key_required": provider.key_required,
+            "models": list(provider.fallback_models),
         }
     )
     # Register before saving: the settings layer validates ``ai.provider``
@@ -580,8 +599,15 @@ class ProviderClient(OpenRouterClient):
         timeout: float = 60.0,
         transport: httpx.BaseTransport | None = None,
         network: NetworkOptions | None = None,
+        spec: Provider | None = None,
     ) -> None:
-        self.spec = get_provider(provider)
+        # ``spec`` lets the Endpoints page test exactly what is typed before the
+        # endpoint is registered; without it an unsaved address could not be
+        # probed at all.
+        chosen = spec or get_provider(provider)
+        if chosen is None:
+            raise ConfigurationError("Unknown provider", message_key="api.provider_unknown")
+        self.spec = chosen
         self.supports_tools = self.spec.protocol == PROTOCOL_OPENAI
         super().__init__(
             api_key_provider,

@@ -6,6 +6,7 @@ State shared by the views lives here; every mutation goes through services.
 
 from __future__ import annotations
 
+import importlib
 import logging
 import threading
 import time
@@ -36,30 +37,12 @@ from .brand import app_icon
 from .bridge import QtBridge
 from .theme import runtime
 from .theme.manager import ThemeManager
-from .views.agent_page import AgentPage
-from .views.api_page import ApiPage
-from .views.appearance_page import AppearancePage
-from .views.atlas_page import AtlasPage
 from .views.chat_view import ChatView
-from .views.code_page import CodePage
 from .views.composer import Composer, human_size
-from .views.context_page import ContextPage
-from .views.doctor_page import DoctorPage
 from .views.header import Header
 from .views.inspector import Inspector
-from .views.media_page import ImagesPage, VideoPage
-from .views.memory_page import MemoryPage
-from .views.output_page import OutputPage
-from .views.performance_page import PerformancePage
-from .views.persona_page import PersonaPage
-from .views.plugins_page import PluginsPage
-from .views.prompts_page import PromptsPage
-from .views.review_page import ReviewPage
 from .views.settings_dialog import SettingsDialog
 from .views.sidebar import Sidebar
-from .views.tasks_page import TasksPage
-from .views.usage_page import UsagePage
-from .views.web_page import WebPageView
 from .widgets.dialogs import ConfirmDialog, PreviewDialog, PromptDialog
 from .widgets.feedback import ToastManager
 from .widgets.global_search import GlobalSearchDialog
@@ -69,13 +52,41 @@ from .widgets.palette import CommandPalette, PaletteAction
 logger = logging.getLogger(__name__)
 
 AI_ROUTES = {
-    "api", "memory", "persona", "studio", "code", "agent",
+    "api", "endpoints", "memory", "persona", "studio", "code", "agent",
     "prompts", "tasks", "performance", "images", "video", "web", "plugins",
     "review", "atlas", "context", "appearance", "doctor", "usage",
 }
+#: Every page, declared here and built the first time it is opened. Importing the
+#: nineteen view modules and constructing all their widgets cost ~0.9 s of the
+#: cold start (more on a Windows disk), and a user who never opens Review should
+#: not pay for it. ``module:Class`` is imported lazily by :meth:`MainWindow._page`.
+PAGE_FACTORIES: dict[str, str] = {
+    "api": "myai.ui.views.api_page:ApiPage",
+    "endpoints": "myai.ui.views.endpoints_page:EndpointsPage",
+    "memory": "myai.ui.views.memory_page:MemoryPage",
+    "persona": "myai.ui.views.persona_page:PersonaPage",
+    "studio": "myai.ui.views.output_page:OutputPage",
+    "code": "myai.ui.views.code_page:CodePage",
+    "agent": "myai.ui.views.agent_page:AgentPage",
+    "prompts": "myai.ui.views.prompts_page:PromptsPage",
+    "tasks": "myai.ui.views.tasks_page:TasksPage",
+    "performance": "myai.ui.views.performance_page:PerformancePage",
+    "images": "myai.ui.views.media_page:ImagesPage",
+    "video": "myai.ui.views.media_page:VideoPage",
+    "web": "myai.ui.views.web_page:WebPageView",
+    "plugins": "myai.ui.views.plugins_page:PluginsPage",
+    "review": "myai.ui.views.review_page:ReviewPage",
+    "atlas": "myai.ui.views.atlas_page:AtlasPage",
+    "context": "myai.ui.views.context_page:ContextPage",
+    "appearance": "myai.ui.views.appearance_page:AppearancePage",
+    "doctor": "myai.ui.views.doctor_page:DoctorPage",
+    "usage": "myai.ui.views.usage_page:UsagePage",
+}
+
 #: One source of truth for a page's header/window title (route -> title, subtitle).
 PAGE_TITLES = {
     "api": ("api.title", "api.subtitle"),
+    "endpoints": ("endpoints.title", "endpoints.subtitle"),
     "memory": ("memory.title", "memory.subtitle"),
     "persona": ("persona.title", "persona.subtitle"),
     "studio": ("studio.title", "studio.subtitle"),
@@ -179,74 +190,92 @@ class MainWindow(QMainWindow):
         self._shortcuts()
 
     def _build_pages(self) -> None:
-        self.api_page = ApiPage(self.context)
-        self.memory_page = MemoryPage(self.context)
-        self.persona_page = PersonaPage(self.context)
-        self.studio_page = OutputPage(self.context)
-        self.code_page = CodePage(self.context)
-        self.agent_page = AgentPage(self.context)
-        self.prompts_page = PromptsPage(self.context)
-        self.tasks_page = TasksPage(self.context)
-        self.performance_page = PerformancePage(self.context)
-        self.images_page = ImagesPage(self.context)
-        self.video_page = VideoPage(self.context)
-        self.web_page = WebPageView(self.context)
-        self.plugins_page = PluginsPage(self.context)
-        self.review_page = ReviewPage(self.context)
-        self.atlas_page = AtlasPage(self.context)
-        self.context_page = ContextPage(self.context)
-        self.appearance_page = AppearancePage(self.context)
-        self.doctor_page = DoctorPage(self.context)
-        self.usage_page = UsagePage(self.context)
-        self._pages = {
-            "api": self.api_page,
-            "memory": self.memory_page,
-            "persona": self.persona_page,
-            "studio": self.studio_page,
-            "code": self.code_page,
-            "agent": self.agent_page,
-            "prompts": self.prompts_page,
-            "tasks": self.tasks_page,
-            "performance": self.performance_page,
-            "images": self.images_page,
-            "video": self.video_page,
-            "web": self.web_page,
-            "plugins": self.plugins_page,
-            "review": self.review_page,
-            "atlas": self.atlas_page,
-            "context": self.context_page,
-            "appearance": self.appearance_page,
-            "doctor": self.doctor_page,
-            "usage": self.usage_page,
-        }
-        for page in self._pages.values():
-            self.stack.addWidget(page)
-        self.api_page.notify.connect(self._show_toast)
-        self.api_page.model_selected.connect(self._on_api_model_selected)
-        self.api_page.models_updated.connect(self._on_models_loaded)
-        self.api_page.provider_changed.connect(self._on_provider_changed)
-        self.memory_page.notify.connect(self._show_toast)
-        self.persona_page.notify.connect(self._show_toast)
-        self.studio_page.notify.connect(self._show_toast)
-        self.code_page.notify.connect(self._show_toast)
-        self.agent_page.notify.connect(self._show_toast)
-        self.agent_page.open_api_page.connect(lambda: self._navigate("api"))
-        for page in (
-            self.prompts_page, self.tasks_page, self.performance_page,
-            self.images_page, self.video_page, self.web_page, self.plugins_page,
-            self.review_page, self.atlas_page, self.context_page,
-            self.appearance_page, self.doctor_page, self.usage_page,
-        ):
-            page.notify.connect(self._show_toast)
-        self.review_page.open_code.connect(lambda: self._navigate("code"))
-        self.atlas_page.open_code.connect(lambda: self._navigate("code"))
-        self.atlas_page.open_file.connect(self._open_in_code)
-        self.context_page.open_chat.connect(lambda: self._navigate("chat"))
-        self.context_page.open_settings.connect(self.open_settings)
-        self.doctor_page.open_settings.connect(self.open_settings)
-        self.usage_page.open_chat.connect(lambda: self._navigate("chat"))
-        self.usage_page.open_catalogue.connect(lambda: self._navigate("api"))
-        self.prompts_page.use_prompt.connect(self._use_prompt)
+        """Create nothing yet; the stack fills as pages are opened.
+
+        The page objects are cached in ``self._pages`` and reached through the
+        ``*_page`` properties below, so every existing caller keeps working while
+        the cost is paid only for what the user actually looks at.
+        """
+        self._pages = {}
+
+    def _page(self, name: str) -> QWidget:
+        page = self._pages.get(name)
+        if page is not None:
+            return page
+        target = PAGE_FACTORIES[name]
+        module_name, class_name = target.split(":")
+        module = importlib.import_module(module_name)
+        page = getattr(module, class_name)(self.context)
+        # A few pages fill their pickers and labels in ``retranslate``; because
+        # this page may be built long after the last language switch, it has to
+        # be localised now instead of inheriting the build-time strings.
+        retranslate = getattr(page, "retranslate", None)
+        if callable(retranslate):
+            retranslate()
+        self._pages[name] = page
+        self.stack.addWidget(page)
+        # Pages appear in the stack and are wired at the same moment they are
+        # built, which keeps the signal list next to the page it belongs to.
+        notify = getattr(page, "notify", None)
+        if notify is not None:
+            notify.connect(self._show_toast)
+        if name == "api":
+            page.model_selected.connect(self._on_api_model_selected)
+            page.models_updated.connect(self._on_models_loaded)
+            page.provider_changed.connect(self._on_provider_changed)
+            page.set_models(self._ai_models)
+        elif name == "endpoints":
+            page.endpoints_changed.connect(self._on_endpoints_changed)
+        elif name == "agent":
+            page.open_api_page.connect(lambda: self._navigate("api"))
+        elif name in {"review", "atlas"}:
+            page.open_code.connect(lambda: self._navigate("code"))
+            if name == "atlas":
+                page.open_file.connect(self._open_in_code)
+        elif name == "context":
+            page.open_chat.connect(lambda: self._navigate("chat"))
+            page.open_settings.connect(self.open_settings)
+        elif name == "doctor":
+            page.open_settings.connect(self.open_settings)
+        elif name == "usage":
+            page.open_chat.connect(lambda: self._navigate("chat"))
+            page.open_catalogue.connect(lambda: self._navigate("api"))
+        elif name == "prompts":
+            page.use_prompt.connect(self._use_prompt)
+        return page
+
+    def _built_pages(self) -> list[QWidget]:
+        return list(self._pages.values())
+
+    # One property per page name: ``window.api_page`` builds it on first touch
+    # and every later access is a dict lookup.
+    def _page_property(name: str):  # noqa: ANN202 - descriptor factory
+        def getter(self):  # noqa: ANN001, ANN202
+            return self._page(name)
+
+        getter.__name__ = f"{name}_page"
+        return property(getter)
+
+    api_page = _page_property("api")
+    endpoints_page = _page_property("endpoints")
+    memory_page = _page_property("memory")
+    persona_page = _page_property("persona")
+    studio_page = _page_property("studio")
+    code_page = _page_property("code")
+    agent_page = _page_property("agent")
+    prompts_page = _page_property("prompts")
+    tasks_page = _page_property("tasks")
+    performance_page = _page_property("performance")
+    images_page = _page_property("images")
+    video_page = _page_property("video")
+    web_page = _page_property("web")
+    plugins_page = _page_property("plugins")
+    review_page = _page_property("review")
+    atlas_page = _page_property("atlas")
+    context_page = _page_property("context")
+    appearance_page = _page_property("appearance")
+    doctor_page = _page_property("doctor")
+    usage_page = _page_property("usage")
 
     def _shortcuts(self) -> None:
         self.shortcut_new = QShortcut(QKeySequence("Ctrl+N"), self)
@@ -276,7 +305,6 @@ class MainWindow(QMainWindow):
 
         self.header.settings_requested.connect(self.open_settings)
         self.header.stop_requested.connect(self._stop_generation)
-        self.header.mode_changed.connect(self._on_mode_changed)
         self.header.model_changed.connect(self._on_model_changed)
         # Before 0.10 the composer chip was decorative: choosing a model there
         # changed the label and nothing else, and the next message went to the
@@ -350,7 +378,6 @@ class MainWindow(QMainWindow):
             self.sidebar.sync_selection(None)
             self.stack.setCurrentWidget(self.chat_view)
             self.composer.show()
-            self.header.set_mode("chat")
         self.chat_view.show_welcome(None)
         self.header.set_conversation(None)
         self.composer.set_notice_visibility(False)
@@ -371,7 +398,6 @@ class MainWindow(QMainWindow):
         self.composer.set_notice_visibility(False)
         self.chat_view.show_welcome(None)
         self.header.set_conversation(None)
-        self.header.set_mode("chat")
         self.inspector.set_conversation(None, [])
         self._update_window_title()
         self.composer.focus_input()
@@ -389,7 +415,6 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(self.chat_view)
         self.composer.show()
         self.header.set_conversation(conversation)
-        self.header.set_mode(conversation.mode if conversation.mode in {"chat", "agent"} else "chat")
         self.header.set_inspector_open(self.inspector.isVisible())
         self.chat_view.show_conversation(conversation, messages)
         self._apply_models_to_ui()
@@ -412,7 +437,7 @@ class MainWindow(QMainWindow):
         logger.debug("unknown_route route=%s", route)
 
     def _show_ai_page(self, route: str) -> None:
-        page = self._pages.get(route)
+        page = self._page(route)
         if page is None:
             return
         self._current_route = route
@@ -424,9 +449,6 @@ class MainWindow(QMainWindow):
         # carries only the title (a second copy read as a rendering bug).
         title_key, _subtitle_key = PAGE_TITLES[route]
         self.header.set_section(tr(title_key))
-        # The pill has to match the page: it said "Chat" on every agent shot in
-        # Phase 4, which was wrong. Library pages keep Chat as their return path.
-        self.header.set_mode("agent" if route == "agent" else "chat")
         self.header.set_inspector_open(self.inspector.isVisible())
         self.inspector.set_conversation(None, [])
         self._update_window_title()
@@ -485,11 +507,12 @@ class MainWindow(QMainWindow):
             self._show_welcome()
         self._update_window_title()
 
-    def _on_mode_changed(self, mode: str) -> None:
-        if mode == "agent":
-            self._navigate("agent")
-        else:
-            self._go_chat()
+    def _on_endpoints_changed(self) -> None:
+        """A custom endpoint was added, used or removed on the Endpoints page."""
+        if "api" in self._pages:
+            self.api_page.refresh()
+        if "endpoints" in self._pages:
+            self.endpoints_page.refresh()
 
     def _on_model_changed(self, model_id: str) -> None:
         """The single place a model change lands, whichever chip sent it.
@@ -525,7 +548,8 @@ class MainWindow(QMainWindow):
         self.header.set_models(items, model_id)
         self.composer.set_model_ready(True)
         self.composer.set_notice_visibility(False)
-        self.api_page.set_default_model(model_id)
+        if "api" in self._pages:
+            self.api_page.set_default_model(model_id)
         self._refresh_context_usage()
         if notify:
             self._show_toast(tr("api.default_saved", model=model_id), "success")
@@ -890,7 +914,8 @@ class MainWindow(QMainWindow):
                 models.append(model)
         self._ai_models = models
         self.context.chat.set_models(models)
-        self.api_page.set_models(models)
+        if "api" in self._pages:
+            self.api_page.set_models(models)
         self._apply_models_to_ui()
         if has_key(provider, self.context.secrets):
             QTimer.singleShot(350, self._fetch_models_async)
@@ -962,7 +987,8 @@ class MainWindow(QMainWindow):
             return
         self._ai_models = list(models)
         self.context.chat.set_models(self._ai_models)
-        self.api_page.set_models(self._ai_models)
+        if "api" in self._pages:
+            self.api_page.set_models(self._ai_models)
         self._store_model_cache()
 
     def _store_model_cache(self) -> None:
@@ -1179,7 +1205,7 @@ class MainWindow(QMainWindow):
         self.composer.retranslate()
         self.chat_view.retranslate()
         self.inspector.retranslate()
-        for page in self._pages.values():
+        for page in self._built_pages():
             if hasattr(page, "rebuild"):
                 page.rebuild()
             elif hasattr(page, "retranslate"):
@@ -1296,8 +1322,8 @@ class MainWindow(QMainWindow):
                     )
                 except Exception:
                     logger.exception("window_state_save_failed")
-            for page in (self.code_page, self.agent_page, self.studio_page):
-                shutdown = getattr(page, "shutdown", None)
+            for page in (self._pages.get("code"), self._pages.get("agent"), self._pages.get("studio")):
+                shutdown = getattr(page, "shutdown", None) if page is not None else None
                 if callable(shutdown):
                     try:
                         shutdown()

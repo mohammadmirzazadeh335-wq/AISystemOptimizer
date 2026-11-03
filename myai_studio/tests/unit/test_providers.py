@@ -696,3 +696,72 @@ def test_tooken_catalogue_rows_are_read_like_any_openai_list() -> None:
     models = _client("tooken", key="tc_live_" + "e" * 48, handler=handler).list_models(refresh=True)
     assert [model.id for model in models] == ["claude-sonnet-4", "gpt-4o-mini"]
     assert all(model.price_known is False for model in models)
+
+
+# ---------------------------------------------------- endpoints page, any API
+def test_arena_ships_as_an_openai_compatible_provider() -> None:
+    from myai.services.providers import get_provider
+
+    arena = get_provider("arena")
+    assert arena is not None
+    assert arena.base_url == "https://api.arena.ai/v1"
+    assert arena.protocol == PROTOCOL_OPENAI
+    assert arena.key_required is True
+
+
+def test_typed_model_ids_are_the_fallback_when_the_endpoint_lists_none() -> None:
+    """A gateway without /models still has to offer something honest to pick."""
+    from myai.services.providers import register_custom_endpoints
+
+    register_custom_endpoints(
+        [
+            {
+                "id": "cx-typed-list",
+                "name": "Typed List",
+                "base_url": "http://127.0.0.1:9999/v1",
+                "protocol": PROTOCOL_OPENAI,
+                "key_required": False,
+                "models": ["model-a", "model-b"],
+            }
+        ]
+    )
+    provider = get_provider("cx-typed-list")
+    assert provider is not None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"error": {"message": "not found"}})
+
+    client = ProviderClient(
+        lambda: "",
+        provider=provider.id,
+        base_url=provider.base_url,
+        transport=httpx.MockTransport(handler),
+        network=NetworkOptions(mode="off"),
+    )
+    models = client.list_models(refresh=True)
+    assert [model.id for model in models] == ["model-a", "model-b"]
+    # Typed by hand, so nothing is claimed about price or capabilities.
+    assert all(model.price_known is False for model in models)
+
+
+def test_an_unsaved_endpoint_can_be_probed_before_it_is_registered() -> None:
+    """The Endpoints page must be able to test a URL that is not saved yet."""
+    from myai.services.providers import custom_provider
+
+    probe = custom_provider(name="Typed", base_url="https://typed.example/v1", models=("m-1",))
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "typed.example"
+        return httpx.Response(404, json={"error": {"message": "not found"}})
+
+    client = ProviderClient(
+        lambda: "typed-key",
+        provider=probe.id,
+        base_url=probe.base_url,
+        transport=httpx.MockTransport(handler),
+        network=NetworkOptions(mode="off"),
+        spec=probe,
+    )
+    models = client.list_models(refresh=True)
+    assert [model.id for model in models] == ["m-1"]
+    assert client._headers()["Authorization"] == "Bearer typed-key"

@@ -9,9 +9,9 @@ APP_ID = "com.myaistudio.ultimate"
 
 # Phase-by-phase release train.  Bumped at the end of every completed phase,
 # and again for the capability round that followed Phase 5.
-VERSION = "0.10.0"
-PHASE = 6
-BUILD_CHANNEL = "Round 6 - Custom endpoints, free/paid badges, 197 formats, creative tools"
+VERSION = "0.11.0"
+PHASE = 7
+BUILD_CHANNEL = "Round 7 - A faster start, foldable navigation, any API, Arena.ai"
 
 __all__ = [
     "APP_NAME",

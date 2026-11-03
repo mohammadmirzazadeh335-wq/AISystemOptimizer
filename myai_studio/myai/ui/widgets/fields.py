@@ -94,6 +94,10 @@ class SearchField(QFrame):
     def set_kbd_hint(self, text: str) -> None:
         self._kbd.setText(text)
 
+    def set_hint_visible(self, visible: bool) -> None:
+        """The shortcut badge belongs to the global search, not to filters."""
+        self._kbd.setVisible(visible)
+
     def set_placeholder(self, text: str) -> None:
         self._edit.setPlaceholderText(text)
         self.setAccessibleName(text)
@@ -172,9 +176,13 @@ class SelectField(QAbstractButton):
         searchable: bool = False,
         search_placeholder: str = "",
         choices: list | None = None,
+        min_width: int = 0,
     ) -> None:
         super().__init__(parent)
         self._items: list[tuple[str, str]] = list(items or [])
+        # A label such as "OpenAI-compatible" must not elide to "OpenAI-comp…";
+        # the caller can raise the floor instead of hard-coding a width outside.
+        self._min_width = int(min_width)
         self._empty_action = empty_action
         # A QMenu with 300 entries grew past the window. Searchable fields open
         # a compact popup with its own filter instead (see model_picker).
@@ -202,7 +210,7 @@ class SelectField(QAbstractButton):
         width = metrics.horizontalAdvance(label) + glyphs
         # Compact chips size to their label; wide fields get room for real model
         # names without eliding them to a single letter.
-        floor = runtime.px(92 if self._compact else 168)
+        floor = max(runtime.px(92 if self._compact else 168), self._min_width)
         self.setFixedWidth(max(floor, min(width, runtime.px(320))))
         self.updateGeometry()
 

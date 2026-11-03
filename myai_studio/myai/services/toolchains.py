@@ -172,6 +172,15 @@ class ToolchainRegistry:
                 self._items = {item.id: item for item in self._detect_all()}
             return list(self._items.values())
 
+    def cached(self) -> list[Toolchain] | None:
+        """The last detection result, or ``None`` if the probes never ran.
+
+        The UI uses this to show a summary instantly when it already knows the
+        answer and to skip the blocking probes on the very first paint.
+        """
+        with self._lock:
+            return None if self._items is None else list(self._items.values())
+
     def get(self, toolchain_id: str) -> Toolchain | None:
         self.detect()
         assert self._items is not None

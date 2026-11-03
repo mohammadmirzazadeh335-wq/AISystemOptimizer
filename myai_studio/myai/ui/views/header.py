@@ -17,7 +17,7 @@ from ...i18n import tr
 from ...services.conversations import ConversationService
 from ..theme import runtime
 from ..theme.icons import icon
-from ..widgets.buttons import IconButton, SegmentedControl
+from ..widgets.buttons import IconButton
 from ..widgets.fields import SelectField
 from ..widgets.foundation import ElidedLabel
 from ..widgets.painting import paint_event
@@ -131,7 +131,6 @@ class Header(QFrame):
     inspector_toggled = Signal(bool)
     settings_requested = Signal()
     stop_requested = Signal()
-    mode_changed = Signal(str)
     model_changed = Signal(str)
     new_chat_requested = Signal()
     rename_requested = Signal()
@@ -196,14 +195,6 @@ class Header(QFrame):
         self.context_ring.setToolTip(tr("chat.context_hint"))
         layout.addWidget(self.context_ring, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        self.mode = SegmentedControl(
-            [("chat", tr("header.chat")), ("agent", tr("header.agent"))],
-            current="chat",
-            compact=True,
-        )
-        self.mode.changed.connect(self.mode_changed)
-        layout.addWidget(self.mode, 0, Qt.AlignmentFlag.AlignVCenter)
-
         self.stop_button = IconButton("stop", tr("header.stop"), 32, icon_size=14, tone="danger")
         self.stop_button.setEnabled(False)
         self.stop_button.setToolTip(tr("header.stop"))
@@ -235,8 +226,6 @@ class Header(QFrame):
         compact = width < runtime.px(560)
         self.status.setVisible(not compact)
         self.context_ring.setVisible(not compact)
-        if hasattr(self, "mode"):
-            self.mode.setVisible(width >= runtime.px(430))
         self.subtitle.setVisible(width >= runtime.px(330))
         self.title.setMinimumWidth(runtime.px(56))
 
@@ -251,7 +240,6 @@ class Header(QFrame):
             self.title.setText(tr("chat.today_label"))
             self.subtitle.setText(f"{tr('header.offline')} · {tr('chat.local_mode')}")
             self.context_ring.set_usage(0.0, False)
-            self.mode.set_value("chat", animate=False)
         else:
             display = conversation.title.strip() or tr("chat.untitled")
             self.title.setText(display)
@@ -263,7 +251,6 @@ class Header(QFrame):
             subtitle_parts.append(tr("nav.account"))
             self.subtitle.setText(" · ".join(subtitle_parts))
             self._update_context()
-            self.mode.set_value(conversation.mode if conversation.mode in {"chat", "agent"} else "chat", animate=False)
 
     def _update_context(self) -> None:
         if self._conversation is None:
@@ -293,7 +280,6 @@ class Header(QFrame):
     def set_generating(self, generating: bool) -> None:
         self._generating = generating
         self.stop_button.setEnabled(generating)
-        self.mode.setEnabled(not generating)
         self.inspector_button.setEnabled(True)
         self.model_chip.setEnabled(not generating)
 
@@ -302,11 +288,6 @@ class Header(QFrame):
         self.title.setText(title)
         self.subtitle.setText(subtitle)
         self.context_ring.set_usage(0, False)
-
-    def set_mode(self, mode: str) -> None:
-        self.mode.blockSignals(True)
-        self.mode.set_value(mode, animate=True)
-        self.mode.blockSignals(False)
 
     def set_inspector_open(self, open_state: bool) -> None:
         self.inspector_button.setChecked(open_state)
@@ -378,15 +359,14 @@ class Header(QFrame):
         self.stop_button.setToolTip(tr("header.stop"))
         self.inspector_button.setToolTip(tr("header.inspector"))
         self.more_button.setToolTip(tr("header.more"))
-        self.mode.set_items([("chat", tr("header.chat")), ("agent", tr("header.agent"))])
         self._reapply_connection()
         self.set_conversation(self._conversation)
 
     def refresh_theme(self) -> None:
         self._refresh_icons()
-        # Chips and the mode switcher paint with the current scale, so their
-        # fixed sizes have to follow it too.
-        for widget in (self.model_chip, self.mode):
+        # The chip paints with the current scale, so its fixed size has to
+        # follow it too.
+        for widget in (self.model_chip,):
             if hasattr(widget, "refresh_metrics"):
                 widget.refresh_metrics()
         self.update()

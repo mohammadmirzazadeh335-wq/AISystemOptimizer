@@ -513,14 +513,19 @@ class LabTile(_HoverMixin, QAbstractButton):
         rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
         radius = runtime.px(8)
         checked = self.isChecked()
+        # Every tile is a card, not a bare line: the column of names read as an
+        # undifferentiated list, which is exactly what the user complained about.
+        painter.setBrush(QColor(runtime.theme().alpha("text", 0.045)))
+        painter.setPen(QPen(QColor(runtime.theme().alpha("text", 0.07)), 1))
+        painter.drawRoundedRect(rect, radius, radius)
         if checked:
             painter.setBrush(QColor(c("accent_soft")))
-            painter.setPen(QPen(QColor(runtime.theme().alpha("accent", 0.38)), 1))
+            painter.setPen(QPen(QColor(runtime.theme().alpha("accent", 0.45)), 1))
             painter.drawRoundedRect(rect, radius, radius)
         elif self._hover_value > 0.01:
-            hover = QColor(c("nav_hover"))
-            hover.setAlphaF(min(1.0, 0.9 * self._hover_value))
-            painter.setPen(Qt.PenStyle.NoPen)
+            hover = QColor(runtime.theme().alpha("text", 0.035))
+            hover.setAlphaF(min(1.0, 1.4 * self._hover_value))
+            painter.setPen(QPen(QColor(runtime.theme().alpha("text", 0.10)), 1))
             painter.setBrush(hover)
             painter.drawRoundedRect(rect, radius, radius)
         if self.hasFocus():
@@ -529,7 +534,7 @@ class LabTile(_HoverMixin, QAbstractButton):
             painter.drawRoundedRect(rect.adjusted(1.5, 1.5, -1.5, -1.5), radius - 2, radius - 2)
         tone = c("accent") if checked else c("text_muted")
         rtl = self.layoutDirection() == Qt.LayoutDirection.RightToLeft
-        pad = runtime.px(9)
+        pad = runtime.px(10)
         icon_size = runtime.px(15) if not self._collapsed else runtime.px(17)
         if self._collapsed:
             # Collapsed rail: icon only, centred, like the full-size nav rows.
@@ -551,6 +556,76 @@ class LabTile(_HoverMixin, QAbstractButton):
         painter.drawText(text_rect, align, elided)
 
 
+class SectionHeader(QLabel):
+    """A navigation group title that can be folded away.
+
+    It is still a ``QLabel`` so ``.text()`` keeps returning the section name for
+    tests and screen readers; the icon and the chevron are painted on top and a
+    click toggles the group. Nineteen destinations in one column was the
+    complaint: folding "Lab" or "AI" away keeps the chat list long enough to be
+    useful while leaving every page one click from the same place.
+    """
+
+    toggled = Signal(bool)
+
+    def __init__(self, text: str, icon_name: str = "", parent: QWidget | None = None) -> None:
+        super().__init__(text, parent)
+        self.setProperty("role", "section")
+        self._icon_name = icon_name
+        self._open = True
+        self.setFixedHeight(runtime.px(26))
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._apply_padding()
+        self.set_open(True)
+
+    def _rtl(self) -> bool:
+        return self.layoutDirection() == Qt.LayoutDirection.RightToLeft
+
+    def _apply_padding(self) -> None:
+        lead = runtime.px(26)   # room for the group's own icon
+        trail = runtime.px(22)  # room for the chevron
+        if self._rtl():
+            self.setContentsMargins(trail, 0, lead, 0)
+        else:
+            self.setContentsMargins(lead, 0, trail, 0)
+
+    def set_open(self, open_state: bool) -> None:
+        self._open = bool(open_state)
+        self.setToolTip(tr("nav.group_collapse") if self._open else tr("nav.group_expand"))
+        self.update()
+
+    def is_open(self) -> bool:
+        return self._open
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: ANN001
+        if event.button() == Qt.MouseButton.LeftButton and self.rect().contains(
+            event.position().toPoint()
+        ):
+            self.toggled.emit(not self._open)
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def paintEvent(self, event) -> None:  # noqa: ANN001
+        super().paintEvent(event)
+        painter = QPainter(self)
+        try:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            color = runtime.theme().color("text_faint")
+            rtl = self._rtl()
+            size = runtime.px(12)
+            top = (self.height() - size) / 2
+            if self._icon_name:
+                x = self.width() - runtime.px(8) - size if rtl else runtime.px(8)
+                draw_icon(painter, self._icon_name, QRectF(x, top, size, size), color, 1.5)
+            chevron = "chevron-down" if self._open else ("chevron-left" if rtl else "chevron-right")
+            x = runtime.px(8) if rtl else self.width() - runtime.px(8) - size
+            draw_icon(painter, chevron, QRectF(x, top, size, size), color, 1.6)
+        finally:
+            painter.end()
+
+
 class Sidebar(QFrame):
     new_chat_requested = Signal()
     conversation_selected = Signal(str)
@@ -562,6 +637,7 @@ class Sidebar(QFrame):
 
     AI_PAGES = [
         ("api", "key", "nav.api"),
+        ("endpoints", "server", "nav.endpoints"),
         ("memory", "database", "nav.memory"),
         ("persona", "user", "nav.persona"),
         ("studio", "code", "nav.studio"),
@@ -671,7 +747,9 @@ class Sidebar(QFrame):
         # The conversation area takes the leftover height (stretch 1) but never
         # less than this, so it cannot collapse to ~30 px and paint its empty
         # state over the LIBRARY rows; below that the column scrolls instead.
-        self._stack.setMinimumHeight(runtime.px(76))
+        # The empty state needs room for its icon, title and two lines; at 76 px
+        # it painted over its own edges (the screenshot showed a cut sentence).
+        self._stack.setMinimumHeight(runtime.px(132))
         self.list_view = QListView()
         self.list_view.setObjectName("ConversationList")
         self.list_view.setFrameShape(QFrame.Shape.NoFrame)
@@ -719,45 +797,39 @@ class Sidebar(QFrame):
         divider = QFrame()
         divider.setProperty("panel", "divider")
         self.nav_layout.addWidget(divider)
-        self.library_label = QLabel(tr("nav.library"))
-        self.library_label.setProperty("role", "section")
-        self.library_label.setContentsMargins(runtime.px(8), runtime.px(4), 0, runtime.px(2))
-        self.nav_layout.addWidget(self.library_label)
 
-        self.nav_buttons: dict[str, NavButton] = {}
-        for key, icon_name, label_key in self.LIBRARY:
-            button = NavButton(tr(label_key), icon_name)
-            button.clicked.connect(lambda _=False, k=key: self._activate_route(k))
-            self.nav_buttons[key] = button
-            self.nav_layout.addWidget(button)
+        # Nineteen destinations in one column is what the screenshot showed;
+        # a filter plus foldable groups turns that list into something a person
+        # can actually scan.
+        self.tools_filter = SearchField(tr("nav.filter_tools"))
+        self.tools_filter.setFixedHeight(runtime.px(30))
+        self.tools_filter.set_hint_visible(False)
+        self.tools_filter.setToolTip(tr("nav.filter_tools_hint"))
+        self.tools_filter.setAccessibleName(tr("nav.filter_tools"))
+        self.tools_filter.text_changed.connect(lambda _text: self._filter_tools())
+        self.nav_layout.addWidget(self.tools_filter)
 
-        self.lab_label = QLabel(tr("nav.lab"))
-        self.lab_label.setProperty("role", "section")
-        self.lab_label.setContentsMargins(runtime.px(8), runtime.px(6), 0, runtime.px(2))
-        self.nav_layout.addWidget(self.lab_label)
-        lab_grid = QGridLayout()
-        lab_grid.setContentsMargins(0, 0, 0, 0)
-        lab_grid.setHorizontalSpacing(runtime.px(4))
-        lab_grid.setVerticalSpacing(runtime.px(2))
-        self.lab_grid = lab_grid
-        self.lab_tiles: list[LabTile] = []
-        for index, (key, icon_name, label_key) in enumerate(self.LAB):
-            tile = LabTile(tr(label_key), icon_name)
-            tile.clicked.connect(lambda _=False, k=key: self._activate_route(k))
-            self.nav_buttons[key] = tile
-            self.lab_tiles.append(tile)
-            lab_grid.addWidget(tile, index // 2, index % 2)
-        self.nav_layout.addLayout(lab_grid)
-
-        self.ai_label = QLabel(tr("nav.ai_section"))
-        self.ai_label.setProperty("role", "section")
-        self.ai_label.setContentsMargins(runtime.px(8), runtime.px(6), 0, runtime.px(2))
-        self.nav_layout.addWidget(self.ai_label)
-        for key, icon_name, label_key in self.AI_PAGES:
-            button = NavButton(tr(label_key), icon_name)
-            button.clicked.connect(lambda _=False, k=key: self._activate_route(k))
-            self.nav_buttons[key] = button
-            self.nav_layout.addWidget(button)
+        self.nav_buttons: dict[str, Any] = {}
+        # The Lab is the advanced half; folding it by default keeps the column
+        # short enough that every studio is visible without scrolling.
+        self._group_open = {"library": True, "lab": False, "ai": True}
+        self.library_label, self.library_grid, self.library_tiles = self._build_group(
+            "library", "nav.library", "grid", self.LIBRARY
+        )
+        self.lab_label, self.lab_grid, self.lab_tiles = self._build_group(
+            "lab", "nav.lab", "wand", self.LAB
+        )
+        self.ai_label, self.ai_grid, self.ai_tiles = self._build_group(
+            "ai", "nav.ai_section", "sparkles", self.AI_PAGES
+        )
+        for group_key, group_header, group_host, _tiles in self._group_widgets():
+            group_header.set_open(self._group_open[group_key])
+            group_host.setVisible(self._group_open[group_key])
+        self.no_tools_match = QLabel(tr("nav.no_tools_match"))
+        self.no_tools_match.setProperty("role", "faint")
+        self.no_tools_match.setContentsMargins(runtime.px(8), runtime.px(4), 0, 0)
+        self.no_tools_match.hide()
+        self.nav_layout.addWidget(self.no_tools_match)
 
         outer.addWidget(self.nav_scroll, 1)
         self.nav_fade = _ScrollFade(self.nav_scroll, self)
@@ -802,6 +874,95 @@ class Sidebar(QFrame):
         self.grip.width_committed.connect(self.width_committed)
         self.grip.show()
 
+    def _build_group(
+        self, key: str, label_key: str, icon_name: str, items: list[tuple[str, str, str]]
+    ) -> tuple[SectionHeader, QGridLayout, list[LabTile]]:
+        """One foldable group of two-column tiles (one column in the rail)."""
+        header = SectionHeader(tr(label_key), icon_name)
+        header.toggled.connect(lambda open_state, group=key: self._set_group_open(group, open_state))
+        self.nav_layout.addWidget(header)
+        host = QWidget()
+        grid = QGridLayout(host)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(runtime.px(4))
+        grid.setVerticalSpacing(runtime.px(2))
+        tiles: list[LabTile] = []
+        for index, (route, tile_icon, route_label) in enumerate(items):
+            tile = LabTile(tr(route_label), tile_icon)
+            # The filter matches the address too, so an English word finds a
+            # Persian tile and the other way round.
+            tile.setProperty("nav_route", route)
+            # The tile is short so it fits two columns; the tooltip keeps the
+            # full page name that the old one-column row could show.
+            tile.setToolTip(tr(f"{route}.title"))
+            tile.clicked.connect(lambda _=False, name=route: self._activate_route(name))
+            self.nav_buttons[route] = tile
+            tiles.append(tile)
+            grid.addWidget(tile, index // 2, index % 2)
+        self.nav_layout.addWidget(host)
+        if key == "library":
+            self.library_host = host
+        elif key == "lab":
+            self.lab_host = host
+        else:
+            self.ai_host = host
+        return header, grid, tiles
+
+    def _group_widgets(self) -> list[tuple[str, SectionHeader, QWidget, list[LabTile]]]:
+        return [
+            ("library", self.library_label, self.library_host, self.library_tiles),
+            ("lab", self.lab_label, self.lab_host, self.lab_tiles),
+            ("ai", self.ai_label, self.ai_host, self.ai_tiles),
+        ]
+
+    def _set_group_open(self, key: str, open_state: bool) -> None:
+        self._group_open[key] = bool(open_state)
+        for group, header, host, _tiles in self._group_widgets():
+            if group == key:
+                header.set_open(open_state)
+                host.setVisible(bool(open_state) and not self._collapsed)
+                if open_state:
+                    self._filter_tools()
+
+    def _open_group_for(self, route: str) -> None:
+        """A page opened from the palette must not stay inside a folded group."""
+        for key, _header, _host, tiles in self._group_widgets():
+            if route in self.nav_buttons and self.nav_buttons[route] in tiles and not self._group_open[key]:
+                self._set_group_open(key, True)
+                return
+
+    def _filter_tools(self) -> None:
+        """Narrow the tiles to what the typed text matches; empty text restores."""
+        if self._collapsed:
+            # The filter field is hidden in the rail; every tile stays reachable.
+            self.no_tools_match.setVisible(False)
+            for _key, _header, host, tiles in self._group_widgets():
+                host.setVisible(True)
+                for tile in tiles:
+                    tile.setVisible(True)
+            return
+        query = self.tools_filter.text().strip().casefold()
+        any_visible = False
+        for key, header, host, tiles in self._group_widgets():
+            matched = 0
+            for tile in tiles:
+                route = str(tile.property("nav_route") or "")
+                visible = (
+                    not query
+                    or query in tile._text.casefold()  # noqa: SLF001
+                    or query in route.casefold()
+                )
+                tile.setVisible(visible)
+                matched += 1 if visible else 0
+            if query:
+                header.setVisible(False)
+                host.setVisible(matched > 0 and not self._collapsed)
+            else:
+                header.setVisible(not self._collapsed)
+                host.setVisible(self._group_open[key] and not self._collapsed)
+            any_visible = any_visible or matched > 0
+        self.no_tools_match.setVisible(bool(query) and not any_visible and not self._collapsed)
+
     # ------------------------------------------------------------------ actions
     def _initial_load(self) -> None:
         self._stack.setCurrentWidget(self.list_view)
@@ -812,7 +973,7 @@ class Sidebar(QFrame):
         """Let the decorative circle go first when the list strip is short."""
         if self._collapsed:
             return
-        self.empty_state.circle.setVisible(self._stack.height() >= runtime.px(112))
+        self.empty_state.circle.setVisible(self._stack.height() >= runtime.px(176))
 
     def refresh(self) -> None:
         self.model.refresh(self.search.text())
@@ -872,6 +1033,7 @@ class Sidebar(QFrame):
     def set_active(self, route: str) -> None:
         self._active_route = route
         self._clear_library_checks()
+        self._open_group_for(route)
         if route in self.nav_buttons:
             button = self.nav_buttons[route]
             button.setChecked(True)
@@ -1100,16 +1262,19 @@ class Sidebar(QFrame):
             self.collapse_button.set_icon_name("panel-left" if not rtl else "panel-right")
             self.collapse_button.setToolTip(tr("nav.collapse"))
 
-    def _layout_lab_tiles(self, collapsed: bool) -> None:
+    def _layout_group_tiles(self, grid: QGridLayout, tiles: list[LabTile], collapsed: bool) -> None:
         """One icon column in the rail, a two-column grid when expanded."""
-        for tile in self.lab_tiles:
-            self.lab_grid.removeWidget(tile)
+        for tile in tiles:
+            grid.removeWidget(tile)
         if collapsed:
-            for index, tile in enumerate(self.lab_tiles):
-                self.lab_grid.addWidget(tile, index, 0, 1, 2)
+            for index, tile in enumerate(tiles):
+                grid.addWidget(tile, index, 0, 1, 2)
         else:
-            for index, tile in enumerate(self.lab_tiles):
-                self.lab_grid.addWidget(tile, index // 2, index % 2)
+            for index, tile in enumerate(tiles):
+                grid.addWidget(tile, index // 2, index % 2)
+
+    def _layout_lab_tiles(self, collapsed: bool) -> None:
+        self._layout_group_tiles(self.lab_grid, self.lab_tiles, collapsed)
 
     def _apply_collapsed_visibility(self, collapsed: bool) -> None:
         self.wordmark.setVisible(not collapsed)
@@ -1120,6 +1285,14 @@ class Sidebar(QFrame):
         self.library_label.setVisible(not collapsed)
         self.ai_label.setVisible(not collapsed)
         self.lab_label.setVisible(not collapsed)
+        self.tools_filter.setVisible(not collapsed)
+        self.no_tools_match.setVisible(False)
+        for _key, _header, host, _tiles in self._group_widgets():
+            # The rail still shows every tile — one per row, icon only — so the
+            # hosts stay visible; only the headers and the filter go away.
+            host.setVisible(True)
+        self._layout_group_tiles(self.library_grid, self.library_tiles, collapsed)
+        self._layout_group_tiles(self.ai_grid, self.ai_tiles, collapsed)
         self._layout_lab_tiles(collapsed)
         for button in self.nav_buttons.values():
             button.set_collapsed(collapsed)
@@ -1190,13 +1363,20 @@ class Sidebar(QFrame):
         self.search_button.setToolTip(tr("nav.search"))
         self.chats_label.setText(tr("nav.chats"))
         self.folder_button.setToolTip(tr("nav.new_folder"))
+        self.tools_filter.set_placeholder(tr("nav.filter_tools"))
+        self.tools_filter.setToolTip(tr("nav.filter_tools_hint"))
+        self.no_tools_match.setText(tr("nav.no_tools_match"))
         self.library_label.setText(tr("nav.library"))
         self.ai_label.setText(tr("nav.ai_section"))
         self.lab_label.setText(tr("nav.lab"))
+        for header in (self.library_label, self.ai_label, self.lab_label):
+            header.set_open(header.is_open())
+        self._filter_tools()
         for key, _icon, label_key in self.LIBRARY + self.LAB + self.AI_PAGES:
             button = self.nav_buttons.get(key)
             if button is not None:
                 button.set_text(tr(label_key))
+                button.setToolTip(tr(f"{key}.title"))
         self.settings_button.set_text(tr("nav.settings"))
         self.account_title.setText(tr("nav.account"))
         self.account_sub.setText(tr("nav.account_sub"))

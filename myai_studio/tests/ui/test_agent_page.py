@@ -538,4 +538,9 @@ def test_short_window_keeps_the_sidebar_empty_state_readable(agent_env) -> None:
         for key, button in window.sidebar.nav_buttons.items():
             assert button.height() >= runtime.px(24), key
         assert window.sidebar.nav_scroll.verticalScrollBar().maximum() >= 0
-        assert window.sidebar._stack.geometry().bottom() < window.sidebar.nav_buttons["agent"].geometry().top()
+        # The nav tiles live inside their own group widget now, so the two
+        # rectangles are compared in the scroll body's coordinates.
+        body = window.sidebar.nav_scroll.widget()
+        agent_tile = window.sidebar.nav_buttons["agent"]
+        tile_top = agent_tile.mapTo(body, agent_tile.rect().topLeft()).y()
+        assert stack.geometry().bottom() < tile_top

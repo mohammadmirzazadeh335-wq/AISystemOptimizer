@@ -8,6 +8,7 @@ executable instead of showing a dead button without a reason.
 
 from __future__ import annotations
 
+import logging
 import re
 import threading
 from pathlib import Path
@@ -49,7 +50,9 @@ from ..theme import runtime
 from ..widgets.fields import FlowLayout, SelectField
 from ..widgets.foundation import Badge
 from ..widgets.history_panel import HistoryDialog
-from .page_base import PageShell, ghost_button, primary_button, secondary_button
+from .page_base import PageShell, ghost_button, primary_button, run_async, secondary_button
+
+logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------- syntax
 KEYWORDS = {
@@ -365,6 +368,7 @@ class CodePage(PageShell):
         self._cancel_event: threading.Event | None = None
         self._quiet_save = False
         self._user_split = False
+        self._toolchain_pending = False
         self._bridge = _RunBridge(self)
         self._bridge.output.connect(self._on_output)
         self._bridge.finished.connect(self._on_run_finished)
@@ -720,7 +724,39 @@ class CodePage(PageShell):
                 stack.append(item.child(index))
 
     def _update_toolchain_summary(self) -> None:
-        items = self.toolchains.detect()
+        """Fill the toolchain line without blocking the page's first paint.
+
+        Probing five toolchains shells out five times, which cost 0.4 s of the
+        window's startup on this machine and more on a cold Windows disk. The
+        platform check runs on a worker the first time and is then cached, so
+        every later call is a dict lookup.
+        """
+        items = self.toolchains.cached()
+        if items is not None:
+            self._apply_toolchain_summary(items)
+            return
+        if self._toolchain_pending:
+            return
+        self._toolchain_pending = True
+        run_async(
+            self,
+            self.toolchains.detect,
+            on_success=self._on_toolchains_detected,
+            on_error=self._on_toolchains_failed,
+        )
+
+    def _on_toolchains_detected(self, items) -> None:  # noqa: ANN001
+        self._toolchain_pending = False
+        self._apply_toolchain_summary(items)
+
+    def _on_toolchains_failed(self, error) -> None:  # noqa: ANN001
+        self._toolchain_pending = False
+        logger.debug("toolchain_detect_failed error=%s", error)
+        self.toolchain_label.setText(tr("code.toolchains_missing", names="\u2066\u2069"))
+        self.toolchain_toggle.setVisible(False)
+        self.toolchain_detail.setVisible(False)
+
+    def _apply_toolchain_summary(self, items) -> None:  # noqa: ANN001
         ready = [item.label for item in items if item.available]
         missing = [item.label for item in items if not item.available]
         # Latin tool names inside a Persian sentence need isolation marks, or
