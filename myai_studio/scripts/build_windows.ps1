@@ -59,6 +59,7 @@ $mode = if ($OneFile) { "--onefile" } else { "--onedir" }
     --add-data "myai\i18n\locales;myai\i18n\locales" `
     --add-data "assets;assets" `
     --collect-submodules "sqlalchemy.dialects.sqlite" `
+    --collect-submodules "myai" `
     --hidden-import "cryptography.fernet" `
     packaging\launcher.py
 if ($LASTEXITCODE -ne 0) { Fail "PyInstaller failed" }

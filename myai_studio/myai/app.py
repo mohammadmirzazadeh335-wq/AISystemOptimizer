@@ -16,7 +16,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 from .context import AppContext, build_context
 from .i18n import set_language, tr
 from .ui.brand import app_icon
-from .ui.main_window import MainWindow
+from .ui.main_window import PAGE_FACTORIES, MainWindow
 from .ui.theme import runtime
 from .ui.theme.manager import ThemeManager
 from .version import APP_NAME, APP_SHORT_NAME, APP_VENDOR, VERSION
@@ -169,7 +169,28 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         QTimer.singleShot(1300, capture)
     elif known.smoke:
-        QTimer.singleShot(1200, app.quit)
+        def smoke_pages() -> None:
+            """Open every page once, then quit.
+
+            Pages are imported the first time they are shown, so a packaged
+            build that lost a module only fails here — on the real executable,
+            inside the smoke test, instead of on the user's desktop.
+            """
+            failed: list[str] = []
+            for route in sorted(PAGE_FACTORIES):
+                try:
+                    window._navigate(route)
+                except Exception:  # noqa: BLE001 - reported as an exit code
+                    logger.exception("smoke_page_failed route=%s", route)
+                    failed.append(route)
+            if failed:
+                print("smoke: page import failed: " + ", ".join(failed), flush=True)
+                app.exit(1)
+                return
+            window._navigate("chat")
+            QTimer.singleShot(150, app.quit)
+
+        QTimer.singleShot(900, smoke_pages)
 
     exit_code = app.exec()
     try:

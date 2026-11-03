@@ -108,3 +108,27 @@ def test_the_tool_filter_narrows_the_tiles_and_says_when_nothing_matches(ui) -> 
     assert sidebar.nav_buttons["images"].isVisibleTo(sidebar)
     assert sidebar.no_tools_match.isVisibleTo(sidebar) is False
     assert sidebar.library_label.isVisibleTo(sidebar)
+
+
+def test_every_declared_page_imports_and_exposes_its_class() -> None:
+    """Lazy imports are invisible to a static bundler; name them here.
+
+    ``build_windows.ps1`` collects ``myai`` as a whole for the same reason, and
+    the packaged smoke test opens every route. This test is the cheap local
+    guard that the table has no typo and no page was left without a class.
+    """
+    import importlib
+
+    from myai.ui.main_window import PAGE_FACTORIES
+
+    seen = set()
+    for route, target in PAGE_FACTORIES.items():
+        module_name, class_name = target.split(":")
+        module = importlib.import_module(module_name)
+        assert hasattr(module, class_name), (route, target)
+        seen.add(route)
+    assert seen == set(PAGE_FACTORIES)
+    # Every AI route must be reachable by the same table the header uses.
+    from myai.ui.main_window import AI_ROUTES
+
+    assert AI_ROUTES == set(PAGE_FACTORIES)
