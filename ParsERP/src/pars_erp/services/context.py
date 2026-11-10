@@ -18,6 +18,16 @@ from pars_erp.config.settings import FileConfig, load_config
 from pars_erp.db.session import Database
 from pars_erp.security.passwords import Argon2PasswordHasher
 from pars_erp.services.accounting_setup_service import AccountingSetupService
+from pars_erp.services.asset_report_service import AssetReportService
+from pars_erp.services.assets_service import AssetService
+from pars_erp.services.attendance_service import AttendanceService
+from pars_erp.services.depreciation_service import DepreciationService
+from pars_erp.services.hr_report_service import HRReportService
+from pars_erp.services.hr_service import HRService
+from pars_erp.services.loans_service import LoanService
+from pars_erp.services.payroll_payment_service import PayrollPaymentService
+from pars_erp.services.payroll_report_service import PayrollReportService
+from pars_erp.services.payroll_service import PayrollService
 from pars_erp.services.accounts_service import AccountService
 from pars_erp.services.audit_service import AuditService
 from pars_erp.services.auth_service import AuthService
@@ -91,6 +101,18 @@ class AppServices:
     reconciliation: ReconciliationService
     treasury_reports: TreasuryReportService
     treasury_dashboard: TreasuryDashboardService
+    # -------------------------------------------------------------------- hr
+    hr: HRService
+    attendance: AttendanceService
+    payroll: PayrollService
+    loans: LoanService
+    payroll_payments: PayrollPaymentService
+    hr_reports: HRReportService
+    payroll_reports: PayrollReportService
+    # ------------------------------------------------------------------ assets
+    assets: AssetService
+    depreciation: DepreciationService
+    asset_reports: AssetReportService
     hasher: Argon2PasswordHasher
     hostname: str = field(default=platform.node() or "unknown-host")
     app_version: str = __version__
@@ -145,6 +167,22 @@ def build_services(*, paths: AppPaths | None = None, config: FileConfig | None =
     treasury_reports = TreasuryReportService(database, settings)
     treasury_dashboard = TreasuryDashboardService(database, treasury_reports)
 
+    hr = HRService(database, audit, settings=settings)
+    attendance = AttendanceService(database, audit, settings=settings)
+    payroll = PayrollService(database, audit, journals=journals, posting=posting,
+                             settings=settings, attendance=attendance)
+    loans = LoanService(database, audit, vouchers=vouchers, journals=journals)
+    payroll_payments = PayrollPaymentService(database, audit, vouchers=vouchers,
+                                             settings=settings)
+    hr_reports = HRReportService(database, settings)
+    payroll_reports = PayrollReportService(database, settings)
+
+    assets = AssetService(database, audit, vouchers=vouchers, journals=journals,
+                          settings=settings)
+    depreciation = DepreciationService(database, audit, journals=journals,
+                                       settings=settings)
+    asset_reports = AssetReportService(database, settings)
+
     return AppServices(
         paths=paths, config=config, db=database, audit=audit, settings=settings,
         auth=auth, users=users, roles=roles, backups=backups, dashboard=dashboard,
@@ -158,6 +196,10 @@ def build_services(*, paths: AppPaths | None = None, config: FileConfig | None =
         funds=funds, cheques=cheques, vouchers=vouchers,
         reconciliation=reconciliation, treasury_reports=treasury_reports,
         treasury_dashboard=treasury_dashboard,
+        hr=hr, attendance=attendance, payroll=payroll, loans=loans,
+        payroll_payments=payroll_payments, hr_reports=hr_reports,
+        payroll_reports=payroll_reports,
+        assets=assets, depreciation=depreciation, asset_reports=asset_reports,
     )
 
 

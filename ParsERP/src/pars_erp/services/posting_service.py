@@ -22,6 +22,7 @@ from sqlalchemy.exc import IntegrityError
 from pars_erp.accounting import constants as AC
 from pars_erp.commerce import constants as CC
 from pars_erp.treasury import constants as TC
+from pars_erp.payroll import constants as PC
 from pars_erp.core.errors import ConflictError, NotFoundError, ValidationError
 from pars_erp.db.models import Account, PostingRule, PostingRuleLine
 from pars_erp.db.session import Database
@@ -30,11 +31,14 @@ from pars_erp.services.audit_service import AuditService
 from pars_erp.services.commerce_common import ZERO, clean_text, get_or_404, to_money
 
 #: Commerce + treasury operations share one table of posting patterns.
-POSTING_OPERATIONS: tuple[str, ...] = CC.POSTING_OPERATIONS + TC.POSTING_OPERATIONS
-POSTING_TITLES_FA: dict[str, str] = {**CC.POSTING_TITLES_FA, **TC.POSTING_TITLES_FA}
-AMOUNT_SOURCES: tuple[str, ...] = CC.AMOUNT_SOURCES + TC.AMOUNT_SOURCES
+POSTING_OPERATIONS: tuple[str, ...] = (CC.POSTING_OPERATIONS + TC.POSTING_OPERATIONS
+                                       + PC.POSTING_OPERATIONS)
+POSTING_TITLES_FA: dict[str, str] = {**CC.POSTING_TITLES_FA, **TC.POSTING_TITLES_FA,
+                                     **PC.POSTING_TITLES_FA}
+AMOUNT_SOURCES: tuple[str, ...] = CC.AMOUNT_SOURCES + TC.AMOUNT_SOURCES + PC.AMOUNT_SOURCES
 AMOUNT_SOURCE_TITLES_FA: dict[str, str] = {**CC.AMOUNT_SOURCE_TITLES_FA,
-                                           **TC.AMOUNT_SOURCE_TITLES_FA}
+                                           **TC.AMOUNT_SOURCE_TITLES_FA,
+                                           **PC.AMOUNT_SOURCE_TITLES_FA}
 
 #: Suggested chart codes per default rule line, in the *standard* phase-2 chart.
 #: They are only used to seed a rule once; afterwards the stored accounts rule.
@@ -127,6 +131,19 @@ DEFAULT_RULE_TEMPLATES: dict[str, tuple[tuple[str, str, str], ...]] = {
     TC.POSTING_BANK_FEE: (
         ("debit", TC.SRC_FEE, "502004"),                # کارمزد بانکی
         ("credit", TC.SRC_FUND, "101006"),
+    ),
+    # ----------------------------------------------------------- phase 5 payroll
+    # debit  حقوق ناخالص + بیمهٔ سهم کارفرما
+    # credit بیمهٔ پرداختنی (کارمند + کارفرما)، مالیات، خالص، اقساط وام و مساعده
+    PC.POSTING_SALARY: (
+        ("debit", PC.SRC_SALARY_EXPENSE, "502001"),      # هزینهٔ حقوق و دستمزد
+        ("debit", PC.SRC_EMPLOYER_INSURANCE, "502006"),  # بیمهٔ سهم کارفرما
+        ("credit", PC.SRC_INSURANCE_TOTAL, "201005"),    # بیمهٔ پرداختنی
+        ("credit", PC.SRC_TAX, "201002"),                # مالیات پرداختنی
+        ("credit", PC.SRC_LOAN, "101008"),               # وام کارکنان
+        ("credit", PC.SRC_ADVANCE, "101008"),            # مساعدهٔ کارکنان
+        ("credit", PC.SRC_OTHER_DEDUCTION, "503001"),    # سایر کسور
+        ("credit", PC.SRC_NET, "201003"),                # حقوق پرداختنی
     ),
 }
 

@@ -31,6 +31,9 @@ GROUP_BACKUP = "backup"
 GROUP_ACCOUNTING = "accounting"
 GROUP_COMMERCE = "commerce"
 GROUP_TREASURY = "treasury"
+GROUP_HR = "hr"
+GROUP_PAYROLL = "payroll"
+GROUP_ASSETS = "assets"
 
 SETTING_GROUPS: tuple[tuple[str, str], ...] = (
     (GROUP_GENERAL, "اطلاعات شرکت و عمومی"),
@@ -40,6 +43,9 @@ SETTING_GROUPS: tuple[tuple[str, str], ...] = (
     (GROUP_ACCOUNTING, "حسابداری"),
     (GROUP_COMMERCE, "بازرگانی و انبار"),
     (GROUP_TREASURY, "خزانه‌داری"),
+    (GROUP_HR, "منابع انسانی"),
+    (GROUP_PAYROLL, "حقوق و دستمزد"),
+    (GROUP_ASSETS, "دارایی‌های ثابت"),
 )
 
 TYPE_STRING = "string"
@@ -200,6 +206,55 @@ SETTING_DEFS: tuple[SettingDef, ...] = (
     SettingDef("treasury_stale_cheque_days", "آستانهٔ «چک معوق» (روز)", GROUP_TREASURY,
                TYPE_INT, 30,
                help_fa="چک سررسیدگذشته بیش از این تعداد روز در گزارش معوق شمرده می‌شود."),
+    # --------------------------------------------------------------------- hr
+    SettingDef("hr_work_start_time", "ساعت شروع کار موظفی", GROUP_HR, TYPE_STRING, "08:00",
+               max_length=5,
+               help_fa="مبنای محاسبهٔ تأخیر؛ ساعت پایان و استراحت هر شیفت در تعریف شیفت است."),
+    SettingDef("hr_work_end_time", "ساعت پایان کار موظفی", GROUP_HR, TYPE_STRING, "17:00",
+               max_length=5),
+    SettingDef("hr_grace_minutes", "مهلت مجاز تأخیر (دقیقه)", GROUP_HR, TYPE_INT, 10,
+               min_value=0, max_value=120,
+               help_fa="تأخیر کمتر از این مقدار در گزارش‌ها محاسبه نمی‌شود."),
+    SettingDef("hr_work_days_per_week", "تعداد روز کاری هفته", GROUP_HR, TYPE_INT, 6,
+               min_value=1, max_value=7),
+    SettingDef("hr_work_weekdays", "روزهای کاری هفته (۰=شنبه تا ۶=جمعه)", GROUP_HR,
+               TYPE_STRING, "0,1,2,3,4,5", max_length=20,
+               help_fa="برای محاسبهٔ روزهای کاری ماه، غیبت و مرخصی استفاده می‌شود."),
+    SettingDef("hr_allow_self_service", "امکان ثبت حضور و درخواست توسط کارمند", GROUP_HR,
+               TYPE_BOOL, False,
+               help_fa="در صورت فعال بودن، کارمند می‌تواند ورود/خروج و درخواست مرخصی ثبت کند."),
+    SettingDef("hr_overtime_requires_approval", "اضافه‌کاری نیازمند تأیید است", GROUP_HR,
+               TYPE_BOOL, True),
+    SettingDef("hr_leave_requires_approval", "مرخصی نیازمند تأیید است", GROUP_HR, TYPE_BOOL,
+               True),
+    SettingDef("hr_contract_alert_days", "هشدار انقضای قرارداد (روز)", GROUP_HR, TYPE_INT, 30,
+               min_value=0, max_value=365),
+    SettingDef("hr_employee_code_prefix", "پیشوند کد پرسنلی", GROUP_HR, TYPE_STRING, "EMP",
+               max_length=8),
+    # ---------------------------------------------------------------- payroll
+    SettingDef("payroll_require_approval", "محاسبهٔ حقوق نیازمند تأیید است", GROUP_PAYROLL,
+               TYPE_BOOL, True,
+               help_fa="پس از محاسبه، ثبت سند حسابداری و پرداخت فقط پس از تأیید ممکن است."),
+    SettingDef("payroll_payment_file_format", "قالب فایل بانکی پرداخت حقوق", GROUP_PAYROLL,
+               TYPE_CHOICE, "csv",
+               choices=(("csv", "CSV"), ("txt", "متن با جداکنندهٔ تب")),
+               help_fa="فایل خروجی دستهٔ پرداخت با این قالب ساخته می‌شود."),
+    SettingDef("payroll_payment_file_columns", "ستون‌های فایل بانکی (با کاما)", GROUP_PAYROLL,
+               TYPE_STRING,
+               "employee_code,full_name,iban,amount,tracking_no",
+               max_length=200,
+               help_fa=("ترتیب ستون‌ها را خودتان تعیین می‌کنید: هر نام باید یکی از "
+                        "employee_code/full_name/iban/bank_account_no/amount/tracking_no/"
+                        "period باشد.")),
+    SettingDef("payroll_allow_multiple_runs", "اجازهٔ چند دورهٔ حقوق هم‌زمان در یک ماه",
+               GROUP_PAYROLL, TYPE_BOOL, False),
+    # ----------------------------------------------------------------- assets
+    SettingDef("assets_default_useful_life_years", "عمر مفید پیش‌فرض دارایی (سال)",
+               GROUP_ASSETS, TYPE_INT, 5, min_value=1, max_value=60),
+    SettingDef("assets_depreciation_requires_approval", "ثبت استهلاک نیازمند تأیید است",
+               GROUP_ASSETS, TYPE_BOOL, True),
+    SettingDef("assets_code_prefix", "پیشوند کد دارایی", GROUP_ASSETS, TYPE_STRING, "AST",
+               max_length=8),
 )
 
 SETTINGS_BY_KEY: dict[str, SettingDef] = {d.key: d for d in SETTING_DEFS}

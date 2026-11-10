@@ -45,10 +45,14 @@ STANDARD_CHART: tuple[tuple[str, str, str, str, str | None, str | None], ...] = 
     ("101006", "حساب‌های بانکی", C.LEVEL_SUBSIDIARY, C.TYPE_ASSET, "current_assets", "101"),
     ("101007", "چک‌های دریافتی در جریان وصول", C.LEVEL_SUBSIDIARY, C.TYPE_ASSET,
      "current_assets", "101"),
+    ("101008", "وام و مساعدهٔ کارکنان", C.LEVEL_SUBSIDIARY, C.TYPE_ASSET,
+     "current_assets", "101"),
     ("102", "دارایی‌های غیرجاری", C.LEVEL_TOTAL, C.TYPE_ASSET, "non_current_assets", "1"),
     ("102001", "دارایی‌های ثابت مشهود", C.LEVEL_SUBSIDIARY, C.TYPE_ASSET,
      "non_current_assets", "102"),
     ("102002", "دارایی‌های نامشهود", C.LEVEL_SUBSIDIARY, C.TYPE_ASSET,
+     "non_current_assets", "102"),
+    ("102003", "استهلاک انباشتهٔ دارایی‌های ثابت", C.LEVEL_SUBSIDIARY, C.TYPE_ASSET,
      "non_current_assets", "102"),
 
     ("2", "بدهی‌ها", C.LEVEL_GROUP, C.TYPE_LIABILITY, None, None),
@@ -60,6 +64,8 @@ STANDARD_CHART: tuple[tuple[str, str, str, str, str | None, str | None], ...] = 
     ("201003", "حقوق و دستمزد پرداختنی", C.LEVEL_SUBSIDIARY, C.TYPE_LIABILITY,
      "current_liabilities", "201"),
     ("201004", "چک‌های پرداختنی", C.LEVEL_SUBSIDIARY, C.TYPE_LIABILITY,
+     "current_liabilities", "201"),
+    ("201005", "بیمهٔ تأمین اجتماعی پرداختنی", C.LEVEL_SUBSIDIARY, C.TYPE_LIABILITY,
      "current_liabilities", "201"),
     ("202", "بدهی‌های غیرجاری", C.LEVEL_TOTAL, C.TYPE_LIABILITY,
      "non_current_liabilities", "2"),
@@ -77,6 +83,8 @@ STANDARD_CHART: tuple[tuple[str, str, str, str, str | None, str | None], ...] = 
     ("401002", "درآمد خدمات", C.LEVEL_SUBSIDIARY, C.TYPE_REVENUE, "revenue", "401"),
     ("402", "سایر درآمدها", C.LEVEL_TOTAL, C.TYPE_REVENUE, "other_income", "4"),
     ("402001", "درآمد متفرقه", C.LEVEL_SUBSIDIARY, C.TYPE_REVENUE, "other_income", "402"),
+    ("402002", "سود فروش دارایی ثابت", C.LEVEL_SUBSIDIARY, C.TYPE_REVENUE,
+     "other_income", "402"),
 
     ("5", "هزینه‌ها", C.LEVEL_GROUP, C.TYPE_EXPENSE, None, None),
     ("501", "بهای تمام‌شده", C.LEVEL_TOTAL, C.TYPE_EXPENSE, "cogs", "5"),
@@ -90,9 +98,15 @@ STANDARD_CHART: tuple[tuple[str, str, str, str, str | None, str | None], ...] = 
      "operating_expense", "502"),
     ("502004", "کارمزد و هزینه‌های بانکی", C.LEVEL_SUBSIDIARY, C.TYPE_EXPENSE,
      "operating_expense", "502"),
+    ("502005", "هزینهٔ استهلاک دارایی‌های ثابت", C.LEVEL_SUBSIDIARY, C.TYPE_EXPENSE,
+     "operating_expense", "502"),
+    ("502006", "بیمهٔ سهم کارفرما", C.LEVEL_SUBSIDIARY, C.TYPE_EXPENSE,
+     "operating_expense", "502"),
     ("503", "سایر هزینه‌ها", C.LEVEL_TOTAL, C.TYPE_EXPENSE, "other_expense", "5"),
     ("503001", "هزینه‌های متفرقه", C.LEVEL_SUBSIDIARY, C.TYPE_EXPENSE, "other_expense",
      "503"),
+    ("503002", "زیان فروش و کنارگذاری دارایی ثابت", C.LEVEL_SUBSIDIARY, C.TYPE_EXPENSE,
+     "other_expense", "503"),
 )
 
 

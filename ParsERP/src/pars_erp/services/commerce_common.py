@@ -134,17 +134,20 @@ def jalali_year(value: _dt.date | None = None) -> int:
 
 
 def next_document_number(session: Session, model: Any, *, prefix: str,
-                         on_date: _dt.date | None = None, width: int = 4) -> str:
-    """Return the next free ``PREFIX-JYY-NNNN`` number for ``model``.
+                         on_date: _dt.date | None = None, width: int = 4,
+                         column: str = "number") -> str:
+    """Return the next free ``PREFIX-JYY-NNNN`` value for ``model``.
 
-    ``JYY`` is the Jalali year (e.g. 1404). The unique constraint on
-    ``number`` still guards against a concurrent insert: callers catch
-    :class:`IntegrityError` and retry once.
+    ``JYY`` is the Jalali year (e.g. 1404). ``column`` names the field that holds
+    the value - models such as ``hr_employees`` keep theirs in ``code``. The
+    unique constraint on that column still guards against a concurrent insert:
+    callers catch :class:`IntegrityError` and retry once.
     """
     year = jalali_year(on_date)
     stem = f"{prefix}-{year}-"
+    field = getattr(model, column)
     highest = session.execute(
-        select(func.max(model.number)).where(model.number.like(f"{stem}%"))).scalar()
+        select(func.max(field)).where(field.like(f"{stem}%"))).scalar()
     sequence = 1
     if highest:
         tail = str(highest).rsplit("-", 1)[-1]

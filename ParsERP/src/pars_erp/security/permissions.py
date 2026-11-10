@@ -207,7 +207,8 @@ _SECTIONS: list[PermissionSection] = [
         _perm("commerce.reports", "view", "گزارش‌های مدیریتی بازرگانی و انبار", "commerce",
               "تنظیمات و گزارش‌های بازرگانی", 271),
 
-        # ------------------------------------------------------- treasury
+    )),
+    PermissionSection("treasury", "خزانه‌داری", (
         _perm("bank_accounts.view", "view", "مشاهده حساب‌های بانکی", "treasury",
               "خزانه‌داری", 300),
         _perm("bank_accounts.edit", "edit", "ایجاد و ویرایش حساب بانکی", "treasury",
@@ -242,6 +243,58 @@ _SECTIONS: list[PermissionSection] = [
               "خزانه‌داری", 319),
         _perm("treasury.calendar", "view", "تقویم سررسیدها", "treasury",
               "خزانه‌داری", 320),
+    )),
+    PermissionSection("hr", "منابع انسانی", (
+        _perm("hr.employees.view", "view", "مشاهدهٔ پرونده کارکنان", "hr",
+              "منابع انسانی", 400),
+        _perm("hr.employees.create", "create", "ایجاد کارمند", "hr", "منابع انسانی", 401),
+        _perm("hr.employees.edit", "edit", "ویرایش پرونده کارمند", "hr", "منابع انسانی", 402),
+        _perm("hr.employees.sensitive", "view", "مشاهدهٔ اطلاعات حساس کارکنان (کد ملی، حقوق، بانک)",
+              "hr", "منابع انسانی", 403),
+        _perm("hr.contracts.manage", "edit", "مدیریت قراردادها (ایجاد، تمدید، اصلاح)",
+              "hr", "منابع انسانی", 404),
+        _perm("hr.org.edit", "edit", "مدیریت ساختار سازمانی", "hr", "منابع انسانی", 405),
+        _perm("hr.attendance.record", "create", "ثبت حضور و غیاب", "hr", "منابع انسانی", 406),
+        _perm("hr.attendance.amend", "edit", "اصلاح حضور و غیاب", "hr", "منابع انسانی", 407),
+        _perm("hr.leave.request", "create", "ثبت درخواست مرخصی", "hr", "منابع انسانی", 408),
+        _perm("hr.leave.approve", "approve", "تأیید مرخصی", "hr", "منابع انسانی", 409),
+        _perm("hr.overtime.approve", "approve", "تأیید اضافه‌کاری و مأموریت", "hr",
+              "منابع انسانی", 410),
+        _perm("hr.reports", "view", "گزارش‌های منابع انسانی", "hr", "منابع انسانی", 411),
+        _perm("hr.print", "print", "چاپ و خروجی منابع انسانی", "hr", "منابع انسانی", 412),
+    )),
+    PermissionSection("payroll", "حقوق و دستمزد", (
+        _perm("payroll.view", "view", "مشاهدهٔ دوره‌ها و فیش‌های حقوق", "payroll",
+              "حقوق و دستمزد", 430),
+        _perm("payroll.settings", "edit", "مدیریت تنظیمات و نسخه‌های حقوق", "payroll",
+              "حقوق و دستمزد", 431),
+        _perm("payroll.calculate", "edit", "محاسبهٔ حقوق ماهانه", "payroll", "حقوق و دستمزد", 432),
+        _perm("payroll.approve", "approve", "تأیید و ثبت نهایی حقوق", "payroll",
+              "حقوق و دستمزد", 433),
+        _perm("payroll.pay", "create", "ثبت پرداخت حقوق", "payroll", "حقوق و دستمزد", 434),
+        _perm("payroll.payslip.view", "view", "مشاهده و چاپ فیش حقوقی", "payroll",
+              "حقوق و دستمزد", 435),
+        _perm("payroll.loans.manage", "edit", "مدیریت وام و مساعدهٔ کارکنان", "payroll",
+              "حقوق و دستمزد", 436),
+        _perm("payroll.reports", "view", "گزارش‌های حقوق و دستمزد", "payroll",
+              "حقوق و دستمزد", 437),
+        _perm("payroll.print", "print", "چاپ و خروجی حقوق و دستمزد", "payroll",
+              "حقوق و دستمزد", 438),
+    )),
+    PermissionSection("assets", "دارایی‌های ثابت", (
+        _perm("assets.view", "view", "مشاهدهٔ دارایی‌های ثابت", "assets", "دارایی‌های ثابت", 460),
+        _perm("assets.register", "create", "ثبت و ویرایش دارایی", "assets", "دارایی‌های ثابت", 461),
+        _perm("assets.transfer", "edit", "انتقال دارایی و تغییر امانت‌دار", "assets",
+              "دارایی‌های ثابت", 462),
+        _perm("assets.dispose", "approve", "فروش و کنارگذاری دارایی", "assets",
+              "دارایی‌های ثابت", 463),
+        _perm("assets.depreciate", "edit", "محاسبهٔ استهلاک", "assets", "دارایی‌های ثابت", 464),
+        _perm("assets.post_depreciation", "approve", "ثبت نهایی استهلاک", "assets",
+              "دارایی‌های ثابت", 465),
+        _perm("assets.maintenance", "create", "ثبت تعمیر و نگهداری", "assets",
+              "دارایی‌های ثابت", 466),
+        _perm("assets.reports", "view", "گزارش‌های دارایی ثابت", "assets", "دارایی‌های ثابت", 467),
+        _perm("assets.print", "print", "چاپ و خروجی دارایی‌ها", "assets", "دارایی‌های ثابت", 468),
     )),
 ]
 
@@ -301,6 +354,19 @@ _TREASURY_VIEW = {
     "cheques.view", "treasury.reports", "treasury.calendar",
 }
 
+#: Read-only HR access: employee files, contracts and reports.
+_HR_VIEW = {
+    "hr.employees.view", "hr.reports", "hr.print", "payroll.view",
+    "payroll.payslip.view", "payroll.reports", "payroll.print",
+    "assets.view", "assets.reports", "assets.print",
+}
+
+#: Day-to-day payroll work: attendance, leave requests, payroll calculation.
+_PAYROLL_ENTRY = {
+    "payroll.calculate", "payroll.loans.manage", "hr.attendance.record",
+    "hr.attendance.amend", "hr.leave.request", "hr.overtime.approve",
+}
+
 #: Day-to-day treasury work: registering vouchers, cheques and settlements.
 _TREASURY_ENTRY = _TREASURY_VIEW | {
     "receipts.create", "payments.create", "cheques.create", "cheques.change_status",
@@ -328,8 +394,13 @@ DEFAULT_ROLE_TEMPLATES: tuple[RoleTemplate, ...] = (
                      "گزارش‌های حسابداری؛ تأیید و ثبت نهایی سند با مدیر سیستم است"),
         permissions=frozenset(
             _PHASE1_BASIC | {"audit.view"} | _ACCOUNTING_ENTRY | _COMMERCE_VIEW
-            | _TREASURY_ENTRY
-            | {"purchase.order", "purchase.invoice", "sales.order", "sales.invoice"}
+            | _TREASURY_ENTRY | _HR_VIEW | _PAYROLL_ENTRY
+            | {"hr.employees.create", "hr.employees.edit", "hr.employees.sensitive",
+               "hr.contracts.manage", "hr.org.edit", "hr.leave.approve",
+               "payroll.settings", "payroll.approve", "payroll.pay",
+               "assets.register", "assets.transfer", "assets.dispose",
+               "assets.depreciate", "assets.post_depreciation", "assets.maintenance",
+               "purchase.order", "purchase.invoice", "sales.order", "sales.invoice"}
         ),
         sort_order=20,
     ),
@@ -350,7 +421,15 @@ DEFAULT_ROLE_TEMPLATES: tuple[RoleTemplate, ...] = (
                "dimensions.edit", "accounting.settings",
                "bank_accounts.edit", "cash_boxes.edit", "cheque_books.manage",
                "vouchers.approve", "vouchers.post", "cheques.cancel",
-               "reconciliation.approve"}),
+               "reconciliation.approve",
+               "payroll.view", "payroll.payslip.view", "payroll.calculate",
+               "payroll.approve", "payroll.pay", "payroll.settings",
+               "payroll.reports", "payroll.print", "payroll.loans.manage",
+               "hr.employees.view", "hr.employees.sensitive", "hr.contracts.manage",
+               "hr.reports", "hr.print", "hr.leave.approve", "hr.overtime.approve",
+               "assets.view", "assets.reports", "assets.print", "assets.depreciate",
+               "assets.post_depreciation", "assets.dispose", "assets.register",
+               "assets.transfer"}),
         sort_order=30,
     ),
     RoleTemplate(
@@ -384,7 +463,7 @@ DEFAULT_ROLE_TEMPLATES: tuple[RoleTemplate, ...] = (
         title_fa="مشاهده‌گر",
         description="مشاهده داشبورد، گزارش‌های حسابداری و اطلاعات بازرگانی بدون هیچ تغییری",
         permissions=frozenset(_PHASE1_BASIC | _ACCOUNTING_VIEW | _COMMERCE_VIEW
-                              | _TREASURY_VIEW),
+                              | _TREASURY_VIEW | _HR_VIEW),
         sort_order=60,
     ),
     RoleTemplate(
@@ -398,6 +477,32 @@ DEFAULT_ROLE_TEMPLATES: tuple[RoleTemplate, ...] = (
             | {"bank_accounts.edit", "cash_boxes.edit", "cheque_books.manage"}
         ),
         sort_order=35,
+    ),
+    RoleTemplate(
+        code="hr_manager",
+        title_fa="مدیر منابع انسانی",
+        description=("مدیریت پروندهٔ کارکنان، ساختار سازمانی، قراردادها، حضور و غیاب، "
+                     "مرخصی و مأموریت؛ محاسبهٔ حقوق را انجام می‌دهد اما تأیید و پرداخت "
+                     "حقوق با مدیر مالی است"),
+        permissions=frozenset(
+            _PHASE1_BASIC | _HR_VIEW | _PAYROLL_ENTRY
+            | {"hr.employees.create", "hr.employees.edit", "hr.employees.sensitive",
+               "hr.contracts.manage", "hr.org.edit", "hr.leave.approve",
+               "payroll.settings"}
+        ),
+        sort_order=36,
+    ),
+    RoleTemplate(
+        code="asset_keeper",
+        title_fa="مسئول دارایی‌های ثابت",
+        description=("ثبت دارایی، انتقال، تغییر امانت‌دار، تعمیر و نگهداری و محاسبهٔ "
+                     "استهلاک؛ فروش/کنارگذاری و ثبت نهایی استهلاک با مدیر مالی است"),
+        permissions=frozenset(
+            _PHASE1_BASIC | _HR_VIEW
+            | {"assets.register", "assets.transfer", "assets.maintenance",
+               "assets.depreciate", "hr.employees.view"}
+        ),
+        sort_order=37,
     ),
 )
 

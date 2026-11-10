@@ -10,6 +10,9 @@ purchase and sale invoices.
 Phase 4 adds the treasury core: bank accounts, cash boxes, receipts, payments,
 transfers, cheque lifecycle, bank reconciliation, settlements and treasury
 reporting.
+Phase 5 adds human resources, attendance/leave, a versioned payroll engine,
+employee loans and advances, payroll payment batches, fixed assets and
+depreciation - wired into the phase 2-4 accounting, commerce and treasury layers.
 
 The Python package keeps the historical ``pars_erp`` name: it is an internal
 identifier (imports, database file name, entry point) and renaming it would break
@@ -21,7 +24,7 @@ from __future__ import annotations
 
 APP_NAME_DEFAULT = "زرین هرمز"
 APP_NAME_EN = "Zarrin Hormoz"
-__version__ = "0.4.0"
-__phase__ = 4
+__version__ = "0.5.0"
+__phase__ = 5
 
 __all__ = ["APP_NAME_DEFAULT", "APP_NAME_EN", "__version__", "__phase__"]

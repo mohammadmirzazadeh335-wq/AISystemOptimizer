@@ -100,7 +100,8 @@ class TestSettings:
     def test_grouping_for_ui(self) -> None:
         grouped = SettingsService.definitions_by_group()
         assert set(grouped) == {"general", "appearance", "security", "backup",
-                                "accounting", "commerce", "treasury"}
+                                "accounting", "commerce", "treasury",
+                                "hr", "payroll", "assets"}
         assert any(d.key == "app_name" for d in grouped["general"])
 
 

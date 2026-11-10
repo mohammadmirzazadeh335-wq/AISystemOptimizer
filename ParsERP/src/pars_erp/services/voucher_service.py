@@ -393,6 +393,80 @@ class VoucherService:
                 session=session)
             return self._payment_row(session, payment)
 
+    def create_receipt_in_session(self, session, ctx: SecurityContext | None,
+                                  data: ReceiptInput) -> Receipt:
+        """Create a receipt row inside the caller's transaction (see payments)."""
+        receipt = Receipt(number=receipt_number(session, data.receipt_date))
+        self._apply_receipt(session, receipt, data, ctx)
+        session.add(receipt)
+        session.flush()
+        self._store_allocations(session, receipt, VOUCHER_RECEIPT, data, ctx)
+        self.audit.log_audit(
+            ctx=ctx, entity_type="receipt", entity_id=receipt.id, action="create",
+            summary_fa=f"ثبت رسید دریافت {receipt.number}",
+            after={"amount": str(receipt.amount), "fund": receipt.fund_kind},
+            session=session)
+        return receipt
+
+    def post_receipt_in_session(self, session, receipt: Receipt,
+                                ctx: SecurityContext | None) -> Receipt:
+        """Post a document created by another module (asset sale, ...).
+
+        The business document was already authorised upstream (its own approval
+        step), so a still-draft treasury row is approved here - explicitly and
+        audited - instead of being posted straight from draft.
+        """
+        if receipt.status == TC.STATUS_POSTED:
+            return receipt
+        if receipt.status == TC.STATUS_DRAFT:
+            receipt.status = TC.STATUS_APPROVED
+            receipt.approved_by_id = getattr(ctx, "user_id", None)
+            session.flush()
+        validate_status(receipt.status, TC.STATUS_POSTED)
+        self._post_receipt_in_session(session, receipt, ctx)
+        return receipt
+
+    # ------------------------------------------------- payroll integration API
+    def create_payment_in_session(self, session, ctx: SecurityContext | None,
+                                  data: PaymentInput) -> Payment:
+        """Create a payment row inside the **caller's** transaction.
+
+        Used by the payroll payment service: paying a salary batch must create the
+        treasury document, post its journal, mark every payslip and update the run
+        in one atomic transaction. The caller has already checked its own
+        permission (``payroll.pay``); this method performs the same validation and
+        audit trail as :meth:`create_payment` but does not commit.
+        """
+        payment = Payment(number=payment_number(session, data.payment_date))
+        self._apply_payment(session, payment, data, ctx)
+        session.add(payment)
+        session.flush()
+        self._store_allocations(session, payment, VOUCHER_PAYMENT, data, ctx)
+        self.audit.log_audit(
+            ctx=ctx, entity_type="payment", entity_id=payment.id, action="create",
+            summary_fa=f"ثبت سند پرداخت {payment.number}",
+            after={"amount": str(payment.amount), "fund": payment.fund_kind},
+            session=session)
+        return payment
+
+    def post_payment_in_session(self, session, payment: Payment,
+                                ctx: SecurityContext | None) -> Payment:
+        """Post a payment created with :meth:`create_payment_in_session`.
+
+        A draft row is approved first (the owning document - a payslip batch or a
+        loan - was authorised by its own permission); the transition and the audit
+        row are the same ones the UI uses.
+        """
+        if payment.status == TC.STATUS_POSTED:
+            return payment
+        if payment.status == TC.STATUS_DRAFT:
+            payment.status = TC.STATUS_APPROVED
+            payment.approved_by_id = getattr(ctx, "user_id", None)
+            session.flush()
+        validate_status(payment.status, TC.STATUS_POSTED)
+        self._post_payment_in_session(session, payment, ctx)
+        return payment
+
     def update_payment(self, ctx: SecurityContext | None, payment_id: int,
                        data: PaymentInput) -> VoucherRow:
         require_permission(ctx, "payments.create")
