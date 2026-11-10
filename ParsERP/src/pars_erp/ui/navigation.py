@@ -158,12 +158,53 @@ NAV_GROUPS: tuple[NavGroup, ...] = (
         NavItem("acc_settings", "تنظیمات حسابداری", "settings", "accounting.settings",
                 "accounting", description_fa="الگوی کدینگ و گردش تأیید"),
     )),
+    NavGroup("hr", "منابع انسانی", (
+        NavItem("hr_employees", "کارکنان", "employees", "hr.employees.view", "hr",
+                description_fa="پروندهٔ پرسنلی، سابقهٔ تغییرات، اطلاعات شغلی و بانکی"),
+        NavItem("hr_org", "ساختار سازمانی", "org", "hr.employees.view", "hr",
+                description_fa="درخت شرکت/شعبه/واحد، مدیر هر واحد و انتقال سازمانی"),
+        NavItem("hr_contracts", "قراردادها", "contract", "hr.contracts.manage", "hr",
+                description_fa="ثبت، تمدید، اصلاح، خاتمه و هشدار انقضای قرارداد"),
+        NavItem("hr_attendance", "حضور و غیاب", "attendance", "hr.attendance.record", "hr",
+                description_fa="ثبت روزانه، اصلاح با دلیل، ورود از فایل و شیفت‌ها"),
+        NavItem("hr_leave", "مرخصی، مأموریت و اضافه‌کاری", "leave", "hr.leave.request",
+                "hr", description_fa="درخواست، تأیید، رد، ماندهٔ مرخصی و ورودی حقوق"),
+        NavItem("hr_reports", "گزارش‌های منابع انسانی", "reports", "hr.reports", "hr",
+                description_fa="کارکنان، قرارداد، حضور، تأخیر، مرخصی و مأموریت"),
+    )),
+    NavGroup("payroll", "حقوق و دستمزد", (
+        NavItem("payroll_settings", "تنظیمات حقوق", "settings", "payroll.settings",
+                "payroll",
+                description_fa="نسخه‌های تاریخ‌دار نرخ بیمه، مالیات، مزایا و ضرایب"),
+        NavItem("payroll_runs", "دوره‌های حقوق", "payroll", "payroll.view", "payroll",
+                description_fa="ایجاد دوره، محاسبه، تأیید، ثبت سند و لغو"),
+        NavItem("payroll_payslips", "فیش حقوقی", "payslip", "payroll.payslip.view",
+                "payroll", description_fa="فیش هر دوره، اقلام محاسبه و چاپ با PDF"),
+        NavItem("payroll_payments", "پرداخت حقوق", "payment", "payroll.pay", "payroll",
+                description_fa="دستهٔ پرداخت، فایل بانکی، پرداخت و ردیف ناموفق"),
+        NavItem("payroll_loans", "وام و مساعده", "loans", "payroll.loans.manage",
+                "payroll", description_fa="درخواست، تأیید، پرداخت، اقساط و تسویه"),
+        NavItem("payroll_reports", "گزارش‌های حقوق", "reports", "payroll.reports",
+                "payroll", description_fa="دفتر حقوق، ریز اقلام، پرداخت‌ها و ماندهٔ وام"),
+    )),
+    NavGroup("assets", "دارایی‌های ثابت", (
+        NavItem("assets_categories", "دسته‌های دارایی", "assets", "assets.view", "assets",
+                description_fa="دسته‌بندی، عمر مفید، روش استهلاک و سه حساب هر دسته"),
+        NavItem("assets_register", "دارایی‌ها", "assets", "assets.view", "assets",
+                description_fa="ثبت دارایی، انتقال، امانت‌داری، سیاست استهلاک و تعمیر"),
+        NavItem("assets_depreciation", "استهلاک", "depreciation", "assets.depreciate",
+                "assets", description_fa="پیش‌نمایش، محاسبهٔ ماهانه، تأیید و ثبت سند"),
+        NavItem("assets_disposals", "فروش و کنارگذاری", "transfer", "assets.view",
+                "assets", description_fa="واگذاری دارایی با سند فروش و فهرست تعمیرات"),
+        NavItem("asset_reports", "گزارش‌های دارایی", "reports", "assets.reports", "assets",
+                description_fa="فهرست دارایی، دسته، محل، امانت‌دار، استهلاک و واگذاری"),
+    )),
 )
 
 #: Menu order: the accounting section sits directly under the overview because it
 #: is where an accountant works all day.
-_GROUP_ORDER = ("overview", "commerce", "treasury", "accounting", "administration",
-                "system")
+_GROUP_ORDER = ("overview", "commerce", "treasury", "accounting", "hr", "payroll",
+                "assets", "administration", "system")
 NAV_GROUPS: tuple[NavGroup, ...] = tuple(
     sorted(NAV_GROUPS, key=lambda group: (
         _GROUP_ORDER.index(group.key) if group.key in _GROUP_ORDER else len(_GROUP_ORDER))))

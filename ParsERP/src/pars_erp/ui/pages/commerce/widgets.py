@@ -19,9 +19,13 @@ class PickCombo(QComboBox):
             self.addItem(placeholder, None)
         for identifier, label in choices:
             self.addItem(label, identifier)
-        self.blockSignals(False)
+        # restoring the previous value must not re-emit ``currentIndexChanged``:
+        # a screen that reloads its combo while refreshing would otherwise loop.
         if current is not None:
-            self.set_value(current)
+            index = self.findData(current)
+            if index >= 0:
+                self.setCurrentIndex(index)
+        self.blockSignals(False)
 
     def value(self) -> int | None:
         data = self.currentData()

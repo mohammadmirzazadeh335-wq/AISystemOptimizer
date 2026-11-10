@@ -344,6 +344,24 @@ class AssetService:
     def asset_choices(self, ctx: SecurityContext | None) -> list[tuple[int, str]]:
         return [(row.id, row.display) for row in self.list_assets(ctx)]
 
+    #: every editable field of an asset, in ``AssetInput`` terms (edit form)
+    ASSET_FORM_FIELDS: tuple[str, ...] = (
+        "code", "title_fa", "category_id", "serial_no", "model", "manufacturer",
+        "purchase_date", "in_service_date", "supplier_detail_id", "invoice_id",
+        "location", "custodian_employee_id", "org_unit_id", "purchase_price",
+        "related_costs", "initial_value", "salvage_value", "useful_life_months",
+        "method", "declining_rate", "total_units", "asset_account_id",
+        "accumulated_account_id", "expense_account_id", "status",
+        "depreciation_start_override", "notes", "attachment_path",
+    )
+
+    def asset_form_data(self, ctx: SecurityContext | None, asset_id: int) -> dict:
+        """Raw editable values of one asset (used by the edit form)."""
+        require_permission(ctx, "assets.view")
+        with self.db.session_scope() as session:
+            asset = self._get_asset(session, asset_id)
+            return {field: getattr(asset, field, None) for field in self.ASSET_FORM_FIELDS}
+
     def register(self, ctx: SecurityContext | None, data: AssetInput) -> AssetRow:
         require_permission(ctx, "assets.register")
         with self.db.session_scope() as session:

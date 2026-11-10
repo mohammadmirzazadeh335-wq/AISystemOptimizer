@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QItemSelectionModel, Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -90,6 +90,30 @@ class PageBase(QWidget):
 
     def can(self, permission: str) -> bool:
         return self.ctx.has(permission)
+
+    def set_rows(self, table, rows) -> None:
+        """Reload a table while keeping the row the user had selected.
+
+        Every phase-5 screen reloads after an action (calculate, approve, post,
+        transfer...). Losing the selection there means the next button click has
+        no target, so the selected ``id`` is restored when it still exists.
+        """
+        from pars_erp.ui.widgets.table import DataTable
+
+        current = table.current_row() if isinstance(table, DataTable) else None
+        identifier = getattr(current, "id", None)
+        table.set_rows(rows)
+        if identifier is None:
+            return
+        for index, row in enumerate(rows):
+            if getattr(row, "id", None) == identifier:
+                model_index = table.model.index(index, 0)
+                table.setCurrentIndex(model_index)
+                table.selectionModel().select(
+                    model_index,
+                    QItemSelectionModel.SelectionFlag.ClearAndSelect
+                    | QItemSelectionModel.SelectionFlag.Rows)
+                return
 
 
 class CardPanel(QFrame):

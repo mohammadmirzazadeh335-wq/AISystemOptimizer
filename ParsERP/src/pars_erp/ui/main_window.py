@@ -76,6 +76,23 @@ from pars_erp.ui.pages.treasury.settings_page import TreasurySettingsPage
 from pars_erp.ui.pages.treasury.settlements_page import SettlementsPage
 from pars_erp.ui.pages.treasury.transfers_page import TransfersPage
 from pars_erp.ui.pages.treasury.vouchers_page import VouchersPage
+from pars_erp.ui.pages.assets.assets_page import AssetsPage
+from pars_erp.ui.pages.assets.categories_page import AssetCategoriesPage
+from pars_erp.ui.pages.assets.depreciation_page import DepreciationPage
+from pars_erp.ui.pages.assets.disposals_page import AssetDisposalsPage
+from pars_erp.ui.pages.assets.reports_page import AssetReportsPage
+from pars_erp.ui.pages.hr.attendance_page import AttendancePage
+from pars_erp.ui.pages.hr.contracts_page import ContractsPage
+from pars_erp.ui.pages.hr.employees_page import EmployeesPage
+from pars_erp.ui.pages.hr.org_page import OrgStructurePage
+from pars_erp.ui.pages.hr.reports_page import HRReportsPage
+from pars_erp.ui.pages.hr.requests_page import LeaveMissionOvertimePage
+from pars_erp.ui.pages.payroll.loans_page import LoansPage
+from pars_erp.ui.pages.payroll.payments_page import PayrollPaymentsPage
+from pars_erp.ui.pages.payroll.payslips_page import PayslipsPage
+from pars_erp.ui.pages.payroll.reports_page import PayrollReportsPage
+from pars_erp.ui.pages.payroll.runs_page import PayrollRunsPage
+from pars_erp.ui.pages.payroll.settings_page import PayrollSettingsPage
 from pars_erp.ui.pages.dashboard_page import DashboardPage
 from pars_erp.ui.pages.roles_page import RolesPage
 from pars_erp.ui.pages.settings_page import SettingsPage
@@ -517,6 +534,40 @@ class MainWindow(QMainWindow):
             page = FundFlowPage(**common)
         elif key == "treasury_reports":
             page = TreasuryReportsPage(**common)
+        elif key == "hr_employees":
+            page = EmployeesPage(**common)
+        elif key == "hr_org":
+            page = OrgStructurePage(**common)
+        elif key == "hr_contracts":
+            page = ContractsPage(**common)
+        elif key == "hr_attendance":
+            page = AttendancePage(**common)
+        elif key == "hr_leave":
+            page = LeaveMissionOvertimePage(**common)
+        elif key == "hr_reports":
+            page = HRReportsPage(**common)
+        elif key == "payroll_settings":
+            page = PayrollSettingsPage(**common)
+        elif key == "payroll_runs":
+            page = PayrollRunsPage(**common)
+        elif key == "payroll_payslips":
+            page = PayslipsPage(**common)
+        elif key == "payroll_payments":
+            page = PayrollPaymentsPage(**common)
+        elif key == "payroll_loans":
+            page = LoansPage(**common)
+        elif key == "payroll_reports":
+            page = PayrollReportsPage(**common)
+        elif key == "assets_categories":
+            page = AssetCategoriesPage(**common)
+        elif key == "assets_register":
+            page = AssetsPage(**common)
+        elif key == "assets_depreciation":
+            page = DepreciationPage(**common)
+        elif key == "assets_disposals":
+            page = AssetDisposalsPage(**common)
+        elif key == "asset_reports":
+            page = AssetReportsPage(**common)
         elif key == "treasury_settings":
             page = TreasurySettingsPage(**common)
         elif key == "users":

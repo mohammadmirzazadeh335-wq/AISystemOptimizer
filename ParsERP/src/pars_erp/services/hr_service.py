@@ -81,6 +81,8 @@ class OrgUnitRow:
     employees_count: int
     is_active: bool
     description: str
+    sort_order: int = 0
+    cost_center_id: int | None = None
 
     @property
     def display(self) -> str:
@@ -397,6 +399,39 @@ class HRService:
                     Employee.mobile.ilike(like), Employee.job_title.ilike(like)))
             return [self._employee_row(session, row, ctx)
                     for row in session.execute(query).scalars()]
+
+    #: every editable field of an employee, in ``EmployeeInput`` terms. The edit
+    #: form needs the raw values (father name, tax file number, ...) which are not
+    #: part of the list row; sensitive ones are only returned to a user who may
+    #: see them, otherwise they come back masked as ``None``.
+    EMPLOYEE_FORM_FIELDS: tuple[str, ...] = (
+        "code", "first_name", "last_name", "person_id", "father_name", "national_id",
+        "birth_date", "birth_place", "gender", "marital_status", "children_count",
+        "phone", "mobile", "email", "address", "emergency_contact", "hire_date",
+        "end_date", "employment_type", "collaboration_status", "org_unit_id",
+        "job_title", "position", "manager_id", "base_salary", "insurance_no",
+        "tax_file_no", "bank_name", "bank_account_no", "iban", "user_id",
+        "attachment_path", "notes", "is_active",
+    )
+    SENSITIVE_EMPLOYEE_FIELDS: frozenset[str] = frozenset(
+        {"national_id", "base_salary", "bank_account_no", "iban", "tax_file_no",
+         "insurance_no"})
+
+    def employee_form_data(self, ctx: SecurityContext | None, employee_id: int) -> dict:
+        """Raw editable values of one employee (permission-checked, masked)."""
+        require_permission(ctx, "hr.employees.view")
+        with self.db.session_scope() as session:
+            employee = self._get_employee(session, employee_id)
+            allowed = ctx is not None and ctx.has("hr.employees.sensitive")
+            data = {}
+            for field in self.EMPLOYEE_FORM_FIELDS:
+                value = getattr(employee, field, None)
+                if field in self.SENSITIVE_EMPLOYEE_FIELDS and not allowed:
+                    value = None
+                data[field] = value
+            data["full_name"] = employee.full_name
+            data["sensitive_visible"] = allowed
+            return data
 
     def get_employee(self, ctx: SecurityContext | None, employee_id: int) -> EmployeeRow:
         require_permission(ctx, "hr.employees.view")
@@ -920,7 +955,9 @@ class HRService:
             manager_employee_id=unit.manager_employee_id,
             manager_name=employee_full_name(manager), path=path,
             depth=max(0, path.count("/")), employees_count=count,
-            is_active=unit.is_active, description=unit.description or "")
+            is_active=unit.is_active, description=unit.description or "",
+            sort_order=int(getattr(unit, "sort_order", 0) or 0),
+            cost_center_id=getattr(unit, "cost_center_id", None))
 
     def _employee_row(self, session: Session, employee: Employee,
                       ctx: SecurityContext | None) -> EmployeeRow:
