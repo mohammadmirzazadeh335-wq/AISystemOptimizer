@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+
+# Local runtime data (never commit a customer database or backups)
+data/
+*.db
+*.db-wal
+*.db-shm
+backups/
+*.log
+.pytest_cache/
+
+# Environment overrides
+.env
+config.local.toml
