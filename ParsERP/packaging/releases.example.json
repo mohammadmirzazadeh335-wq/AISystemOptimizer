@@ -1,0 +1,23 @@
+{
+  "_comment": [
+    "نمونهٔ مانیفست به‌روزرسانی زرین هرمز. هیچ مقدار واقعی نسخه یا هش در آن نیست.",
+    "این فایل را با packaging/make_release_manifest.py بسازید تا هش و اندازه از خود بسته محاسبه شود.",
+    "update_source در تنظیمات می‌تواند مسیر فایل، پوشه یا نشانی https باشد."
+  ],
+  "format": "pars-erp-update/1",
+  "channel": "stable",
+  "releases": [
+    {
+      "version": "0.7.1",
+      "channel": "stable",
+      "released_at": "1405-08-20",
+      "notes_fa": ["نمونهٔ تغییرات — با تغییرات واقعی جایگزین شود"],
+      "url": "https://updates.example.invalid/ZarrinHormoz-0.7.1-setup.exe",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size_bytes": 0,
+      "schema_revision": "0006_phase7_alerts",
+      "min_version": "0.6.0",
+      "signature": "<base64 Ed25519 — با کلید خصوصی واقعی ساخته شود>"
+    }
+  ]
+}

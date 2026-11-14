@@ -1,0 +1,8 @@
+# Runtime dependencies of زرین هرمز (Zarrin Hormoz) — version 0.7.0.
+# Python 3.11+ required. Install with:  pip install -r requirements.txt
+SQLAlchemy>=2.0,<3          # ORM + Core, dialect-agnostic data access
+alembic>=1.13,<2            # schema migrations
+argon2-cffi>=23.1,<26       # Argon2id password hashing
+PySide6>=6.6,<7             # Qt 6 desktop UI
+openpyxl>=3.1,<4            # Excel export of invoices and reports
+cryptography>=42,<47        # Ed25519 verification of update packages

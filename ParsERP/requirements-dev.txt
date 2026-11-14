@@ -1,0 +1,5 @@
+# Development / test dependencies (the shipped app needs only requirements.txt).
+-r requirements.txt
+pytest>=8
+ruff>=0.6                 # linting (configuration in pyproject.toml)
+pytest-cov>=5             # `pytest --cov=pars_erp --cov-report=term-missing`
