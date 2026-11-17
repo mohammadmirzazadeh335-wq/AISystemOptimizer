@@ -33,3 +33,12 @@ packages/
 # It is a 66 MB self-contained binary; committing it would bloat every clone.
 portable/*.exe
 portable/*.pdb
+
+# AI WordPress Copilot test environment (npm + playground cache)
+tools/wp-test/node_modules/
+tools/wp-test/package-lock.json
+tools/wp-test/.playground/
+tools/wp-test/*.log
+tools/wp-test/.test-credentials
+tools/wp-test/__pycache__/
+ai-wordpress-copilot/.test-credentials

@@ -6,6 +6,13 @@ It scans your machine, separates what genuinely costs resources from what Window
 proposes only changes it can justify, asks before acting, verifies the result, and tells you
 honestly when nothing can be improved.
 
+> **New in this repo — [AI WordPress Copilot](ai-wordpress-copilot/):** a professional, modular
+> WordPress plugin (PHP/OOP + REST + RTL Persian/English admin UI) implementing a real AI agent
+> with tool calling, SEO analysis, site context, memory, activity log, approvals and rollback.
+> See [ai-wordpress-copilot/docs/REPORT.md](ai-wordpress-copilot/docs/REPORT.md) for the full
+> delivery report and [ai-wordpress-copilot/docs/TESTING.md](ai-wordpress-copilot/docs/TESTING.md)
+> for the end-to-end test suite (64/64 passing against a real WordPress install).
+
 ```
 SystemScanner → Rules engine → Risk analyzer → (optional local AI) → Planner
              → Safety layer → Safe executor → Verification → Report

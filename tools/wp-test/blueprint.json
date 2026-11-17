@@ -1,0 +1,8 @@
+{
+  "steps": [
+    {
+      "step": "activatePlugin",
+      "pluginPath": "ai-wordpress-copilot/ai-wordpress-copilot.php"
+    }
+  ]
+}
