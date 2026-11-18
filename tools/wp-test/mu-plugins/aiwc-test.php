@@ -135,6 +135,45 @@ add_action(
 			)
 		);
 
+		// TEMPORARY test route: set an option (test fixtures only, e.g. elementor_version).
+		register_rest_route(
+			'aiwc-test/v1',
+			'/set-option',
+			array(
+				'methods'             => 'POST',
+				'callback'            => function ( $request ) {
+					$key   = (string) $request->get_param( 'key' );
+					$value = $request->get_param( 'value' );
+					update_option( $key, $value );
+					return array( 'ok' => true, 'key' => $key, 'value' => get_option( $key ) );
+				},
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		// TEMPORARY test route: execute a real tool through the registry.
+		register_rest_route(
+			'aiwc-test/v1',
+			'/exec-tool',
+			array(
+				'methods'             => 'POST',
+				'callback'            => function ( $request ) {
+					$name = (string) $request->get_param( 'name' );
+					$args = (array) $request->get_param( 'args' );
+					// Run as the first administrator (capability checks are user-based).
+					$users = get_users( array( 'role' => 'administrator', 'number' => 1, 'orderby' => 'ID', 'order' => 'ASC' ) );
+					if ( $users ) {
+						wp_set_current_user( $users[0]->ID );
+					}
+					$plugin  = aiwc();
+					$registry = $plugin->get( 'registry' );
+					$result = $registry->execute( $name, $args, array( 'source' => 'test', 'command' => 'exec-tool' ) );
+					return $result;
+				},
+				'permission_callback' => '__return_true',
+			)
+		);
+
 		// TEMPORARY debug route: exercise chat_stream internals and report Throwables.
 		register_rest_route(
 			'aiwc-test/v1',

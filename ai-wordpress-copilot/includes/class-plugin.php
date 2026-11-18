@@ -89,6 +89,7 @@ class Plugin {
 		$registry->register_group( new Ai\Tools\Core_Tools( $this ) );
 		$registry->register_group( new Ai\Tools\Content_Tools( $this ) );
 		$registry->register_group( new Ai\Tools\Design_Tools( $this ) );
+		$registry->register_group( new Ai\Tools\Builder_Tools( $this ) );
 		$registry->register_group( new Ai\Tools\Seo_Tools( $this ) );
 		$registry->register_group( new Ai\Tools\Woo_Tools( $this ) );
 		$registry->register_group( new Ai\Tools\System_Tools( $this ) );

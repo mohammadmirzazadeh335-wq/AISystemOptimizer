@@ -167,6 +167,46 @@ function respondTo(res, messages) {
 
   const text = lastUserText(messages);
 
+  // --- Website Builder patterns (PHASE 5) ---
+  if (/(رنگ اصلی|set design color|update design system|طراحی را.*رنگ)/i.test(text)) {
+    return completion(res, {
+      role: 'assistant',
+      content: null,
+      tool_calls: [
+        toolCall('call_ds_update', 'update_design_system', {
+          colors: { primary: '#1e3a5f', accent: '#d97706' },
+        }),
+      ],
+    });
+  }
+  if (/((show|get) design system|دریافت سیستم طراحی)/i.test(text)) {
+    return completion(res, {
+      role: 'assistant',
+      content: null,
+      tool_calls: [toolCall('call_ds_get', 'get_design_system', {})],
+    });
+  }
+  if (/(build landing|لندینگ بساز|build page|build website|بساز.*فروشگاه)/i.test(text)) {
+    return completion(res, {
+      role: 'assistant',
+      content: null,
+      tool_calls: [
+        toolCall('call_build', 'build_page', {
+          title: 'صفحه لندینگ تست',
+          slug: 'test-landing',
+          sections: [
+            { type: 'hero', content: { heading: 'فروشگاه مدرن', text: 'بهترین محصولات با بهترین قیمت', button_text: 'خرید', button_url: '#products' } },
+            { type: 'features', content: {} },
+            { type: 'stats', content: {} },
+            { type: 'pricing', content: {} },
+            { type: 'faq', content: {} },
+            { type: 'cta', content: {} },
+          ],
+        }),
+      ],
+    });
+  }
+
   if (/(create page|ایجاد صفحه|بساز|بسازید|create a page|slow)/i.test(text)) {
     return completion(res, {
       role: 'assistant',
