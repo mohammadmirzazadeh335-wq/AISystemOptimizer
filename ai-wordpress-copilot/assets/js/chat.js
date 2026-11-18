@@ -83,6 +83,22 @@
         resolveApproval(parseInt(btn.dataset.reject, 10), false, btn);
       });
     });
+    // Direct rollback buttons on tool steps.
+    el.querySelectorAll('[data-rollback]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (!confirm(A.t('confirm_delete'))) return;
+        btn.disabled = true;
+        A.api('snapshots/' + btn.dataset.rollback + '/restore', { method: 'POST' })
+          .then(function (res) {
+            A.toast(A.t('rollback_done'));
+            if (state.activeId) loadMessages(state.activeId);
+          })
+          .catch(function (err) {
+            btn.disabled = false;
+            A.toast(err.message, true);
+          });
+      });
+    });
 
     el.scrollTop = el.scrollHeight;
   }
@@ -112,8 +128,14 @@
     if (payload.data !== undefined && payload.data !== null) {
       html += '<div class="aiwc-step-detail">' + A.esc(JSON.stringify(payload.data, null, 2).slice(0, 1200)) + '</div>';
     }
+    if (payload.data && payload.data.url) {
+      html += '<div style="margin-top:6px"><a class="aiwc-btn sm" href="' + A.esc(payload.data.url) + '" target="_blank" rel="noopener">' + A.esc(A.t('preview')) + '</a></div>';
+    }
     if (payload.snapshot_id) {
-      html += '<div style="margin-top:6px"><span class="aiwc-badge info">snapshot #' + payload.snapshot_id + '</span></div>';
+      html += '<div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+        '<span class="aiwc-badge info">snapshot #' + payload.snapshot_id + '</span>' +
+        '<button class="aiwc-btn danger sm" data-rollback="' + payload.snapshot_id + '">' + A.esc(A.t('rollback')) + '</button>' +
+        '</div>';
     }
     if (payload.pending && payload.approval_id) {
       html += '<div class="actions">' +
@@ -153,6 +175,13 @@
     }).catch(function (err) { A.toast(err.message, true); });
   }
 
+  function setBusyUI(busy) {
+    var send = document.getElementById('aiwc-send');
+    var stop = document.getElementById('aiwc-stop');
+    if (send) send.style.display = busy ? 'none' : '';
+    if (stop) stop.style.display = busy ? '' : 'none';
+  }
+
   function sendMessage() {
     var input = document.getElementById('aiwc-chat-input');
     var text = (input.value || '').trim();
@@ -160,6 +189,7 @@
 
     state.busy = true;
     input.value = '';
+    setBusyUI(true);
     state.messages.push({ role: 'user', content: text, status: 'ok' });
     renderMessages();
 
@@ -179,6 +209,7 @@
     }).then(function (res) {
       thinking.remove();
       state.busy = false;
+      setBusyUI(false);
       if (res.conversation_id) {
         state.activeId = res.conversation_id;
       }
@@ -192,6 +223,7 @@
     }).catch(function (err) {
       thinking.remove();
       state.busy = false;
+      setBusyUI(false);
       state.messages.push({
         role: 'assistant',
         content: '**' + A.t('error') + ':** ' + err.message,
@@ -234,6 +266,7 @@
       '    <div class="aiwc-chat-foot">' +
       '      <textarea id="aiwc-chat-input" placeholder="' + A.esc(A.t('chat_placeholder')) + '" rows="2"></textarea>' +
       '      <button class="aiwc-btn primary" id="aiwc-send">' + A.esc(A.t('send')) + '</button>' +
+      '      <button class="aiwc-btn danger" id="aiwc-stop" style="display:none">&#9632; ' + A.esc(A.t('cancel')) + '</button>' +
       '    </div>' +
       '  </div>' +
       '</div>';
@@ -245,6 +278,11 @@
       document.getElementById('aiwc-chat-input').focus();
     });
     document.getElementById('aiwc-send').addEventListener('click', sendMessage);
+    document.getElementById('aiwc-stop').addEventListener('click', function () {
+      A.api('chat/cancel', { method: 'POST' })
+        .then(function () { A.toast(A.t('cancel')); })
+        .catch(function (err) { A.toast(err.message, true); });
+    });
     document.getElementById('aiwc-chat-input').addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();

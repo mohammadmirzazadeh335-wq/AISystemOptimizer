@@ -42,15 +42,16 @@
 | صف تأیید عملیات (pending) + اجرای واقعی پس از تأیید | ✅ تست E2E |
 | رد عملیات و ثبت در تاریخچه | ✅ تست E2E |
 
-### ابزارهای اجرایی (۳۰+ ابزار در ۶ گروه)
+### ابزارهای اجرایی (۳۲+ ابزار در ۷ گروه)
 | گروه | ابزارها | وضعیت |
 |------|---------|-------|
-| هسته | site_overview، list/get/search_content، users_list، plugins_info، theme_info، settings_inspect، update_site_option (سفیدلیست)، get_menus | ✅ |
+| هسته | site_overview، list/get/search_content، users_list، **users_manage_role** (تغییر نقش کاربر — ریسک critical با تأیید اجباری)، plugins_info، theme_info، settings_inspect، update_site_option (سفیدلیست)، get_menus | ✅ |
 | محتوا | create_page، update_page (replace/append/prepend)، delete_page (سطل زباله/دائمی)، create_post (دسته/برچسب)، update_post، set_content_status، media_list، update_media_alt | ✅ |
-| طراحی | create_design_section (بلوک قابل استفاده مجدد + افزودن به صفحه)، update_header_footer (قالب بلوکی + fallback ویجت)، update/get_custom_css، create_menu، add_menu_item، create_elementor_section، get_design_settings | ✅ (Elementor به‌صورت شرطی — تست نشده، پایین را ببینید) |
+| طراحی | create_design_section (بلوک قابل استفاده مجدد + افزودن به صفحه)، update_header_footer (قالب بلوکی + fallback ویجت)، update/get_custom_css، create_menu، add_menu_item، create_elementor_section، get_design_settings | ✅ (Elementor تست‌شده — پایین) |
 | سئو | seo_analyze، seo_update_meta (یکپارچه با Yoast/RankMath)، seo_analyze_site (صف/زنجیره)، seo_get_site_report، seo_suggest_improvements | ✅ |
-| ووکامرس | woo_product_create/update/list، woo_report | ✅ کد کامل — تست نشده (پایین را ببینید) |
+| ووکامرس | woo_product_create/update/list، woo_report | ✅ تست‌شده روی WooCommerce واقعی (پایین) |
 | سیستم | rollback_change، list_snapshots، memory_save/list/forget، jobs_list | ✅ |
+| عملکرد | **performance_analyze** (بررسی واقعی: حجم/زمان صفحه، تعداد اسکریپت/استایل/تصویر، lazy-load، ابعاد تصویر، Cache-Control، حجم options آپلودشده، تعداد transient ها، تعداد افزونه‌های فعال، WP_DEBUG، gzip؛ امتیاز وزن‌دار ۰–۱۰۰) | ✅ تست‌شده |
 
 ### سیستم سئو (موتور تحلیل واقعی — نه فرمول صوری)
 - بررسی عنوان SEO (طول ۳۰–۶۰)، Meta Description (۷۰–۱۶۰)
@@ -106,8 +107,8 @@
 
 | مورد | وضعیت | توضیح |
 |------|-------|-------|
-| ابزارهای WooCommerce | کد کامل، **تست نشده** | در محیط تست WooCommerce نصب نبود. کد از API رسمی `WC_Product` استفاده می‌کند و فقط در صورت فعال‌بودن Woo در دسترس است. |
-| سازگاری Elementor | کد کامل (`_elementor_data`)، **تست نشده** | Elementor در محیط تست نصب نبود. ساختار JSON استاندارد Elementor تولید می‌شود. |
+| ~~ابزارهای WooCommerce~~ | ✅ **تست‌شده** | روی **WooCommerce 11.3.0 واقعی** (ساخت از مونوریپو رسمی + ۲۰ پکیج composer با autoload سازگار) تست شد: ایجاد/ویرایش/فهرست محصول با تأیید قیمت از DB واقعی + گزارش فروشگاه. |
+| ~~سازگاری Elementor~~ | ✅ **تست‌شده** | روی **Elementor 4.5.0 واقعی** (کد رسمی مخزن) تست شد: ساخت صفحه با ساختار `_elementor_data` (sections/columns/widgets) و تأیید صفحه از WP REST. |
 | پخش زنده (Streaming) پاسخ‌ها | **پیاده‌سازی نشده** | پاسخ‌ها غیراستریم است (برای سادگی قابلیت اطمینان حلقه tool). نمایش progress در UI موجود است. |
 | لینک‌های شکسته **خارجی** | بررسی نمی‌شود | فقط لینک‌های داخلی بررسی می‌شوند (درخواست شبکه به دامنه‌های خارجی در بسیاری هاست‌ها محدود است). |
 | اجرای Cron زمان‌بندی‌شده | پیاده‌سازی شده، **فقط اجرای دستی صف تست شده** | هندلر `aiwc_process_jobs` ثبت شده؛ در هاست واقعی با بازدید سایت اجرا می‌شود. |
@@ -121,17 +122,19 @@
 ## ۴. تست‌های انجام‌شده
 
 ### ۴.۱ محیط تست
-- نصب واقعی WordPress (trunk رسمی) با PHP 8.3 + SQLite در WordPress Playground CLI
+- نصب واقعی WordPress (trunk رسمی) با PHP 8.3 + SQLite در WordPress Playground CLI (۳ worker همزمان)
 - فعال‌سازی افزونه از مسیر استاندارد (`activatePlugin`) — **بدون هیچ خطای Fatal/Parse**
+- **WooCommerce 11.3.0 واقعی**: ساخته‌شده از مونوریپو رسمی (codeload) + هر ۲۰ پکیج composer از dist های رسمی + autoload سازگار با قرارداد `vendor/autoload_packages.php` (اسکریپت بازتولید: `tools/wp-test/build-fixtures.py`)
+- **Elementor 4.5.0 واقعی**: کد رسمی مخزن `elementor/elementor`
 - سرور Mock سازگار با OpenAI با tool calls چندمرحله‌ای (انتقال HTTP واقعی از PHP به سرور)
 
-### ۴.۲ مجموعه تست E2E — نتیجه: **۶۴ از ۶۴ موفق** ✅
+### ۴.۲ مجموعه تست E2E — نتیجه: **۹۰ از ۹۰ موفق** ✅
 `tools/wp-test/smoke_test.py` — مهم‌ترین سنجه‌ها:
 
 1. فعال‌سازی افزونه + بوت بدون خطا  
 2. ذخیره/خواندن تنظیمات؛ مخفی‌ماندن کلید API  
 3. تست اتصال API (HTTP واقعی) + لیست مدل‌ها  
-4. Site Context + رد درخواست بدون احراز هویت  
+4. Site Context + رد درخواست بدون احراز هویت (401 واقعی)  
 5. **چت → ابزار `create_page` → ایجاد صفحه واقعی → تأیید با WP REST API**  
 6. ثبت در Activity Log + شمارش توکن  
 7. **حالت تأیید**: عدم ایجاد صفحه قبل از تأیید → ایجاد پس از approve  
@@ -141,17 +144,29 @@
 11. **Rollback واقعی صفحه** (تغییر → بازگردانی → تطابق دقیق محتوا)  
 12. **Rollback واقعی CSS اختصاصی**  
 13. رجیستری ابزارها + toggle  
-14. رندر صفحات ادمین + بارگذاری Asset ها  
+14. **تشخیص خودکار افزونه‌های فعال** (WooCommerce/Elementor) در Site Context  
+15. **WooCommerce واقعی**: ایجاد محصول → ویرایش قیمت → تأیید قیمت از DB واقعی → فهرست محصولات → گزارش فروشگاه  
+16. **Elementor واقعی**: ساخت صفحه با ساختار sections/columns/widgets → تأیید صفحه از WP REST  
+17. **performance_analyze**: امتیاز ۰–۱۰۰ + بررسی‌های واقعی (حداقل ۳ گروه بررسی)  
+18. **users_manage_role** (ریسک critical): در حالت خودکار، تغییر نقش **منتظر تأیید** می‌ماند → approve → تأیید تغییر نقش واقعی کاربر در WP (`roles` شامل `editor`)  
+19. **لغو عملیات (Stop)**: چت کند + `POST /chat/cancel` همزمان → پاسخ `cancelled: true` + **ایجاد نشدن** صفحه  
+20. **بازگردانی مستقیم Snapshot**: `POST /snapshots/{id}/restore` → بازگشت دقیق عنوان اصلی  
+21. رندر صفحات ادمین + بارگذاری Asset ها  
 
 ### ۴.۳ تست‌های ایستا
-- lint سینتکس **۳۷ فایل PHP** (php-parser) — بدون خطا  
+- lint سینتکس **۳۸ فایل PHP** (php-parser) — بدون خطا  
 - lint سینتکس **۴ فایل JS** (node --check) — بدون خطا  
+- `py_compile` مجموعه تست — بدون خطا  
 
 ### ۴.۴ باگ‌های کشف‌شده در حین تست و رفع‌شده
 1. `permission_callback` به متد protected (خطای REST) → public شد  
 2. ارسال body در درخواست GET مدل‌ها (خطای WP HTTP API) → حذف body برای GET/HEAD  
 3. عدم ادامه تحلیل سایتی پس از یک دسته → زنجیره‌کردن خودکار دسته‌ها + پردازش صف تا تخلیه  
 4. بازگردانی CSS که به‌جای CSS واقعی یک option جانبی را برمی‌گرداند → نوع snapshot `custom_css` اختصاصی  
+5. **race لغو عملیات**: پرچم لغو که هنگام صف‌کشیدن درخواست می‌رسید توسط پاک‌سازی ابتدای run حذف می‌شد → حذف فقط پرچم‌های قدیمی (بیش از ۳۰ ثانیه) + پاک‌سازی در پایان عادی  
+6. **کش منفی options وردپرس**: `get_transient` در درخواست‌های طولانی، نوشته‌شدن پرچم لغو توسط درخواست موازی را نمی‌دید (`$notoptions`) → خواندن مستقیم DB در بررسی لغو  
+7. **performance_analyze روی میزبان بدون loopback** کل بررسی را متوقف می‌کرد → کاهش graceful: بررسی‌های سمت سرور ادامه می‌یابند  
+8. نرخ‌سخت‌افزاری درخواست چت (۱۵/دقیقه) برای ابزارهای خودکار کم بود → فیلتر `aiwc_chat_rate_limit` اضافه شد  
 
 ---
 

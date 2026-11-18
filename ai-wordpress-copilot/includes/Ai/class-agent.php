@@ -179,7 +179,22 @@ class Agent {
 			'total_tokens'      => 0,
 		);
 
+		// Cooperative cancellation: the UI "stop" button sets a timestamped flag.
+		// Do NOT clear fresh flags here — a cancel that arrives while this request
+		// was still queued must stop this run at its first boundary. Only clear
+		// stale flags (older than 30s) left over from crashed runs.
+		$cancel_key = 'aiwc_cancel_' . get_current_user_id();
+		$flagged_at = (int) get_transient( $cancel_key );
+		if ( $flagged_at && ( time() - $flagged_at ) > 30 ) {
+			delete_transient( $cancel_key );
+		}
+
 		for ( $step = 0; $step < $max_steps; ++$step ) {
+			// Cooperative cancellation between steps (UI "stop" button).
+			if ( $this->is_cancel_requested( $cancel_key ) ) {
+				delete_transient( $cancel_key );
+				return $this->finalize_cancelled( $conversation_id, $user_message, $steps, $total_usage, $pending );
+			}
 			$response = $this->client->chat( $messages, $openai_tools );
 
 			if ( is_wp_error( $response ) ) {
@@ -233,6 +248,7 @@ class Agent {
 
 			if ( ! $tool_calls ) {
 				// Final answer.
+				delete_transient( $cancel_key );
 				$this->conversations->update(
 					$conversation_id,
 					array(
@@ -256,6 +272,11 @@ class Agent {
 			// Execute tool calls.
 			$executed = 0;
 			foreach ( $tool_calls as $call ) {
+				// Cooperative cancellation between tool calls as well.
+				if ( $this->is_cancel_requested( $cancel_key ) ) {
+					delete_transient( $cancel_key );
+					return $this->finalize_cancelled( $conversation_id, $user_message, $steps, $total_usage, $pending );
+				}
 				if ( $executed >= (int) $settings['max_tools_per_request'] ) {
 					// Too many calls: tell the model we hit the cap.
 					$tool_message = array(
@@ -389,6 +410,7 @@ class Agent {
 		}
 
 		// Step budget exhausted: synthesize a final note.
+		delete_transient( $cancel_key );
 		$note = __( 'Step limit reached. Partial progress has been recorded; you can continue with a follow-up command.', 'ai-wordpress-copilot' );
 		$this->conversations->add_message(
 			$conversation_id,
@@ -408,6 +430,73 @@ class Agent {
 			'steps'           => $steps,
 			'usage'           => $total_usage,
 			'pending'         => $pending,
+			'error'           => '',
+		);
+	}
+
+	/**
+	 * Check the cancel flag with a direct DB read.
+	 *
+	 * get_transient() cannot be used here: WordPress caches negative option
+	 * lookups ($notoptions) for the whole request, so a flag written by a
+	 * concurrent request (the /chat/cancel endpoint) would never be seen while
+	 * this long-running request is still alive.
+	 *
+	 * @param string $cancel_key Transient name.
+	 * @return bool
+	 */
+	private function is_cancel_requested( $cancel_key ) {
+		global $wpdb;
+		$value = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1",
+				'_transient_' . $cancel_key
+			)
+		);
+		return null !== $value && '' !== $value;
+	}
+
+	/**
+	 * Abort the loop gracefully after a cancel request.
+	 *
+	 * @param int    $conversation_id Conversation id.
+	 * @param string $user_message    Original command.
+	 * @param array  $steps           Steps so far.
+	 * @param array  $total_usage     Usage so far.
+	 * @param array  $pending         Pending approvals so far.
+	 * @return array
+	 */
+	private function finalize_cancelled( $conversation_id, $user_message, array $steps, array $total_usage, array $pending ) {
+		$note = __( 'Operation cancelled by the administrator. Completed steps are recorded below.', 'ai-wordpress-copilot' );
+		$this->conversations->add_message(
+			$conversation_id,
+			array(
+				'role'    => 'assistant',
+				'content' => $note,
+			)
+		);
+		$this->conversations->update( $conversation_id, array( 'add_tokens' => $total_usage['total_tokens'] ) );
+
+		$this->log->log(
+			array(
+				'command'         => $user_message,
+				'tool_name'       => 'cancel',
+				'summary'         => 'Operation cancelled by admin',
+				'status'          => 'rejected',
+				'conversation_id' => $conversation_id,
+			)
+		);
+
+		return array(
+			'conversation_id' => $conversation_id,
+			'message'         => array(
+				'role'    => 'assistant',
+				'content' => $note,
+			),
+			'steps'           => $steps,
+			'usage'           => $total_usage,
+			'pending'         => $pending,
+			'cancelled'       => true,
 			'error'           => '',
 		);
 	}

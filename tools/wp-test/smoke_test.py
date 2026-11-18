@@ -40,6 +40,25 @@ def check(name, cond, detail=""):
         print("FAIL  " + name + ("  -> " + str(detail) if detail else ""))
 
 
+def parse_json_loose(body):
+    """Parse JSON even when PHP notices precede the payload (php-wasm quirk)."""
+    text = body.decode(errors="replace") if isinstance(body, bytes) else str(body)
+    text = text.strip()
+    if not text:
+        return {}
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    for i, ch in enumerate(text):
+        if ch in "{[":
+            try:
+                return json.loads(text[i:])
+            except Exception:
+                continue
+    return {}
+
+
 def req(path, method="GET", body=None, auth=True, raw_base=False):
     url = (BASE if raw_base else API) + path
     data = json.dumps(body).encode() if body is not None else None
@@ -51,10 +70,10 @@ def req(path, method="GET", body=None, auth=True, raw_base=False):
         r.add_header("Authorization", "Basic " + token)
     try:
         with urllib.request.urlopen(r, timeout=60) as resp:
-            return resp.getcode(), json.loads(resp.read().decode() or "{}")
+            return resp.getcode(), parse_json_loose(resp.read())
     except urllib.error.HTTPError as e:
         try:
-            payload = json.loads(e.read().decode() or "{}")
+            payload = parse_json_loose(e.read())
         except Exception:
             payload = {}
         return e.code, payload
@@ -66,7 +85,9 @@ def fetch_creds():
     """Fetch test credentials from the test-only mu-plugin endpoint."""
     url = BASE + "/wp-json/aiwc-test/v1/creds?key=smoke"
     with urllib.request.urlopen(url, timeout=60) as resp:
-        data = json.loads(resp.read().decode())
+        data = parse_json_loose(resp.read())
+    if "user" not in data or "pass" not in data:
+        raise RuntimeError("creds endpoint returned no credentials: %r" % (data,))
     with open(CREDS_FILE, "w") as fh:
         json.dump({"user": data["user"], "pass": data["pass"]}, fh)
     return data
@@ -306,7 +327,127 @@ def main():
     snap_rows = [r for r in data.get("items", []) if r.get("tool_name") in ("create_page", "update_page", "update_custom_css")]
     check("logs contain mutating ops", len(snap_rows) > 0, [r.get("tool_name") for r in data.get("items", [])][:10])
 
-    # --- 14. WP admin page loads (HTML sanity, cookie login) ---
+    # --- 14. Real-plugin integration detection (WooCommerce / Elementor) ---
+    code, ctx = req("/site/context")
+    overview = (ctx.get("overview") or ctx.get("data", {}).get("overview") or {}) if code == 200 else {}
+    have_wc = bool(overview.get("woocommerce"))
+    have_el = bool(overview.get("elementor"))
+    note("active integrations: woocommerce=%s elementor=%s" % (have_wc, have_el))
+    check("woocommerce detected by site context", have_wc is True, overview)
+    check("elementor detected by site context", have_el is True, overview)
+
+    # --- 15. WooCommerce tools (real plugin) ---
+    wc_product_id = 0
+    if have_wc:
+        code, data = req("/chat", "POST", {"message": "create product test item"})
+        wc_steps = [s for s in data.get("steps", []) if s.get("tool") == "woo_product_create"]
+        check("woo_product_create tool ran", len(wc_steps) > 0 and wc_steps[0].get("status") == "success", data.get("steps"))
+        if wc_steps and wc_steps[0].get("result", {}).get("success"):
+            wc_product_id = wc_steps[0]["result"].get("data", {}).get("product_id", 0)
+        check("woo product created", wc_product_id > 0, wc_steps)
+
+        if wc_product_id:
+            code, data = req("/chat", "POST", {"message": "edit product " + str(wc_product_id)})
+            upd = [s for s in data.get("steps", []) if s.get("tool") == "woo_product_update"]
+            check("woo_product_update tool ran", len(upd) > 0 and upd[0].get("status") == "success", data.get("steps"))
+
+            code, data = req("/chat", "POST", {"message": "list products"})
+            lst = [s for s in data.get("steps", []) if s.get("tool") == "woo_product_list"]
+            items = (lst[0].get("result", {}).get("data", {}) or {}).get("items", []) if lst else []
+            check("woo_product_list sees the product", any(i.get("id") == wc_product_id for i in items), items[:3])
+            mine = next((i for i in items if i.get("id") == wc_product_id), {})
+            check("woo product price updated", "14.5" in str(mine.get("price", "")) or "14.50" in str(mine.get("price", "")), mine)
+
+        code, data = req("/chat", "POST", {"message": "woo report"})
+        rpt = [s for s in data.get("steps", []) if s.get("tool") == "woo_report"]
+        check("woo_report tool ran", len(rpt) > 0 and rpt[0].get("status") == "success", data.get("steps"))
+        rpt_data = (rpt[0].get("result", {}).get("data", {}) or {}) if rpt else {}
+        check("woo report has store stats", "products" in rpt_data, rpt_data)
+    else:
+        check("woo_product_create tool ran (skipped - plugin inactive)", True)
+
+    # --- 16. Elementor tools (real plugin) ---
+    if have_el:
+        code, data = req("/chat", "POST", {"message": "elementor page"})
+        el_steps = [s for s in data.get("steps", []) if s.get("tool") == "create_elementor_section"]
+        check("create_elementor_section tool ran", len(el_steps) > 0 and el_steps[0].get("status") == "success", data.get("steps"))
+        el_data = (el_steps[0].get("result", {}).get("data", {}) or {}) if el_steps else {}
+        el_page = el_data.get("post_id", 0)
+        check("elementor page created", el_page > 0, el_data)
+        code, elv = req("/wp-json/wp/v2/pages/" + str(el_page), raw_base=True)
+        check("elementor page visible via WP REST", code == 200 and elv.get("id") == el_page, elv)
+    else:
+        check("create_elementor_section tool ran (skipped - plugin inactive)", True)
+
+    # --- 17. Performance analysis tool ---
+    code, data = req("/chat", "POST", {"message": "performance check"})
+    perf_steps = [s for s in data.get("steps", []) if s.get("tool") == "performance_analyze"]
+    check("performance_analyze tool ran", len(perf_steps) > 0 and perf_steps[0].get("status") == "success", data.get("steps"))
+    perf_data = (perf_steps[0].get("result", {}).get("data", {}) or {}) if perf_steps else {}
+    check("performance score in range", isinstance(perf_data.get("score"), int) and 0 <= perf_data["score"] <= 100, perf_data.get("score"))
+    checks = perf_data.get("checks")
+    check("performance checks computed", isinstance(checks, (list, dict)) and len(checks or {}) >= 3, checks)
+
+    # --- 18. User role management (critical risk -> approval in mode 3) ---
+    uname = "aiwc-editor-" + str(int(time.time()))
+    code, new_user = req("/wp-json/wp/v2/users", "POST", {
+        "username": uname, "email": uname + "@example.com",
+        "password": "AiwcEditor!2026", "roles": ["subscriber"],
+    }, raw_base=True)
+    uid = new_user.get("id", 0) if code in (200, 201) else 0
+    check("test user created", uid > 0, (code, new_user))
+    if uid:
+        code, data = req("/chat", "POST", {"message": "make user " + str(uid) + " editor"})
+        pending = data.get("pending", [])
+        check("critical role change waits for approval", len(pending) > 0, data.get("steps"))
+        rid = pending[0]["approval_id"] if pending else 0
+        code, res = req("/approvals/" + str(rid) + "/approve", "POST")
+        check("role change approved and executed", code == 200 and res.get("success") is True, res)
+        code, udata = req("/wp-json/wp/v2/users/" + str(uid) + "?context=edit", raw_base=True)
+        check("user role really changed to editor", code == 200 and "editor" in (udata.get("roles") or []), udata.get("roles"))
+
+    # --- 19. Cancel a running operation (stop button) ---
+    import threading
+    result_box = {}
+
+    def _slow_chat():
+        result_box["resp"] = req("/chat", "POST", {"message": "slow create page cancelme"})
+
+    t = threading.Thread(target=_slow_chat)
+    t.start()
+    time.sleep(0.5)
+    code, cres = req("/chat/cancel", "POST", {})
+    check("POST /chat/cancel accepted", code == 200 and cres.get("cancelling") is True, cres)
+    t.join(timeout=120)
+    cresp = result_box.get("resp", (0, {}))[1]
+    check("operation stopped cooperatively", cresp.get("cancelled") is True, cresp)
+    code, pages = req("/wp-json/wp/v2/pages?search=cancelme&per_page=10", raw_base=True)
+    check("cancelled page was NOT created", code == 200 and len(pages) == 0, pages)
+
+    # --- 20. Direct snapshot rollback endpoint ---
+    code, data = req("/chat", "POST", {"message": "create page snap victim"})
+    snap_page = 0
+    for s in data.get("steps", []):
+        if s.get("tool") == "create_page" and s.get("result", {}).get("success"):
+            snap_page = s["result"].get("data", {}).get("post_id", 0)
+    code, snap_orig = req("/wp-json/wp/v2/pages/" + str(snap_page), raw_base=True)
+    orig_title = snap_orig.get("title", {}).get("rendered", "") if code == 200 else ""
+    code, data = req("/chat", "POST", {"message": "update page " + str(snap_page)})
+    snap_id = 0
+    for s in data.get("steps", []):
+        if s.get("tool") == "update_page" and s.get("result", {}).get("success"):
+            r = s["result"]
+            snap_id = r.get("snapshot_id") or (r.get("data", {}) or {}).get("snapshot_id") or 0
+    check("update created a snapshot", snap_id > 0, data.get("steps"))
+    code, res = req("/snapshots/" + str(snap_id) + "/restore", "POST")
+    check("POST /snapshots/{id}/restore works", code == 200 and res.get("success") is True, res)
+    code, snap_now = req("/wp-json/wp/v2/pages/" + str(snap_page), raw_base=True)
+    now_title = snap_now.get("title", {}).get("rendered", "") if code == 200 else ""
+    check("snapshot restore brought back original", now_title == orig_title and bool(orig_title), (orig_title, now_title))
+    code, data = req("/snapshots")
+    check("GET /snapshots lists snapshots", code == 200 and len(data.get("items", [])) > 0, data)
+
+    # --- 21. WP admin page loads (HTML sanity, cookie login) ---
     try:
         # Application passwords don't authenticate wp-admin pages; use the
         # Playground default credentials (admin/password) with a cookie jar.

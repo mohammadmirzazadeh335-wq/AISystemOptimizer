@@ -5,9 +5,13 @@
  *
  * Deterministic behavior:
  *  - "create page ..."      -> tool_call create_page, then final summary
+ *  - "update page <id>"     -> tool_call update_page, then final summary
  *  - "analyze seo <id>"     -> tool_call seo_analyze, then final summary
  *  - "delete page <id>"     -> tool_call delete_page, then final summary
  *  - "remember ..."         -> tool_call memory_save
+ *  - "performance ..."      -> tool_call performance_analyze
+ *  - "make user <id> ..."   -> tool_call users_manage_role (critical risk)
+ *  - "slow ..."             -> same as create page but each reply takes 8s
  *  - anything else          -> plain text reply
  */
 const http = require('http');
@@ -64,6 +68,199 @@ function toolCall(id, name, args) {
   };
 }
 
+function respondTo(res, messages) {
+  if (hasToolResult(messages)) {
+    const lastTool = [...messages].reverse().find((m) => m.role === 'tool');
+    let outcome = 'ok';
+    try {
+      const parsed = JSON.parse(lastTool.content || '{}');
+      outcome = parsed.success ? 'ok' : 'failed';
+    } catch (e) {}
+    return completion(res, {
+      role: 'assistant',
+      content:
+        '## گزارش تغییرات\n\nعملیات با موفقیت انجام شد (نتیجه: ' +
+        outcome +
+        ').\n\n- ابزار اجراشده ثبت شد\n- تغییرات در تاریخچه فعالیت‌ها قابل بازگردانی است\n\nAll done — the requested operation has been executed and logged.',
+    });
+  }
+
+  const text = lastUserText(messages);
+
+  if (/(create page|ایجاد صفحه|بساز|بسازید|create a page|slow)/i.test(text)) {
+    return completion(res, {
+      role: 'assistant',
+      content: null,
+      tool_calls: [
+        toolCall('call_create_1', 'create_page', {
+          title: 'AIWC Test Page ' + Date.now(),
+          content:
+            '<h2>درباره ما</h2><p>این صفحه توسط دستیار هوشمند وردپرس ساخته شده است.</p><ul><li>طراحی مدرن</li><li>سئو محور</li></ul>',
+          status: 'publish',
+        }),
+      ],
+    });
+  }
+
+  if (/(update page|ویرایش صفحه|update the page)/i.test(text)) {
+    return completion(res, {
+      role: 'assistant',
+      content: null,
+      tool_calls: [
+        toolCall('call_upd_1', 'update_page', {
+          post_id: firstNumber(text, 1),
+          title: 'Updated Title ' + Date.now(),
+          content: '<p>Updated content by AI agent.</p>',
+          content_mode: 'replace',
+        }),
+      ],
+    });
+  }
+
+  if (/(analyze seo|تحلیل سئو|seo analyze)/i.test(text)) {
+    return completion(res, {
+      role: 'assistant',
+      content: null,
+      tool_calls: [
+        toolCall('call_seo_1', 'seo_analyze', { post_id: firstNumber(text, 1) }),
+      ],
+    });
+  }
+
+      if (/(create product|ایجاد محصول|محصول بساز)/i.test(text)) {
+        return completion(res, {
+          role: 'assistant',
+          content: null,
+          tool_calls: [
+            toolCall('call_wooc_1', 'woo_product_create', {
+              title: 'AIWC Test Product ' + Date.now(),
+              price: '9.99',
+              status: 'publish',
+            }),
+          ],
+        });
+      }
+
+      if (/(edit product|update product|ویرایش محصول)/i.test(text)) {
+        return completion(res, {
+          role: 'assistant',
+          content: null,
+          tool_calls: [
+            toolCall('call_woou_1', 'woo_product_update', {
+              product_id: firstNumber(text, 1),
+              price: '14.50',
+            }),
+          ],
+        });
+      }
+
+      if (/(woo report|sales report|گزارش فروش)/i.test(text)) {
+        return completion(res, {
+          role: 'assistant',
+          content: null,
+          tool_calls: [toolCall('call_woorpt_1', 'woo_report', {})],
+        });
+      }
+
+      if (/(list products|product list|لیست محصولات)/i.test(text)) {
+        return completion(res, {
+          role: 'assistant',
+          content: null,
+          tool_calls: [toolCall('call_woolist_1', 'woo_product_list', { per_page: 10 })],
+        });
+      }
+
+      if (/(elementor|المنتور)/i.test(text)) {
+        return completion(res, {
+          role: 'assistant',
+          content: null,
+          tool_calls: [
+            toolCall('call_elem_1', 'create_elementor_section', {
+              title: 'AIWC Elementor Page ' + Date.now(),
+              status: 'publish',
+              sections: [
+                {
+                  columns: [
+                    {
+                      width: 100,
+                      widgets: [
+                        { type: 'heading', settings: { title: 'AIWC Elementor Section' } },
+                        { type: 'text', settings: { text: 'طراحی شده با دستیار هوشمند' } },
+                        { type: 'button', settings: { text: 'بیشتر بدانید' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            }),
+          ],
+        });
+      }
+
+      if (/(performance|speed|سرعت|کارایی)/i.test(text)) {
+    return completion(res, {
+      role: 'assistant',
+      content: null,
+      tool_calls: [toolCall('call_perf_1', 'performance_analyze', {})],
+    });
+  }
+
+  if (/(make user|change role|تغییر نقش|نقش کاربر)/i.test(text)) {
+    return completion(res, {
+      role: 'assistant',
+      content: null,
+      tool_calls: [
+        toolCall('call_role_1', 'users_manage_role', {
+          user_id: firstNumber(text, 1),
+          role: 'editor',
+          action: 'add',
+        }),
+      ],
+    });
+  }
+
+  if (/(delete|حذف)/i.test(text)) {
+    return completion(res, {
+      role: 'assistant',
+      content: null,
+      tool_calls: [
+        toolCall('call_del_1', 'delete_page', {
+          post_id: firstNumber(text, 1),
+          permanent: false,
+        }),
+      ],
+    });
+  }
+
+  if (/(remember|یاد بگیر|به خاطر بسپار)/i.test(text)) {
+    return completion(res, {
+      role: 'assistant',
+      content: null,
+      tool_calls: [
+        toolCall('call_mem_1', 'memory_save', {
+          category: 'brand',
+          key: 'primary_color',
+          value: 'سرمه‌ای',
+        }),
+      ],
+    });
+  }
+
+  if (/(site overview|نمای کلی)/i.test(text)) {
+    return completion(res, {
+      role: 'assistant',
+      content: null,
+      tool_calls: [toolCall('call_ov_1', 'site_overview', {})],
+    });
+  }
+
+  return completion(res, {
+    role: 'assistant',
+    content:
+      'سلام! من دستیار هوشمند وردپرس هستم. می‌توانم صفحه بسازم، سئو را تحلیل کنم و سایت را مدیریت کنم.\n\nHello! I am your WordPress copilot. Try: "create page", "analyze seo <id>", "site overview".',
+  });
+}
+
 const server = http.createServer((req, res) => {
   if (req.method === 'GET' && req.url.startsWith('/v1/models')) {
     return json(res, 200, {
@@ -83,105 +280,9 @@ const server = http.createServer((req, res) => {
         return json(res, 400, { error: { message: 'invalid JSON' } });
       }
       const messages = Array.isArray(body.messages) ? body.messages : [];
-
-      if (hasToolResult(messages)) {
-        const lastTool = [...messages].reverse().find((m) => m.role === 'tool');
-        let outcome = 'ok';
-        try {
-          const parsed = JSON.parse(lastTool.content || '{}');
-          outcome = parsed.success ? 'ok' : 'failed';
-        } catch (e) {}
-        return completion(res, {
-          role: 'assistant',
-          content:
-            '## گزارش تغییرات\n\nعملیات با موفقیت انجام شد (نتیجه: ' +
-            outcome +
-            ').\n\n- ابزار اجراشده ثبت شد\n- تغییرات در تاریخچه فعالیت‌ها قابل بازگردانی است\n\nAll done — the requested operation has been executed and logged.',
-        });
-      }
-
-      const text = lastUserText(messages);
-
-      if (/(create page|ایجاد صفحه|بساز|بسازید|create a page)/i.test(text)) {
-        return completion(res, {
-          role: 'assistant',
-          content: null,
-          tool_calls: [
-            toolCall('call_create_1', 'create_page', {
-              title: 'AIWC Test Page ' + Date.now(),
-              content:
-                '<h2>درباره ما</h2><p>این صفحه توسط دستیار هوشمند وردپرس ساخته شده است.</p><ul><li>طراحی مدرن</li><li>سئو محور</li></ul>',
-              status: 'publish',
-            }),
-          ],
-        });
-      }
-
-      if (/(analyze seo|تحلیل سئو|seo analyze)/i.test(text)) {
-        return completion(res, {
-          role: 'assistant',
-          content: null,
-          tool_calls: [
-            toolCall('call_seo_1', 'seo_analyze', { post_id: firstNumber(text, 1) }),
-          ],
-        });
-      }
-
-      if (/(update page|ویرایش صفحه|update the page)/i.test(text)) {
-        return completion(res, {
-          role: 'assistant',
-          content: null,
-          tool_calls: [
-            toolCall('call_upd_1', 'update_page', {
-              post_id: firstNumber(text, 1),
-              title: 'Updated Title ' + Date.now(),
-              content: '<p>Updated content by AI agent.</p>',
-              content_mode: 'replace',
-            }),
-          ],
-        });
-      }
-
-      if (/(delete|حذف)/i.test(text)) {
-        return completion(res, {
-          role: 'assistant',
-          content: null,
-          tool_calls: [
-            toolCall('call_del_1', 'delete_page', {
-              post_id: firstNumber(text, 1),
-              permanent: false,
-            }),
-          ],
-        });
-      }
-
-      if (/(remember|یاد بگیر|به خاطر بسپار)/i.test(text)) {
-        return completion(res, {
-          role: 'assistant',
-          content: null,
-          tool_calls: [
-            toolCall('call_mem_1', 'memory_save', {
-              category: 'brand',
-              key: 'primary_color',
-              value: 'سرمه‌ای',
-            }),
-          ],
-        });
-      }
-
-      if (/(site overview|نمای کلی)/i.test(text)) {
-        return completion(res, {
-          role: 'assistant',
-          content: null,
-          tool_calls: [toolCall('call_ov_1', 'site_overview', {})],
-        });
-      }
-
-      return completion(res, {
-        role: 'assistant',
-        content:
-          'سلام! من دستیار هوشمند وردپرس هستم. می‌توانم صفحه بسازم، سئو را تحلیل کنم و سایت را مدیریت کنم.\n\nHello! I am your WordPress copilot. Try: "create page", "analyze seo <id>", "site overview".',
-      });
+      const allText = messages.filter((m) => m.role === 'user').map((m) => m.content).join(' ');
+      const delay = /slow/i.test(allText) ? 8000 : 0;
+      setTimeout(() => respondTo(res, messages), delay);
     });
     return;
   }

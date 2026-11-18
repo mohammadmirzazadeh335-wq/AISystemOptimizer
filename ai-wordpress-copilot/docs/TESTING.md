@@ -12,9 +12,10 @@
 |------|-----|
 | `mock-openai.js` | سرور Mock سازگار با OpenAI (`/v1/chat/completions` با tool calls + `/v1/models`) |
 | `fetch-shim.js` | هدایت درخواست‌های مسدودشده `wordpress.org` به میراث GitHub (فقط محیط تست) |
+| `build-fixtures.py` | ساخت **WooCommerce 11.3.0 و Elementor 4.5.0 واقعی** در `fixtures/plugins/` (مونوریپو + ۲۰ پکیج composer + autoload سازگار) |
 | `mu-plugins/aiwc-test.php` | فقط تست: فعال‌سازی Application Password روی HTTP + صدور credential + fallback موقت HTTP |
-| `blueprint.json` | فعال‌سازی افزونه هنگام بوت سایت |
-| `smoke_test.py` | مجموعه تست E2E (۶۴ سنجه) |
+| `blueprint.json` | فعال‌سازی WooCommerce، Elementor و افزونه هنگام بوت سایت |
+| `smoke_test.py` | مجموعه تست E2E (۹۰ سنجه) |
 | `lint-php.js` | lint سینتکس همه فایل‌های PHP با `php-parser` |
 
 ## اجرای تست‌ها
@@ -23,15 +24,20 @@
 cd tools/wp-test
 npm install @wp-playground/cli
 
+# ۰) ساخت افزونه‌های واقعی WooCommerce / Elementor (یک‌بار؛ نیازمند دسترسی github/codeload)
+python3 build-fixtures.py
+
 # ۱) سرور Mock API
 node mock-openai.js &
 
-# ۲) سایت وردپرس (پلاگین به‌صورت زنده mount می‌شود)
+# ۲) سایت وردپرس (پلاگین‌ها به‌صورت زنده mount می‌شوند)
 NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt \
 node -r ./fetch-shim.js node_modules/@wp-playground/cli/cli.js server \
-  --wp=trunk --php=8.3 --port=9400 --login \
+  --wp=trunk --php=8.3 --port=9400 --workers=3 --login \
   --mount ../../ai-wordpress-copilot:/wordpress/wp-content/plugins/ai-wordpress-copilot \
   --mount ./mu-plugins:/wordpress/wp-content/mu-plugins \
+  --mount ./fixtures/plugins/woocommerce:/wordpress/wp-content/plugins/woocommerce \
+  --mount ./fixtures/plugins/elementor:/wordpress/wp-content/plugins/elementor \
   --blueprint ./blueprint.json
 
 # ۳) تست‌ها (صبر برای بوت + دریافت credential خودکار)
@@ -40,6 +46,8 @@ python3 smoke_test.py
 # ۴) lint سینتکس PHP
 node lint-php.js
 ```
+
+نکته: `--workers=3` برای تست لغو عملیات (درخواست موازی `chat/cancel` هنگام اجرای چت) لازم است.
 
 نکته: چون افزونه به‌صورت `--mount` سوار می‌شود، هر تغییر کد بلافاصله در سایت تست اعمال می‌شود
 (نیازی به نصب مجدد نیست).
@@ -62,9 +70,15 @@ node lint-php.js
 - ✅ تحلیل سئوی سایتی: صف → زنجیره دسته‌ها → گزارش با میانگین امتیاز
 - ✅ لیست محتوا + **Rollback واقعی صفحه** (تغییر → snapshot → بازگردانی → تطابق محتوا)
 - ✅ تغییر CSS اختصاصی + **Rollback واقعی CSS**
+- ✅ **WooCommerce واقعی**: ایجاد محصول → ویرایش قیمت → تأیید از DB → فهرست → گزارش فروشگاه
+- ✅ **Elementor واقعی**: ساخت صفحه با ساختار sections/columns/widgets (`_elementor_data`) → تأیید با WP REST
+- ✅ **performance_analyze**: امتیاز ۰–۱۰۰ + بررسی‌های واقعی سمت سرور/صفحه
+- ✅ **users_manage_role** (ریسک critical): تأیید اجباری در حالت خودکار → تغییر نقش واقعی کاربر
+- ✅ **لغو عملیات (Stop)**: `POST /chat/cancel` موازی → توقف همکارانه + اجرا نشدن ابزار
+- ✅ **بازگردانی مستقیم Snapshot** (`POST /snapshots/{id}/restore`)
 - ✅ رجیستری ابزارها + فعال/غیرفعال‌سازی
 - ✅ رندر صفحه داشبورد ادمین + بارگذاری Asset ها + عدم وجود Fatal
-- ✅ lint سینتکس ۳۷ فایل PHP و ۴ فایل JS
+- ✅ lint سینتکس ۳۸ فایل PHP و ۴ فایل JS
 
 ## یادداشت‌های محیطی
 

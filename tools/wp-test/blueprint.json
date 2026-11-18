@@ -2,6 +2,14 @@
   "steps": [
     {
       "step": "activatePlugin",
+      "pluginPath": "woocommerce/woocommerce.php"
+    },
+    {
+      "step": "activatePlugin",
+      "pluginPath": "elementor/elementor.php"
+    },
+    {
+      "step": "activatePlugin",
       "pluginPath": "ai-wordpress-copilot/ai-wordpress-copilot.php"
     }
   ]

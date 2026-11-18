@@ -90,6 +90,7 @@ class Plugin {
 		$registry->register_group( new Ai\Tools\Seo_Tools( $this ) );
 		$registry->register_group( new Ai\Tools\Woo_Tools( $this ) );
 		$registry->register_group( new Ai\Tools\System_Tools( $this ) );
+		$registry->register_group( new Ai\Tools\Performance_Tools( $this ) );
 
 		// Admin + REST.
 		if ( is_admin() ) {

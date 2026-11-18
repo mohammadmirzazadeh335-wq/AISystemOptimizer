@@ -41,4 +41,5 @@ tools/wp-test/.playground/
 tools/wp-test/*.log
 tools/wp-test/.test-credentials
 tools/wp-test/__pycache__/
+tools/wp-test/fixtures/
 ai-wordpress-copilot/.test-credentials

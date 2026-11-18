@@ -122,7 +122,9 @@
   /* ================= Dashboard ================= */
   function renderDashboard(c) {
     c.innerHTML = '<div class="aiwc-card"><div class="aiwc-empty">' + A.esc(A.t('loading')) + '</div></div>';
-    A.api('stats').then(function (data) {
+    Promise.all([A.api('stats'), A.api('jobs').catch(function () { return { items: [] }; })]).then(function (res) {
+      var data = res[0];
+      var jobs = res[1].items || [];
       var o = data.overview || {};
       var counts = o.counts || {};
       var html =
@@ -153,15 +155,57 @@
         '</div>' +
         (!data.configured ? '<p style="margin-top:12px;color:var(--aiwc-warn);font-size:12.5px">' + A.esc(A.t('api_not_ready')) + '</p>' : '') +
         '</div></div>' +
+        '<div class="aiwc-card"><h2>' + A.esc(A.t('queue_jobs')) + '</h2>' + jobsPanel(jobs) + '</div>' +
         '<div class="aiwc-card"><h2>' + A.esc(A.t('recent_activity')) + '</h2>' + logsTable(data.recent_logs || [], true) + '</div>';
       c.innerHTML = html;
 
       c.querySelectorAll('[data-go]').forEach(function (b) {
         b.addEventListener('click', function () { go(b.dataset.go); });
       });
+      c.querySelectorAll('[data-job-run]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          b.disabled = true;
+          A.api('jobs/' + b.dataset.jobRun + '/run', { method: 'POST' }).then(function () {
+            A.toast(A.t('complete'));
+            renderDashboard(c);
+          }).catch(function (err) { A.toast(err.message, true); });
+        });
+      });
+      c.querySelectorAll('[data-job-del]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          if (!confirm(A.t('confirm_delete'))) return;
+          A.api('jobs/' + b.dataset.jobDel, { method: 'DELETE' }).then(function () {
+            renderDashboard(c);
+          }).catch(function (err) { A.toast(err.message, true); });
+        });
+      });
     }).catch(function (err) {
       c.innerHTML = '<div class="aiwc-card"><div class="aiwc-empty">' + A.esc(err.message) + '</div></div>';
     });
+  }
+
+  function jobsPanel(jobs) {
+    if (!jobs.length) {
+      return '<div class="aiwc-empty">' + A.esc(A.t('no_items')) + '</div>';
+    }
+    var rows = jobs.slice(0, 8).map(function (j) {
+      var progress = '';
+      if (j.result && j.result.total) {
+        var pct = Math.min(100, Math.round(100 * (j.result.processed || 0) / j.result.total));
+        progress = '<div class="aiwc-progress" style="min-width:110px"><div class="bar" style="width:' + pct + '%"></div></div>' +
+          '<span style="font-size:11px;white-space:nowrap">' + A.fmtNum(j.result.processed || 0) + '/' + A.fmtNum(j.result.total) + '</span>';
+      }
+      return '<tr>' +
+        '<td>#' + j.id + '</td>' +
+        '<td><span style="direction:ltr;font-family:monospace;font-size:11px">' + A.esc(j.type) + '</span></td>' +
+        '<td>' + A.statusBadge(j.status) + (j.error ? '<div style="color:var(--aiwc-err);font-size:11px">' + A.esc(j.error) + '</div>' : '') + '</td>' +
+        '<td>' + progress + '</td>' +
+        '<td style="white-space:nowrap">' +
+        (j.status === 'pending' ? '<button class="aiwc-btn sm primary" data-job-run="' + j.id + '">' + A.esc(A.t('run_now')) + '</button> ' : '') +
+        '<button class="aiwc-btn sm danger" data-job-del="' + j.id + '">' + A.esc(A.t('delete')) + '</button>' +
+        '</td></tr>';
+    }).join('');
+    return '<table class="aiwc-table"><thead><tr><th>ID</th><th>' + A.esc(A.t('category')) + '</th><th>' + A.esc(A.t('status')) + '</th><th>' + A.esc(A.t('steps')) + '</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
   function stat(num, label) {

@@ -158,6 +158,30 @@ class Core_Tools extends Abstract_Tool_Group {
 				'handler'     => 'handle_update_site_option',
 			),
 			array(
+				'name'        => 'users_manage_role',
+				'description' => 'Add or remove a WordPress role for a user (e.g. make someone an editor, or demote them). Requires list_users/edit_users. Always ask for administrator approval.',
+				'parameters'  => array(
+					'type'       => 'object',
+					'properties' => array(
+						'user_id' => array( 'type' => 'integer', 'description' => 'Target user ID.' ),
+						'role'    => array(
+							'type'        => 'string',
+							'description' => 'Role slug.',
+							'enum'        => array( 'administrator', 'editor', 'author', 'contributor', 'subscriber' ),
+						),
+						'action'  => array(
+							'type'        => 'string',
+							'description' => 'add or remove the role.',
+							'enum'        => array( 'add', 'remove' ),
+						),
+					),
+					'required'   => array( 'user_id', 'role', 'action' ),
+				),
+				'risk'        => 'critical',
+				'needs_confirmation' => true,
+				'handler'     => 'handle_users_manage_role',
+			),
+			array(
 				'name'        => 'get_menus',
 				'description' => 'List navigation menus with their items (title, URL, type).',
 				'parameters'  => array(
@@ -413,6 +437,68 @@ class Core_Tools extends Abstract_Tool_Group {
 		return $this->success(
 			$after,
 			sprintf( 'Option "%s" updated.', $name ),
+			array( 'log_id' => $log_id )
+		);
+	}
+
+	/**
+	 * users_manage_role
+	 *
+	 * @param array $args    Args.
+	 * @param array $context Context.
+	 * @return array
+	 */
+	public function handle_users_manage_role( array $args, array $context = array() ) {
+		if ( ! current_user_can( 'promote_users' ) && ! current_user_can( 'edit_users' ) ) {
+			return $this->error( 'Missing capability: edit_users' );
+		}
+
+		$user_id = absint( $args['user_id'] );
+		$user    = get_userdata( $user_id );
+		if ( ! $user ) {
+			return $this->error( sprintf( 'User %d not found.', $user_id ) );
+		}
+
+		$role   = sanitize_text_field( $args['role'] );
+		$action = ( 'remove' === ( $args['action'] ?? 'add' ) ) ? 'remove' : 'add';
+
+		// Safety: never allow removing the last administrator.
+		if ( 'remove' === $action && 'administrator' === $role ) {
+			$admins = get_users( array( 'role' => 'administrator', 'fields' => 'ids' ) );
+			if ( count( $admins ) <= 1 && in_array( 'administrator', (array) $user->roles, true ) ) {
+				return $this->error( 'Refusing to remove the last administrator.' );
+			}
+		}
+
+		$before_roles = $user->roles;
+		if ( 'add' === $action ) {
+			$user->add_role( $role );
+		} else {
+			$user->remove_role( $role );
+		}
+		$user    = get_userdata( $user_id );
+		$after_roles = $user ? $user->roles : array();
+
+		$log_id = $this->plugin->get( 'log' )->log(
+			array(
+				'command'         => isset( $context['command'] ) ? (string) $context['command'] : '',
+				'tool_name'       => 'users_manage_role',
+				'object_type'     => 'user',
+				'object_id'       => $user_id,
+				'summary'         => sprintf( '%s role "%s" for user #%d', 'add' === $action ? 'Added' : 'Removed', $role, $user_id ),
+				'args'            => $args,
+				'before_state'    => array( 'roles' => $before_roles ),
+				'after_state'     => array( 'roles' => $after_roles ),
+				'conversation_id' => isset( $context['conversation_id'] ) ? absint( $context['conversation_id'] ) : 0,
+			)
+		);
+
+		return $this->success(
+			array(
+				'user_id' => $user_id,
+				'roles'   => $after_roles,
+			),
+			sprintf( 'Role "%s" %sd for user #%d (roles: %s).', $role, $action, $user_id, implode( ', ', $after_roles ) ),
 			array( 'log_id' => $log_id )
 		);
 	}

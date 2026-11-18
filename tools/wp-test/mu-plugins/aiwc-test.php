@@ -9,6 +9,67 @@
  * This file is mounted into the test site only; it is NOT part of the plugin.
  */
 
+// php-wasm prints PHP notices to output even when error_reporting/display_errors
+// are relaxed, and that early output breaks REST status headers ("headers already
+// sent" -> 200 instead of 401/201) and pollutes JSON. Buffer everything and strip
+// benign notice/warning HTML chunks at flush time.
+if ( ! ob_get_level() ) {
+	ob_start(
+		function ( $html ) {
+			return preg_replace(
+				'#<br\s*/?>\s*<b>(?:Notice|Warning|Deprecated|Strict Standards)</b>:[\s\S]*?on line <b>\d+</b><br\s*/?>#i',
+				'',
+				$html
+			);
+		}
+	);
+}
+
+// Keep REST/JSON responses clean in tests: hide benign early-translation notices.
+ini_set( 'display_errors', '0' );
+error_reporting( E_ALL & ~E_USER_NOTICE & ~E_DEPRECATED & ~E_NOTICE );
+
+// Raise the chat rate limit for automated test runs.
+add_filter( 'aiwc_chat_rate_limit', function () { return 500; } );
+
+// The test fixture ships WooCommerce source without its JS build artifacts
+// (assets/client/**). Skip WC's admin asset layer to avoid its asset-registry
+// exception on wp-admin pages; REST/CRUD integration is unaffected.
+add_action(
+	'plugins_loaded',
+	function () {
+		if ( class_exists( '\Automattic\WooCommerce\Internal\Admin\WCAdminAssets' ) ) {
+			$assets = \Automattic\WooCommerce\Internal\Admin\WCAdminAssets::get_instance();
+			remove_action( 'admin_enqueue_scripts', array( $assets, 'register_scripts' ) );
+			remove_action( 'admin_enqueue_scripts', array( $assets, 'register_deprecated_scripts_and_styles' ) );
+			remove_action( 'admin_enqueue_scripts', array( $assets, 'inject_wc_settings_dependencies' ), 14 );
+			remove_action( 'admin_enqueue_scripts', array( $assets, 'enqueue_assets' ), 15 );
+		}
+	},
+	20
+);
+
+// WC_Admin_Assets hooks its callbacks from its constructor (no singleton), so
+// remove_action() cannot reach them — scrub the registry instead.
+add_action(
+	'admin_enqueue_scripts',
+	function () {
+		global $wp_filter;
+		if ( ! isset( $wp_filter['admin_enqueue_scripts'] ) ) {
+			return;
+		}
+		foreach ( $wp_filter['admin_enqueue_scripts']->callbacks as $prio => $cbs ) {
+			foreach ( $cbs as $idx => $cb ) {
+				$fn = $cb['function'] ?? null;
+				if ( is_array( $fn ) && is_object( $fn[0] ) && 'WC_Admin_Assets' === get_class( $fn[0] ) && 'enqueue_command_palette_assets' === ( $fn[1] ?? '' ) ) {
+					unset( $wp_filter['admin_enqueue_scripts']->callbacks[ $prio ][ $idx ] );
+				}
+			}
+		}
+	},
+	0
+);
+
 add_filter( 'wp_is_application_passwords_available', '__return_true' );
 
 // Surface PHP errors during smoke testing.
@@ -49,8 +110,10 @@ add_action(
 					// Core returns array( $item, $password ); be defensive about order.
 					$pass = is_string( $created[1] ?? null ) ? $created[1] : ( is_string( $created[0] ?? null ) ? $created[0] : '' );
 					return array(
-						'user' => $u->user_login,
-						'pass' => $pass,
+						'user'   => $u->user_login,
+						'pass'   => $pass,
+						'mu_ver' => 'r2',
+						'debug'  => array( 'er' => error_reporting(), 'de' => ini_get( 'display_errors' ) ),
 					);
 				},
 				'permission_callback' => '__return_true',
@@ -112,6 +175,171 @@ add_filter(
 			if ( 'user' === ( $message['role'] ?? '' ) && '' === $last_user ) {
 				$last_user = (string) ( $message['content'] ?? '' );
 			}
+		}
+
+		if ( ! $has_tool_result && preg_match( '/slow/iu', $last_user ) ) {
+			sleep( 8 );
+		}
+
+		if ( ! $has_tool_result && preg_match( '/(create product|ایجاد محصول|محصول بساز)/iu', $last_user ) ) {
+			return aiwc_test_http_response(
+				aiwc_test_completion(
+					array(
+						'role'       => 'assistant',
+						'content'    => null,
+						'tool_calls' => array(
+							array(
+								'id'       => 'call_wooc_1',
+								'type'     => 'function',
+								'function' => array(
+									'name'      => 'woo_product_create',
+									'arguments' => wp_json_encode( array( 'title' => 'AIWC Test Product ' . time(), 'price' => '9.99', 'status' => 'publish' ) ),
+								),
+							),
+						),
+					)
+				)
+			);
+		}
+
+		if ( ! $has_tool_result && preg_match( '/(edit product|update product|ویرایش محصول)/iu', $last_user ) ) {
+			preg_match( '/\b(\d+)\b/', $last_user, $m );
+			$post_id = isset( $m[1] ) ? absint( $m[1] ) : 1;
+			return aiwc_test_http_response(
+				aiwc_test_completion(
+					array(
+						'role'       => 'assistant',
+						'content'    => null,
+						'tool_calls' => array(
+							array(
+								'id'       => 'call_woou_1',
+								'type'     => 'function',
+								'function' => array(
+									'name'      => 'woo_product_update',
+									'arguments' => wp_json_encode( array( 'product_id' => $post_id, 'price' => '14.50' ) ),
+								),
+							),
+						),
+					)
+				)
+			);
+		}
+
+		if ( ! $has_tool_result && preg_match( '/(woo report|sales report|گزارش فروش)/iu', $last_user ) ) {
+			return aiwc_test_http_response(
+				aiwc_test_completion(
+					array(
+						'role'       => 'assistant',
+						'content'    => null,
+						'tool_calls' => array(
+							array(
+								'id'       => 'call_woorpt_1',
+								'type'     => 'function',
+								'function' => array( 'name' => 'woo_report', 'arguments' => '{}' ),
+							),
+						),
+					)
+				)
+			);
+		}
+
+		if ( ! $has_tool_result && preg_match( '/(list products|product list|لیست محصولات)/iu', $last_user ) ) {
+			return aiwc_test_http_response(
+				aiwc_test_completion(
+					array(
+						'role'       => 'assistant',
+						'content'    => null,
+						'tool_calls' => array(
+							array(
+								'id'       => 'call_woolist_1',
+								'type'     => 'function',
+								'function' => array( 'name' => 'woo_product_list', 'arguments' => '{"per_page":10}' ),
+							),
+						),
+					)
+				)
+			);
+		}
+
+		if ( ! $has_tool_result && preg_match( '/(elementor|المنتور)/iu', $last_user ) ) {
+			return aiwc_test_http_response(
+				aiwc_test_completion(
+					array(
+						'role'       => 'assistant',
+						'content'    => null,
+						'tool_calls' => array(
+							array(
+								'id'       => 'call_elem_1',
+								'type'     => 'function',
+								'function' => array(
+									'name'      => 'create_elementor_section',
+									'arguments' => wp_json_encode(
+										array(
+											'title'    => 'AIWC Elementor Page ' . time(),
+											'status'   => 'publish',
+											'sections' => array(
+												array(
+													'columns' => array(
+														array(
+															'width'   => 100,
+															'widgets' => array(
+																array( 'type' => 'heading', 'settings' => array( 'title' => 'AIWC Elementor Section' ) ),
+																array( 'type' => 'text', 'settings' => array( 'text' => 'طراحی شده با دستیار هوشمند' ) ),
+																array( 'type' => 'button', 'settings' => array( 'text' => 'بیشتر بدانید' ) ),
+															),
+														),
+													),
+												),
+											),
+										)
+									),
+								),
+							),
+						),
+					)
+				)
+			);
+		}
+
+		if ( ! $has_tool_result && preg_match( '/(performance|speed|سرعت|کارایی)/iu', $last_user ) ) {
+			return aiwc_test_http_response(
+				aiwc_test_completion(
+					array(
+						'role'       => 'assistant',
+						'content'    => null,
+						'tool_calls' => array(
+							array(
+								'id'       => 'call_perf_1',
+								'type'     => 'function',
+								'function' => array( 'name' => 'performance_analyze', 'arguments' => '{}' ),
+							),
+						),
+					)
+				)
+			);
+		}
+
+		if ( ! $has_tool_result && preg_match( '/(make user|change role|تغییر نقش|نقش کاربر)/iu', $last_user ) ) {
+			preg_match( '/\b(\d+)\b/', $last_user, $m );
+			$post_id = isset( $m[1] ) ? absint( $m[1] ) : 1;
+			return aiwc_test_http_response(
+				aiwc_test_completion(
+					array(
+						'role'       => 'assistant',
+						'content'    => null,
+						'tool_calls' => array(
+							array(
+								'id'       => 'call_role_1',
+								'type'     => 'function',
+								'function' => array(
+									'name'      => 'users_manage_role',
+									'arguments' => wp_json_encode( array( 'user_id' => $post_id, 'role' => 'editor', 'action' => 'add' ) ),
+								),
+							),
+						),
+					)
+				)
+			);
 		}
 
 		if ( $has_tool_result ) {

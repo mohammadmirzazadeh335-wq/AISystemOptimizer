@@ -88,6 +88,16 @@ class Chat_Controller extends Base_Controller {
 
 		register_rest_route(
 			Api::NS,
+			'/chat/cancel',
+			array(
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'cancel_chat' ),
+				'permission_callback' => array( $this, 'can_manage' ),
+			)
+		);
+
+		register_rest_route(
+			Api::NS,
 			'/approvals',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -211,10 +221,11 @@ class Chat_Controller extends Base_Controller {
 			);
 		}
 
-		// Simple per-user rate limit: 15 requests / minute.
-		$rl_key = 'aiwc_rl_' . get_current_user_id();
-		$hits   = (int) get_transient( $rl_key );
-		if ( $hits >= 15 ) {
+		// Simple per-user rate limit: 15 requests / minute (filterable).
+		$rl_key  = 'aiwc_rl_' . get_current_user_id();
+		$hits    = (int) get_transient( $rl_key );
+		$rl_limit = max( 1, (int) apply_filters( 'aiwc_chat_rate_limit', 15 ) );
+		if ( $hits >= $rl_limit ) {
 			return $this->error( 'aiwc_rate_limited', __( 'Too many requests. Please wait a moment.', 'ai-wordpress-copilot' ), 429 );
 		}
 		set_transient( $rl_key, $hits + 1, MINUTE_IN_SECONDS );
@@ -243,6 +254,16 @@ class Chat_Controller extends Base_Controller {
 		}
 
 		return $this->respond( $result );
+	}
+
+	/**
+	 * POST /chat/cancel — request cooperative cancellation of the running agent loop.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public function cancel_chat() {
+		set_transient( 'aiwc_cancel_' . get_current_user_id(), time(), 5 * MINUTE_IN_SECONDS );
+		return $this->respond( array( 'cancelling' => true ) );
 	}
 
 	/**

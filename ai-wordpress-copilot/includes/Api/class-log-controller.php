@@ -57,6 +57,53 @@ class Log_Controller extends Base_Controller {
 				'permission_callback' => array( $this, 'can_manage' ),
 			)
 		);
+
+		register_rest_route(
+			Api::NS,
+			'/snapshots',
+			array(
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'list_snapshots' ),
+				'permission_callback' => array( $this, 'can_manage' ),
+			)
+		);
+
+		register_rest_route(
+			Api::NS,
+			'/snapshots/(?P<id>\d+)/restore',
+			array(
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'restore_snapshot' ),
+				'permission_callback' => array( $this, 'can_manage' ),
+			)
+		);
+	}
+
+	/**
+	 * GET /snapshots — recent rollback snapshots.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public function list_snapshots() {
+		return $this->respond(
+			array(
+				'items' => $this->plugin->get( 'snapshots' )->list_snapshots( 20 ),
+			)
+		);
+	}
+
+	/**
+	 * POST /snapshots/{id}/restore
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function restore_snapshot( \WP_REST_Request $request ) {
+		$result = $this->plugin->get( 'snapshots' )->restore( (int) $request['id'] );
+		if ( is_wp_error( $result ) ) {
+			return $this->error( $result->get_error_code(), $result->get_error_message(), 500 );
+		}
+		return $this->respond( $result );
 	}
 
 	/**
