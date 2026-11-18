@@ -13,6 +13,7 @@ use AIWC\Builder\Design_Engine;
 use AIWC\Builder\Design_System;
 use AIWC\Builder\Elementor_Adapter;
 use AIWC\Builder\Gutenberg_Adapter;
+use AIWC\Builder\Redesign_Engine;
 use AIWC\Builder\Section_Library;
 
 defined( 'ABSPATH' ) || exit;
@@ -137,6 +138,23 @@ class Builder_Tools extends Abstract_Tool_Group {
 					),
 					'required'   => array( 'action' ),
 				),
+			),
+			array(
+				'name'        => 'redesign_page',
+				'description' => 'Redesign a page safely: action=analyze (content inventory + design critique + proposal), action=preview (build a draft preview copy; the original stays untouched), action=apply (replace the page with the preview — REQUIRES confirm=true and user approval; content is snapshot-protected), action=compare (before/after structural comparison; screenshots unavailable in this environment).',
+				'parameters'  => array(
+					'type'       => 'object',
+					'properties' => array(
+						'post_id'    => array( 'type' => 'integer', 'description' => 'Page to redesign.' ),
+						'action'     => array( 'type' => 'string', 'description' => 'analyze | preview | apply | compare' ),
+						'proposal'   => array( 'type' => 'object', 'description' => 'Optional adjusted proposal for preview (sections/preserved/removed).' ),
+						'preview_id' => array( 'type' => 'integer', 'description' => 'Preview post ID (required for apply).' ),
+						'confirm'    => array( 'type' => 'boolean', 'description' => 'Explicit user-confirmed approval (required for apply).' ),
+					),
+					'required'   => array( 'post_id', 'action' ),
+				),
+				'handler'     => 'handle_redesign_page',
+				'risk'        => 'write',
 			),
 			array(
 				'name'        => 'get_builder_status',
@@ -355,6 +373,40 @@ class Builder_Tools extends Abstract_Tool_Group {
 			return $ok ? $this->success( array(), 'Component deleted.' ) : $this->error( 'Component not found.' );
 		}
 		return $this->error( 'Unknown action: ' . $action );
+	}
+
+	/**
+	 * redesign_page
+	 *
+	 * @param array $args Args.
+	 * @return array
+	 */
+	public function handle_redesign_page( array $args ) {
+		$post_id = isset( $args['post_id'] ) ? (int) $args['post_id'] : 0;
+		$action  = isset( $args['action'] ) ? (string) $args['action'] : '';
+		switch ( $action ) {
+			case 'analyze':
+				$result = Redesign_Engine::analyze( $post_id );
+				break;
+			case 'preview':
+				$proposal = isset( $args['proposal'] ) && is_array( $args['proposal'] ) ? $args['proposal'] : array();
+				$result   = Redesign_Engine::preview( $post_id, $proposal );
+				break;
+			case 'apply':
+				$preview_id = isset( $args['preview_id'] ) ? (int) $args['preview_id'] : 0;
+				$confirm    = ! empty( $args['confirm'] );
+				$result     = Redesign_Engine::apply( $post_id, $preview_id, $confirm );
+				break;
+			case 'compare':
+				$result = Redesign_Engine::compare( $post_id );
+				break;
+			default:
+				return $this->error( 'Unknown redesign action: ' . $action );
+		}
+		if ( is_wp_error( $result ) ) {
+			return $this->error( $result->get_error_message() );
+		}
+		return $this->success( $result, 'Redesign ' . $action . ' completed.' );
 	}
 
 	/**
