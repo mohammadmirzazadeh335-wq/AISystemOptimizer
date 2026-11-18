@@ -343,8 +343,8 @@ add_filter(
 								'id'       => 'call_woou_1',
 								'type'     => 'function',
 								'function' => array(
-									'name'      => 'woo_product_update',
-									'arguments' => wp_json_encode( array( 'product_id' => $post_id, 'price' => '14.50' ) ),
+								'name'      => 'woo_product_update',
+								'arguments' => wp_json_encode( array( 'product_id' => $post_id, 'price' => '14.50', 'confirm' => true ) ),
 								),
 							),
 						),

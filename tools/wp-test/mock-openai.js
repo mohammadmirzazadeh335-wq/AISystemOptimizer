@@ -261,6 +261,50 @@ function respondTo(res, messages) {
         });
       }
 
+      if (/(variable product|محصول متغیر|variations|تنوع‌دار)/i.test(text)) {
+        return completion(res, {
+          role: 'assistant',
+          content: null,
+          tool_calls: [
+            toolCall('call_woov_1', 'woo_product_variable', {
+              title: 'محصول متغیر تست',
+              attributes: [{ name: 'Size', options: ['S', 'M'], variation: true }],
+              variations: [
+                { sku: 'VAR-S', attributes: { Size: 'S' }, price: '10.00', stock: 5, confirm: true },
+                { sku: 'VAR-M', attributes: { Size: 'M' }, price: '12.00', stock: 3, confirm: true },
+              ],
+              confirm: true,
+            }),
+          ],
+        });
+      }
+      if (/(manage stock|inventory|موجودی)/i.test(text)) {
+        return completion(res, {
+          role: 'assistant',
+          content: null,
+          tool_calls: [
+            toolCall('call_woos_1', 'woo_manage_stock', {
+              product_id: firstNumber(text, 1),
+              stock: 25,
+              confirm: true,
+            }),
+          ],
+        });
+      }
+      if (/(product analysis|تحلیل محصول)/i.test(text)) {
+        return completion(res, {
+          role: 'assistant',
+          content: null,
+          tool_calls: [toolCall('call_wooa_1', 'woo_product_analyze', { product_id: firstNumber(text, 1) })],
+        });
+      }
+      if (/(shop design|طراحی فروشگاه)/i.test(text)) {
+        return completion(res, {
+          role: 'assistant',
+          content: null,
+          tool_calls: [toolCall('call_wood_1', 'woo_shop_design', { action: 'shop', title: 'فروشگاه من' })],
+        });
+      }
       if (/(edit product|update product|ویرایش محصول)/i.test(text)) {
         return completion(res, {
           role: 'assistant',
@@ -269,6 +313,7 @@ function respondTo(res, messages) {
             toolCall('call_woou_1', 'woo_product_update', {
               product_id: firstNumber(text, 1),
               price: '14.50',
+              confirm: true,
             }),
           ],
         });
@@ -382,6 +427,16 @@ function respondTo(res, messages) {
 }
 
 const server = http.createServer((req, res) => {
+  // Tiny 1x1 JPEG (valid image for media sideload tests).
+  if (req.url.startsWith('/img/test.jpg')) {
+    const jpg = Buffer.from(
+      '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q==',
+      'base64'
+    );
+    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Length': jpg.length });
+    return res.end(jpg);
+  }
+
   // Link-checker test endpoints.
   if (req.url.startsWith('/status/200')) return json(res, 200, { ok: true });
   if (req.url.startsWith('/status/404')) return json(res, 404, { error: { message: 'not found' } });

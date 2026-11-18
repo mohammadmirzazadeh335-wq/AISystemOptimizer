@@ -430,6 +430,10 @@ class Seo_Analyzer {
 			);
 		}
 		$report['available'] = true;
+		if ( ! isset( $report['average_score'] ) && ! empty( $report['items'] ) && is_array( $report['items'] ) ) {
+			$scores                 = wp_list_pluck( $report['items'], 'score' );
+			$report['average_score'] = $scores ? (int) round( array_sum( $scores ) / count( $scores ) ) : 0;
+		}
 		return $report;
 	}
 

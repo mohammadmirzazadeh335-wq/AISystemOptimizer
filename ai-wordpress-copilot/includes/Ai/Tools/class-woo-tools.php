@@ -57,6 +57,7 @@ class Woo_Tools extends Abstract_Tool_Group {
 						'sale_price'  => array( 'type' => 'string', 'description' => 'New sale price.' ),
 						'stock'       => array( 'type' => 'integer', 'description' => 'New stock quantity.' ),
 						'status'      => array( 'type' => 'string', 'description' => 'New status.', 'enum' => array( 'publish', 'draft' ) ),
+						'confirm'     => array( 'type' => 'boolean', 'description' => 'Set true to confirm price/stock changes after the user approved them.' ),
 					),
 					'required'   => array( 'product_id' ),
 				),
@@ -199,6 +200,23 @@ class Woo_Tools extends Abstract_Tool_Group {
 		$product    = wc_get_product( $product_id );
 		if ( ! $product ) {
 			return $this->error( sprintf( 'Product %d not found.', $product_id ) );
+		}
+
+		// Mandatory confirmation for sensitive commerce changes (price/stock).
+		$sensitive = array_intersect( array( 'price', 'sale_price', 'stock', 'stock_status' ), array_keys( $args ) );
+		if ( $sensitive && empty( $args['confirm'] ) ) {
+			$log_id = $this->plugin->get( 'registry' )->create_approval(
+				'woo_product_update',
+				$args + array( 'product_id' => $product_id ),
+				$context
+			);
+			return $this->error(
+				sprintf(
+					'Price/stock changes need explicit user confirmation (fields: %s). Ask the user, then retry with confirm=true. Approval entry #%d created.',
+					implode( ', ', $sensitive ),
+					$log_id
+				)
+			);
 		}
 
 		$state = $this->begin_mutation( $product_id, 'woo_product_update', $args, $context );

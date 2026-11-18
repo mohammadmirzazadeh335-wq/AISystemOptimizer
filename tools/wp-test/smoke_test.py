@@ -93,6 +93,19 @@ def fetch_creds():
     return data
 
 
+def count_pages():
+    """Total page count via the X-WP-Total header (per_page caps body length)."""
+    r = urllib.request.Request(BASE + "/wp-json/wp/v2/pages?per_page=1")
+    creds = json.load(open(CREDS_FILE))
+    token = base64.b64encode((creds["user"] + ":" + creds["pass"]).encode()).decode()
+    r.add_header("Authorization", "Basic " + token)
+    try:
+        with urllib.request.urlopen(r, timeout=30) as resp:
+            return int(resp.headers.get("X-WP-Total", -1))
+    except Exception:
+        return -1
+
+
 def wait_ready(timeout=300):
     start = time.time()
     while time.time() - start < timeout:
@@ -192,8 +205,7 @@ def main():
 
     # --- 7. Approval flow (mode 2) ---
     code, _ = req("/settings", "POST", {"execution_mode": 2})
-    before_code, before_pages = req("/wp-json/wp/v2/pages?per_page=100", raw_base=True)
-    count_before = len(before_pages) if before_code == 200 else -1
+    count_before = count_pages()
 
     code, data = req("/chat", "POST", {"message": "create page about approval flow"})
     check("mode2 chat returns", code == 200, data)
@@ -205,14 +217,13 @@ def main():
     check("GET /approvals lists pending", code == 200 and any(a["id"] == approval_id for a in ap.get("items", [])), ap)
 
     code, after_pages = req("/wp-json/wp/v2/pages?per_page=100", raw_base=True)
-    count_after = len(after_pages) if code == 200 else -1
+    count_after = count_pages()
     check("mode2 did NOT create the page before approval", count_before == count_after, (count_before, count_after))
 
     code, res = req("/approvals/" + str(approval_id) + "/approve", "POST")
     check("approve executes the operation", code == 200 and res.get("success") is True, res)
 
-    code, after_pages = req("/wp-json/wp/v2/pages?per_page=100", raw_base=True)
-    count_final = len(after_pages) if code == 200 else -1
+    count_final = count_pages()
     check("page created after approval", count_final == count_before + 1, (count_before, count_final))
 
     # --- 8. Reject flow ---
