@@ -83,6 +83,21 @@ ini_set( 'display_errors', '1' );
 error_reporting( E_ALL );
 
 /**
+ * Test-environment SSRF guard context: the sandbox DNS resolves every host to
+ * a private proxy address and the mock API lives on 127.0.0.1. Production
+ * installs keep the strict defaults (these filters exist for tests only).
+ */
+add_filter( 'aiwc_url_guard_trust_dns', '__return_true' );
+add_filter(
+	'aiwc_url_guard_allowed_hosts',
+	function ( $hosts ) {
+		$hosts[] = '127.0.0.1';
+		$hosts[] = 'localhost';
+		return $hosts;
+	}
+);
+
+/**
  * On-demand application-password provisioning for the smoke tests.
  * Endpoint: /wp-json/aiwc-test/v1/creds?key=smoke
  */
@@ -123,11 +138,37 @@ add_action(
 		// TEMPORARY debug route: exercise chat_stream internals and report Throwables.
 		register_rest_route(
 			'aiwc-test/v1',
+			'/url-guard',
+			array(
+				'methods'             => 'GET',
+				'callback'            => function ( $request ) {
+					$url      = (string) $request->get_param( 'url' );
+					$trust    = '0' !== (string) $request->get_param( 'trust_dns' );
+					$allow    = array_filter( explode( ',', (string) $request->get_param( 'allow' ) ) );
+					add_filter( 'aiwc_url_guard_trust_dns', function () use ( $trust ) { return $trust; } );
+					add_filter( 'aiwc_url_guard_allowed_hosts', function () use ( $allow ) { return $allow; } );
+					$result = \AIWC\Security\Url_Guard::validate_url( $url );
+					if ( is_wp_error( $result ) ) {
+						return array( 'ok' => false, 'code' => $result->get_error_code() );
+					}
+					return array( 'ok' => true );
+				},
+				'permission_callback' => '__return_true',
+			)
+		);
+		register_rest_route(
+			'aiwc-test/v1',
 			'/debug-stream',
 			array(
 				'methods'             => 'GET',
 				'callback'            => function () {
 					$out = array();
+					$out['dns'] = array(
+						'gethostbynamel_example' => function_exists( 'gethostbynamel' ) ? @gethostbynamel( 'example.com' ) : 'missing',
+						'gethostbyname_example'  => function_exists( 'gethostbyname' ) ? @gethostbyname( 'example.com' ) : 'missing',
+						'inet_pton'              => function_exists( 'inet_pton' ),
+						'dns_get_record'         => function_exists( 'dns_get_record' ),
+					);
 					try {
 						$plugin = function_exists( 'aiwc' ) ? aiwc() : null;
 						$out['plugin'] = $plugin ? get_class( $plugin ) : 'no aiwc()';

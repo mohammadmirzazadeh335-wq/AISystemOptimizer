@@ -75,6 +75,7 @@ class Plugin {
 		$this->set( 'context', new Context\Site_Context_Engine() );
 		$this->set( 'queue', new Queue\Job_Queue() );
 		$this->set( 'seo', new Seo\Seo_Analyzer( $this->get( 'context' ) ) );
+		$this->set( 'link_checker', new Seo\Link_Checker( $this ) );
 
 		// AI layer.
 		$client  = new Ai\OpenAI_Client();
@@ -84,6 +85,7 @@ class Plugin {
 		$this->set( 'agent', new Ai\Agent( $client, $registry, $this->get( 'conversations' ), $this->get( 'memory' ), $this->get( 'context' ), $this->get( 'log' ), $this->get( 'snapshots' ) ) );
 
 		// Tool groups.
+		Activator::maybe_upgrade();
 		$registry->register_group( new Ai\Tools\Core_Tools( $this ) );
 		$registry->register_group( new Ai\Tools\Content_Tools( $this ) );
 		$registry->register_group( new Ai\Tools\Design_Tools( $this ) );

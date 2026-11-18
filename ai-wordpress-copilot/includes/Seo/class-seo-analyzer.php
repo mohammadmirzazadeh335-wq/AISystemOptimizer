@@ -194,9 +194,10 @@ class Seo_Analyzer {
 
 		// 5. Links.
 		preg_match_all( '/<a\s[^>]*href\s*=\s*([\'"])(.*?)\1/i', $content, $link_matches );
-		$internal = 0;
-		$external = 0;
-		$broken   = array();
+		$internal       = 0;
+		$external       = 0;
+		$broken         = array();
+		$external_links = array();
 		$site_host = wp_parse_url( home_url(), PHP_URL_HOST );
 		foreach ( $link_matches[2] as $href ) {
 			$href = html_entity_decode( $href );
@@ -204,7 +205,8 @@ class Seo_Analyzer {
 				continue;
 			}
 			$host = wp_parse_url( $href, PHP_URL_HOST );
-			if ( ! $host || $host === $site_host ) {
+			$port = (int) wp_parse_url( $href, PHP_URL_PORT );
+			if ( ! $host || ( $host === $site_host && $port === (int) wp_parse_url( home_url(), PHP_URL_PORT ) ) ) {
 				++$internal;
 				// Verify internal link resolves (post name or path).
 				$path = wp_parse_url( $href, PHP_URL_PATH );
@@ -216,6 +218,7 @@ class Seo_Analyzer {
 				}
 			} else {
 				++$external;
+				$external_links[] = $href;
 			}
 		}
 		$checks['links'] = array( 'internal' => $internal, 'external' => $external, 'broken' => $broken );
@@ -224,6 +227,29 @@ class Seo_Analyzer {
 		}
 		if ( $broken ) {
 			$issues[] = $this->issue( 'broken_links', 'high', sprintf( 'Broken internal link(s): %s', implode( ', ', array_slice( $broken, 0, 5 ) ) ), 'Fix or remove the broken links.' );
+		}
+
+		// External link statuses from the link checker cache (run /links/scan +
+		// /links/check to populate; the analyzer stays fast by never fetching).
+		$ext_broken = array();
+		$ext_status = array();
+		foreach ( array_unique( $external_links ) as $ext_url ) {
+			$row = Link_Checker::cached_status( $ext_url );
+			$ext_status[ $ext_url ] = $row && 'pending' !== $row['status'] ? $row['status'] : 'unchecked';
+			if ( $row && in_array( $row['status'], array( 'broken', 'timeout', 'unreachable', 'ssl_error' ), true ) ) {
+				$ext_broken[] = $ext_url;
+			}
+		}
+		if ( $ext_status ) {
+			$checks['links']['external_status'] = $ext_status;
+		}
+		if ( $ext_broken ) {
+			$issues[] = $this->issue(
+				'broken_external_links',
+				'high',
+				sprintf( 'Broken external link(s): %s', implode( ', ', array_slice( $ext_broken, 0, 5 ) ) ),
+				'Open the link report (Website Builder → Links) for fix suggestions; update or remove the failing links.'
+			);
 		}
 
 		// 6. Content length.

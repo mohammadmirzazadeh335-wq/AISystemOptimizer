@@ -30,6 +30,17 @@ class Activator {
 	}
 
 	/**
+	 * Run schema upgrades on version bumps (safe no-op otherwise).
+	 */
+	public static function maybe_upgrade() {
+		if ( get_option( 'aiwc_db_version' ) === AIWC_DB_VERSION ) {
+			return;
+		}
+		self::create_tables();
+		update_option( 'aiwc_db_version', AIWC_DB_VERSION );
+	}
+
+	/**
 	 * Create custom database tables.
 	 */
 	public static function create_tables() {
@@ -125,6 +136,26 @@ class Activator {
 			PRIMARY KEY  (id),
 			KEY status (status),
 			KEY type (type)
+		) $charset;";
+
+		$sql[] = "CREATE TABLE {$p}aiwc_links (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			url_hash CHAR(32) NOT NULL,
+			url TEXT NOT NULL,
+			source_post_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			anchor_text VARCHAR(500) NOT NULL DEFAULT '',
+			status VARCHAR(20) NOT NULL DEFAULT 'pending',
+			http_code SMALLINT NOT NULL DEFAULT 0,
+			final_url TEXT NULL,
+			redirect_count TINYINT UNSIGNED NOT NULL DEFAULT 0,
+			error_message VARCHAR(500) NOT NULL DEFAULT '',
+			attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+			checked_at DATETIME NULL DEFAULT NULL,
+			created_at DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00',
+			PRIMARY KEY  (id),
+			UNIQUE KEY url_source (url_hash, source_post_id),
+			KEY status (status),
+			KEY url_hash (url_hash)
 		) $charset;";
 
 		$sql[] = "CREATE TABLE {$p}aiwc_memory (

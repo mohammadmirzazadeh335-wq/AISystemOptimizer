@@ -50,6 +50,7 @@ class Api {
 			new Log_Controller( $plugin ),
 			new Memory_Controller( $plugin ),
 			new Jobs_Controller( $plugin ),
+			new Links_Controller( $plugin ),
 		);
 	}
 

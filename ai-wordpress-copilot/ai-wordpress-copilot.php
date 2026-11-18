@@ -21,7 +21,7 @@ define( 'AIWC_VERSION', '1.0.0' );
 define( 'AIWC_FILE', __FILE__ );
 define( 'AIWC_PATH', plugin_dir_path( __FILE__ ) );
 define( 'AIWC_URL', plugin_dir_url( __FILE__ ) );
-define( 'AIWC_DB_VERSION', '1.0.0' );
+define( 'AIWC_DB_VERSION', '1.1.0' );
 
 require_once AIWC_PATH . 'includes/class-autoloader.php';
 AIWC\Autoloader::register();

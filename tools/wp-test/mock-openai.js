@@ -342,6 +342,26 @@ function respondTo(res, messages) {
 }
 
 const server = http.createServer((req, res) => {
+  // Link-checker test endpoints.
+  if (req.url.startsWith('/status/200')) return json(res, 200, { ok: true });
+  if (req.url.startsWith('/status/404')) return json(res, 404, { error: { message: 'not found' } });
+  if (req.url.startsWith('/status/500')) return json(res, 500, { error: { message: 'server error' } });
+  if (req.url.startsWith('/status/301')) {
+    res.writeHead(301, { Location: '/status/200' });
+    return res.end();
+  }
+  if (req.url.startsWith('/status/302-evil')) {
+    res.writeHead(302, { Location: 'http://169.254.169.254/latest/meta-data/' });
+    return res.end();
+  }
+  if (req.url.startsWith('/status/302-relative')) {
+    res.writeHead(302, { Location: '/status/200' });
+    return res.end();
+  }
+  if (req.url.startsWith('/status/timeout')) {
+    return setTimeout(() => json(res, 200, { ok: true }), 20000);
+  }
+
   if (req.method === 'GET' && req.url.startsWith('/v1/models')) {
     return json(res, 200, {
       object: 'list',
