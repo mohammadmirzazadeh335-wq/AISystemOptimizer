@@ -175,11 +175,119 @@
     }).catch(function (err) { A.toast(err.message, true); });
   }
 
+  var activeStream = null;
+
   function setBusyUI(busy) {
     var send = document.getElementById('aiwc-send');
     var stop = document.getElementById('aiwc-stop');
     if (send) send.style.display = busy ? 'none' : '';
     if (stop) stop.style.display = busy ? '' : 'none';
+  }
+
+  function renderPlanCard(plan) {
+    if (!plan || !plan.steps || !plan.steps.length) return '';
+    var html = '<div class="aiwc-plan"><strong>📋 ' + A.esc(A.t('plan') || 'Plan') + '</strong> ' + A.esc(plan.summary || '');
+    html += '<ol>';
+    plan.steps.forEach(function (s) {
+      html += '<li>' + A.esc(typeof s === 'string' ? s : (s.text || s.step || JSON.stringify(s))) + '</li>';
+    });
+    html += '</ol></div>';
+    return html;
+  }
+
+  function parseSseChunk(chunk, onEvent) {
+    var ev = 'message';
+    var dataLines = [];
+    chunk.split('\n').forEach(function (line) {
+      if (line.indexOf('event: ') === 0) ev = line.slice(7).trim();
+      else if (line.indexOf('data: ') === 0) dataLines.push(line.slice(6));
+      else if (line.indexOf('data:') === 0) dataLines.push(line.slice(5));
+    });
+    if (!dataLines.length) return;
+    var raw = dataLines.join('\n');
+    if (raw === '[DONE]') { onEvent('done_raw', {}); return; }
+    var data = {};
+    try { data = JSON.parse(raw); } catch (e) { data = { text: raw }; }
+    onEvent(ev, data);
+  }
+
+  /**
+   * Stream the agent run over SSE. Resolves with the final result object on
+   * 'done'. Rejects if the stream never started (caller falls back to the
+   * non-streaming endpoint); rejects with err.partial=true if it broke mid-run.
+   */
+  function streamChat(text, ui) {
+    var cfg = global.AIWC || {};
+    var url = cfg.root.replace(/\/$/, '') + '/chat/stream';
+    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    activeStream = controller;
+
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': cfg.nonce },
+      credentials: 'same-origin',
+      body: JSON.stringify({ message: text, conversation_id: state.activeId || 0 }),
+      signal: controller ? controller.signal : undefined
+    }).then(function (resp) {
+      if (!resp.ok || !resp.body) {
+        return resp.json().catch(function () { return {}; }).then(function (data) {
+          var err = new Error((data && (data.error || data.message)) || ('HTTP ' + resp.status));
+          err.partial = false;
+          throw err;
+        });
+      }
+      var reader = resp.body.getReader();
+      var decoder = new TextDecoder();
+      var buf = '';
+      var finalResult = null;
+      var gotEvent = false;
+      var stepLines = 0;
+
+      function onEvent(ev, data) {
+        gotEvent = true;
+        if (ev === 'delta') {
+          ui.streamText += (data.text || '');
+          ui.updateStream();
+        } else if (ev === 'plan') {
+          ui.showPlan(data);
+        } else if (ev === 'tool_call') {
+          ui.addStep('tool', data.tool || data.name || '', null);
+          stepLines++;
+        } else if (ev === 'step') {
+          ui.addStep('result', data.tool || '', data.status);
+        } else if (ev === 'review') {
+          ui.addStep('review', data.tool || '', data.ok === false ? 'review_failed' : 'ok');
+        } else if (ev === 'status') {
+          ui.addStep('status', data.message || data.text || '', null);
+        } else if (ev === 'usage') {
+          ui.usage(data);
+        } else if (ev === 'error') {
+          var err = new Error(data.message || 'stream error');
+          err.partial = gotEvent;
+          throw err;
+        } else if (ev === 'done') {
+          finalResult = data;
+        }
+      }
+
+      function pump() {
+        return reader.read().then(function (r) {
+          if (r.done) return finalResult;
+          buf += decoder.decode(r.value, { stream: true });
+          var parts = buf.split('\n\n');
+          buf = parts.pop();
+          parts.forEach(function (p) { parseSseChunk(p, onEvent); });
+          return pump();
+        });
+      }
+
+      return pump().catch(function (err) {
+        if (err && err.partial !== undefined) throw err;
+        var e2 = new Error(err && err.message ? err.message : 'stream disconnected');
+        e2.partial = gotEvent;
+        throw e2;
+      });
+    });
   }
 
   function sendMessage() {
@@ -194,42 +302,82 @@
     renderMessages();
 
     var body = document.getElementById('aiwc-chat-body');
-    var thinking = document.createElement('div');
-    thinking.className = 'aiwc-thinking';
-    thinking.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span><span>' + A.esc(A.t('thinking')) + '</span>';
-    body.appendChild(thinking);
+    var streamBox = document.createElement('div');
+    streamBox.className = 'aiwc-chat-msg ai aiwc-stream';
+    streamBox.innerHTML = '<div class="aiwc-stream-plan"></div><div class="aiwc-stream-text"><span class="aiwc-cursor">▌</span></div><div class="aiwc-stream-steps"></div>';
+    body.appendChild(streamBox);
     body.scrollTop = body.scrollHeight;
 
-    A.api('chat', {
-      method: 'POST',
-      body: {
-        message: text,
-        conversation_id: state.activeId || 0
+    var ui = {
+      streamText: '',
+      updateStream: function () {
+        var el = streamBox.querySelector('.aiwc-stream-text');
+        if (el) {
+          el.innerHTML = (global.AIWCMarkdown ? global.AIWCMarkdown.render(ui.streamText) : A.esc(ui.streamText)) + '<span class="aiwc-cursor">▌</span>';
+          body.scrollTop = body.scrollHeight;
+        }
+      },
+      showPlan: function (plan) {
+        var el = streamBox.querySelector('.aiwc-stream-plan');
+        if (el) { el.innerHTML = renderPlanCard(plan); body.scrollTop = body.scrollHeight; }
+      },
+      addStep: function (kind, name, status) {
+        var el = streamBox.querySelector('.aiwc-stream-steps');
+        if (!el) return;
+        var cls = 'aiwc-step-line' + (status === 'success' || status === 'ok' ? ' ok' : (status ? ' bad' : ''));
+        var icon = kind === 'review' ? '🔍' : (kind === 'result' ? (status === 'success' || status === 'ok' ? '✓' : '✗') : (kind === 'status' ? 'ℹ' : '🛠'));
+        var line = document.createElement('div');
+        line.className = cls;
+        line.textContent = icon + ' ' + name + (status ? ' — ' + status : '');
+        el.appendChild(line);
+        body.scrollTop = body.scrollHeight;
+      },
+      usage: function (usage) {
+        if (usage && usage.total_tokens) updateUsage(usage, state.activeId);
       }
-    }).then(function (res) {
-      thinking.remove();
+    };
+
+    function finish(res) {
       state.busy = false;
       setBusyUI(false);
-      if (res.conversation_id) {
-        state.activeId = res.conversation_id;
-      }
+      if (streamBox.parentNode) streamBox.remove();
+      if (res && res.conversation_id) state.activeId = res.conversation_id;
       return loadConversations().then(function () {
         return loadMessages(state.activeId);
       }).then(function () {
-        if (res.usage && res.usage.total_tokens) {
+        if (res && res.usage && res.usage.total_tokens) {
           updateUsage(res.usage, res.conversation_id ? res.conversation_id : state.activeId);
         }
       });
-    }).catch(function (err) {
-      thinking.remove();
+    }
+
+    function fail(err) {
       state.busy = false;
       setBusyUI(false);
+      if (streamBox.parentNode) streamBox.remove();
       state.messages.push({
         role: 'assistant',
-        content: '**' + A.t('error') + ':** ' + err.message,
+        content: '**' + A.t('error') + ':** ' + err.message + (err.partial ? '\n\n⏸ ' + (A.t('partial_stream') || 'Connection lost mid-run. The operation may have completed on the server.') : ''),
         status: 'error'
       });
       renderMessages();
+    }
+
+    streamChat(text, ui).then(function (res) {
+      return finish(res);
+    }).catch(function (err) {
+      if (err && err.partial === false) {
+        // Stream never started — fall back to the non-streaming endpoint.
+        return A.api('chat', {
+          method: 'POST',
+          body: { message: text, conversation_id: state.activeId || 0 }
+        }).then(function (res) {
+          return finish(res);
+        }).catch(function (err2) {
+          fail(err2);
+        });
+      }
+      fail(err);
     });
   }
 
@@ -279,6 +427,7 @@
     });
     document.getElementById('aiwc-send').addEventListener('click', sendMessage);
     document.getElementById('aiwc-stop').addEventListener('click', function () {
+      if (activeStream && activeStream.abort) activeStream.abort();
       A.api('chat/cancel', { method: 'POST' })
         .then(function () { A.toast(A.t('cancel')); })
         .catch(function (err) { A.toast(err.message, true); });

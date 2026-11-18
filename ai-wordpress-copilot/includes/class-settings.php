@@ -43,6 +43,18 @@ class Settings {
 			'execution_mode'        => 2, // 1 analyze, 2 confirm, 3 auto low-risk, 4 step-confirm.
 			'ui_language'           => 'fa',
 			'ui_theme'              => 'dark',
+			// Provider flexibility.
+			'custom_headers'        => '',   // JSON object of extra HTTP headers.
+			'custom_params'         => '',   // JSON object of extra body params.
+			'streaming'             => 1,    // Use SSE streaming when the model supports it.
+			'stream_timeout'        => 120,  // Seconds for streaming requests.
+			'context_window'        => 128000, // Model context window in tokens (0 = auto-detect).
+			'json_mode'             => 0,    // Request JSON response_format when supported.
+			'model_capabilities'    => '',   // Cached JSON: {tool_calling, streaming, streaming_tools, json_mode, context_window, source, detected_at}.
+			'system_prompt'         => '',   // Extra system prompt appended to the built-in one.
+			'preferred_builder'     => 'auto', // auto|elementor|gutenberg|classic.
+			'link_check_concurrency' => 3,
+			'link_check_timeout'    => 8,
 		);
 	}
 
@@ -81,10 +93,21 @@ class Settings {
 		$current = self::all();
 		$clean   = $current;
 
-		$string_keys = array( 'base_url', 'model', 'ui_language', 'ui_theme' );
+		$string_keys = array( 'base_url', 'model', 'ui_language', 'ui_theme', 'system_prompt', 'preferred_builder' );
 		foreach ( $string_keys as $key ) {
 			if ( isset( $input[ $key ] ) ) {
 				$clean[ $key ] = sanitize_text_field( (string) $input[ $key ] );
+			}
+		}
+
+		if ( isset( $clean['preferred_builder'] ) && ! in_array( $clean['preferred_builder'], array( 'auto', 'elementor', 'gutenberg', 'classic' ), true ) ) {
+			$clean['preferred_builder'] = 'auto';
+		}
+
+		// JSON blobs: custom headers / custom params / cached capabilities.
+		foreach ( array( 'custom_headers', 'custom_params', 'model_capabilities' ) as $json_key ) {
+			if ( isset( $input[ $json_key ] ) ) {
+				$clean[ $json_key ] = self::sanitize_json_object( (string) $input[ $json_key ] );
 			}
 		}
 
@@ -116,6 +139,12 @@ class Settings {
 			'max_tools_per_request'  => array( 1, 25 ),
 			'context_token_budget'   => array( 1000, 100000 ),
 			'execution_mode'         => array( 1, 4 ),
+			'streaming'              => array( 0, 1 ),
+			'stream_timeout'         => array( 10, 600 ),
+			'context_window'         => array( 0, 2000000 ),
+			'json_mode'              => array( 0, 1 ),
+			'link_check_concurrency' => array( 1, 10 ),
+			'link_check_timeout'     => array( 2, 30 ),
 		);
 		foreach ( $int_ranges as $key => $range ) {
 			if ( isset( $input[ $key ] ) ) {
@@ -153,6 +182,37 @@ class Settings {
 	private static function sanitize_key_value( $value ) {
 		$value = preg_replace( '/[\r\n\t\s]+/', '', $value );
 		return substr( sanitize_text_field( $value ), 0, 512 );
+	}
+
+	/**
+	 * Sanitize a JSON object string (headers/params). Only flat string→string
+	 * maps survive; anything else is dropped. Returns '' for empty/invalid input.
+	 *
+	 * @param string $raw Raw JSON.
+	 * @return string Clean JSON or ''.
+	 */
+	private static function sanitize_json_object( $raw ) {
+		$raw = trim( (string) $raw );
+		if ( '' === $raw ) {
+			return '';
+		}
+		$decoded = json_decode( $raw, true );
+		if ( ! is_array( $decoded ) ) {
+			return '';
+		}
+		$clean = array();
+		foreach ( $decoded as $k => $v ) {
+			$key = sanitize_text_field( (string) $k );
+			if ( '' === $key || ! is_scalar( $v ) ) {
+				continue;
+			}
+			// Never allow overriding auth headers through custom headers.
+			if ( in_array( strtolower( $key ), array( 'authorization', 'host', 'content-length', 'cookie' ), true ) ) {
+				continue;
+			}
+			$clean[ $key ] = sanitize_text_field( (string) $v );
+		}
+		return $clean ? (string) wp_json_encode( $clean ) : '';
 	}
 
 	/**

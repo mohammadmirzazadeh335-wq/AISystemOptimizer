@@ -27,6 +27,58 @@ function json(res, status, body) {
   res.end(payload);
 }
 
+function chunk(res, obj) {
+  res.write('data: ' + JSON.stringify(obj) + '\n\n');
+}
+
+function streamCompletion(res, body) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+  });
+  if (!body) {
+    res.write('data: [ERROR]\n\n');
+    return res.end();
+  }
+  const msg = (body.choices && body.choices[0] && body.choices[0].message) || {};
+  const base = { id: body.id || 'chatcmpl-mock-stream', object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: body.model || 'mock-gpt' };
+
+  chunk(res, { ...base, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] });
+
+  if (Array.isArray(msg.tool_calls) && msg.tool_calls.length) {
+    msg.tool_calls.forEach((tc, i) => {
+      const argsStr = tc.function.arguments || '{}';
+      const half = Math.ceil(argsStr.length / 2);
+      chunk(res, {
+        ...base,
+        choices: [{ index: 0, delta: { tool_calls: [{ index: i, id: tc.id, type: 'function', function: { name: tc.function.name, arguments: '' } }] }, finish_reason: null }],
+      });
+      chunk(res, {
+        ...base,
+        choices: [{ index: 0, delta: { tool_calls: [{ index: i, function: { arguments: argsStr.slice(0, half) } }] }, finish_reason: null }],
+      });
+      chunk(res, {
+        ...base,
+        choices: [{ index: 0, delta: { tool_calls: [{ index: i, function: { arguments: argsStr.slice(half) } }] }, finish_reason: null }],
+      });
+    });
+    chunk(res, { ...base, choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] });
+  } else {
+    const content = msg.content || '';
+    const third = Math.ceil(content.length / 3) || 1;
+    for (let i = 0; i < content.length; i += third) {
+      chunk(res, { ...base, choices: [{ index: 0, delta: { content: content.slice(i, i + third) }, finish_reason: null }] });
+    }
+    chunk(res, { ...base, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] });
+  }
+
+  chunk(res, { ...base, choices: [], usage: body.usage || { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 } });
+  res.write('data: [DONE]\n\n');
+  res.end();
+}
+
 function firstNumber(text, fallback) {
   const m = String(text || '').match(/\b(\d+)\b/);
   return m ? parseInt(m[1], 10) : fallback;
@@ -44,6 +96,14 @@ function lastUserText(messages) {
 }
 
 function completion(res, message, finishReason) {
+  if (mockLegacy && Array.isArray(message.tool_calls) && message.tool_calls.length) {
+    const tc = message.tool_calls[0];
+    message = {
+      role: 'assistant',
+      content: '```aiwc-tool\n' + JSON.stringify({ tool: tc.function.name, args: JSON.parse(tc.function.arguments || '{}') }) + '\n```',
+    };
+    finishReason = 'stop';
+  }
   json(res, 200, {
     id: 'chatcmpl-mock-' + Date.now(),
     object: 'chat.completion',
@@ -68,7 +128,27 @@ function toolCall(id, name, args) {
   };
 }
 
+let mockLegacy = false; // when true, tool calls are returned as ```aiwc-tool fenced content
+let mockTools = [];     // tools offered in the current request (for probes)
+
 function respondTo(res, messages) {
+  const probeText = lastUserText(messages);
+
+  // Capability-probe prompts (used by detect_capabilities).
+  if (/(Call the ping tool|Reply with exactly OK)/.test(probeText) && mockTools.length) {
+    return completion(res, {
+      role: 'assistant',
+      content: null,
+      tool_calls: [toolCall('call_probe', mockTools[0].function.name, { ok: true })],
+    });
+  }
+  if (/Say STREAM-OK/.test(probeText)) {
+    return completion(res, { role: 'assistant', content: 'STREAM-OK' });
+  }
+  if (/Return ONLY a JSON object/.test(probeText)) {
+    return completion(res, { role: 'assistant', content: '{"status":"ok"}' });
+  }
+
   if (hasToolResult(messages)) {
     const lastTool = [...messages].reverse().find((m) => m.role === 'tool');
     let outcome = 'ok';
@@ -279,9 +359,38 @@ const server = http.createServer((req, res) => {
       } catch (e) {
         return json(res, 400, { error: { message: 'invalid JSON' } });
       }
+      // Error-injection via model name (for testing the provider error layer).
+      if (body.model === 'mock-401') return json(res, 401, { error: { message: 'Incorrect API key provided', type: 'invalid_request_error' } });
+      if (body.model === 'mock-404') return json(res, 404, { error: { message: 'The model `x` does not exist', code: 'model_not_found' } });
+      if (body.model === 'mock-429') return json(res, 429, { error: { message: 'Rate limit exceeded', type: 'rate_limit_exceeded' } });
+      if (body.model === 'mock-500') return json(res, 500, { error: { message: 'The server had an error' } });
       const messages = Array.isArray(body.messages) ? body.messages : [];
+      mockLegacy = !Array.isArray(body.tools) || body.tools.length === 0;
+      mockTools = Array.isArray(body.tools) ? body.tools : [];
       const allText = messages.filter((m) => m.role === 'user').map((m) => m.content).join(' ');
       const delay = /slow/i.test(allText) ? 8000 : 0;
+
+      if (body.stream) {
+        // Capture the non-stream decision, then replay it as SSE chunks
+        // (tool-call arguments are deliberately split into fragments to
+        // exercise the client-side assembler).
+        let captured = null;
+        const stub = {
+          writeHead() {},
+          end(s) {
+            try {
+              captured = JSON.parse(s);
+            } catch (e) {
+              captured = null;
+            }
+          },
+        };
+        return setTimeout(() => {
+          respondTo(stub, messages);
+          streamCompletion(res, captured);
+        }, delay);
+      }
+
       setTimeout(() => respondTo(res, messages), delay);
     });
     return;

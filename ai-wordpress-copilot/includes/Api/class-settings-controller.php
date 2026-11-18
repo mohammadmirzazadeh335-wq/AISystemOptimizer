@@ -49,6 +49,16 @@ class Settings_Controller extends Base_Controller {
 
 		register_rest_route(
 			Api::NS,
+			'/settings/detect-capabilities',
+			array(
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'detect_capabilities' ),
+				'permission_callback' => array( $this, 'can_manage' ),
+			)
+		);
+
+		register_rest_route(
+			Api::NS,
 			'/models',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -90,6 +100,19 @@ class Settings_Controller extends Base_Controller {
 	public function test_connection() {
 		$result = $this->plugin->get( 'client' )->test_connection();
 		return $this->respond( $result, $result['ok'] ? 200 : 502 );
+	}
+
+	/**
+	 * POST /settings/detect-capabilities — probe the model for tool calling /
+	 * streaming / JSON mode / context window and cache the result.
+	 *
+	 * @param \WP_REST_Request $request Request (optional "force"=false).
+	 * @return \WP_REST_Response
+	 */
+	public function detect_capabilities( \WP_REST_Request $request ) {
+		$force = ! empty( $request['force'] );
+		$caps  = $this->plugin->get( 'client' )->detect_capabilities( $force );
+		return $this->respond( $caps );
 	}
 
 	/**

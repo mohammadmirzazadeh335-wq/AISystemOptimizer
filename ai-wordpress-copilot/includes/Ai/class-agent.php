@@ -102,11 +102,15 @@ class Agent {
 	/**
 	 * Run one user command through the agent loop.
 	 *
-	 * @param int    $conversation_id Conversation id (0 = create new).
-	 * @param string $user_message    User command.
-	 * @return array{conversation_id: int, message: array, steps: array, usage: array, pending: array, error: string}
+	 * @param int      $conversation_id Conversation id (0 = create new).
+	 * @param string   $user_message    User command.
+	 * @param callable $on_event        Optional live event emitter (streaming):
+	 *                                  function( string $type, mixed $data ).
+	 *                                  Types: delta, tool_call, tool_args, usage,
+	 *                                  step, plan, review, status.
+	 * @return array{conversation_id: int, message: array, steps: array, usage: array, pending: array, error: string, plan: array}
 	 */
-	public function run( $conversation_id, $user_message ) {
+	public function run( $conversation_id, $user_message, $on_event = null ) {
 		$settings = Settings::all();
 
 		if ( ! Settings::is_configured() ) {
@@ -163,6 +167,28 @@ class Agent {
 		$include_mut  = 1 !== $mode; // Mode 1 exposes read-only tools only.
 		$openai_tools = $this->registry->openai_tools( $mode, $include_mut );
 
+		// Planning tool (meta, always available): the model records an execution
+		// plan before acting on complex commands.
+		$openai_tools[] = array(
+			'type'     => 'function',
+			'function' => array(
+				'name'        => 'create_plan',
+				'description' => 'Record a concise execution plan (list of steps) before performing a complex multi-step task. Call this FIRST for requests like building/redesigning a site or page.',
+				'parameters'  => array(
+					'type'       => 'object',
+					'properties' => array(
+						'summary' => array( 'type' => 'string', 'description' => 'One-line summary of the goal.' ),
+						'steps'   => array(
+							'type'        => 'array',
+							'description' => 'Ordered, concrete steps.',
+							'items'       => array( 'type' => 'string' ),
+						),
+					),
+					'required'   => array( 'summary', 'steps' ),
+				),
+			),
+		);
+
 		$budget_chars = (int) $settings['context_token_budget'] * 4;
 		$history      = $this->conversations->build_context_messages( $conversation_id, $budget_chars );
 
@@ -173,6 +199,7 @@ class Agent {
 
 		$steps       = array();
 		$pending     = array();
+		$plan        = array();
 		$total_usage = array(
 			'prompt_tokens'     => 0,
 			'completion_tokens' => 0,
@@ -195,7 +222,15 @@ class Agent {
 				delete_transient( $cancel_key );
 				return $this->finalize_cancelled( $conversation_id, $user_message, $steps, $total_usage, $pending );
 			}
-			$response = $this->client->chat( $messages, $openai_tools );
+			$response = $this->call_model( $messages, $openai_tools, $on_event );
+
+			if ( is_wp_error( $response ) ) {
+				// Streaming failure on a stream-enabled request: fall back once
+				// to the standard (non-streaming) call before giving up.
+				if ( 'aiwc_stream_unsupported' === $response->get_error_code() || 'aiwc_connection' === $response->get_error_code() ) {
+					$response = $this->client->chat( $messages, $openai_tools );
+				}
+			}
 
 			if ( is_wp_error( $response ) ) {
 				$error = $response->get_error_message();
@@ -215,6 +250,7 @@ class Agent {
 					'steps'           => $steps,
 					'usage'           => $total_usage,
 					'pending'         => $pending,
+					'plan'            => $plan,
 					'error'           => $error,
 				);
 			}
@@ -230,6 +266,26 @@ class Agent {
 			$assistant = isset( $choice['message'] ) ? $choice['message'] : array();
 			$content    = isset( $assistant['content'] ) ? (string) $assistant['content'] : '';
 			$tool_calls = isset( $assistant['tool_calls'] ) && is_array( $assistant['tool_calls'] ) ? $assistant['tool_calls'] : array();
+
+			// Legacy JSON-protocol models: convert a fenced aiwc-tool block into
+			// a synthetic tool call so the normal execution path handles it.
+			if ( ! $tool_calls && $content ) {
+				$legacy = self::extract_legacy_tool_call( $content );
+				if ( $legacy ) {
+					$tool_calls = array(
+						array(
+							'id'       => 'legacy-' . wp_generate_password( 6, false ),
+							'type'     => 'function',
+							'function' => array(
+								'name'      => $legacy['name'],
+								'arguments' => (string) wp_json_encode( $legacy['args'] ),
+							),
+						),
+					);
+					// Keep only the non-block part as visible content.
+					$content = trim( preg_replace( '/```aiwc-tool\s*\{.*?\}\s*```/s', '', $content ) );
+				}
+			}
 
 			// Persist the assistant turn.
 			$assistant_row = array(
@@ -265,6 +321,7 @@ class Agent {
 					'steps'           => $steps,
 					'usage'           => $total_usage,
 					'pending'         => $pending,
+					'plan'            => $plan,
 					'error'           => '',
 				);
 			}
@@ -308,6 +365,46 @@ class Agent {
 					}
 				}
 
+				// Planning tool handled inline (meta, read-only).
+				if ( 'create_plan' === $name ) {
+					$plan = array(
+						'summary' => isset( $args['summary'] ) ? sanitize_text_field( (string) $args['summary'] ) : '',
+						'steps'   => array(),
+					);
+					if ( isset( $args['steps'] ) && is_array( $args['steps'] ) ) {
+						foreach ( $args['steps'] as $s ) {
+							$plan['steps'][] = sanitize_text_field( (string) $s );
+						}
+					}
+					$steps[] = array(
+						'type'   => 'plan',
+						'tool'   => 'create_plan',
+						'args'   => $plan,
+						'result' => array( 'success' => true, 'summary' => 'Plan recorded.' ),
+						'status' => 'success',
+					);
+					if ( is_callable( $on_event ) ) {
+						call_user_func( $on_event, 'plan', $plan );
+					}
+					$tool_content = wp_json_encode( array( 'success' => true, 'message' => 'Plan recorded. Now execute the steps one by one using the available tools.' ) );
+					$message_id   = $this->conversations->add_message(
+						$conversation_id,
+						array(
+							'role'         => 'tool',
+							'content'      => $tool_content,
+							'tool_call_id' => $call['id'],
+							'tool_name'    => 'create_plan',
+							'status'       => 'ok',
+						)
+					);
+					$messages[] = array(
+						'role'         => 'tool',
+						'tool_call_id' => $call['id'],
+						'content'      => $tool_content,
+					);
+					continue;
+				}
+
 				$tool_meta = $this->registry->get( $name );
 				$risk      = $tool_meta ? $tool_meta['risk'] : 'write';
 				$is_read   = 'read' === $risk;
@@ -342,14 +439,25 @@ class Agent {
 							'source'          => 'agent',
 						)
 					);
-					$steps[] = array(
+					$review = $this->self_review( $name, $args, $result );
+					$step_entry = array(
 						'type'   => 'tool',
 						'tool'   => $name,
 						'args'   => $args,
 						'result' => $this->compact_result( $result ),
 						'status' => ! empty( $result['success'] ) ? 'success' : 'failed',
 					);
-					$tool_content = wp_json_encode( $this->compact_result( $result ) );
+					if ( $review ) {
+						$step_entry['review'] = $review;
+					}
+					$steps[] = $step_entry;
+					if ( is_callable( $on_event ) ) {
+						call_user_func( $on_event, 'step', $step_entry );
+						if ( $review ) {
+							call_user_func( $on_event, 'review', array( 'tool' => $name ) + $review );
+						}
+					}
+					$tool_content = wp_json_encode( $this->compact_result( $result ) + ( $review ? array( 'review' => $review ) : array() ) );
 					$status       = ! empty( $result['success'] ) ? 'ok' : 'error';
 				} else {
 					// Create a pending approval; store the tool message id in object_id
@@ -430,8 +538,202 @@ class Agent {
 			'steps'           => $steps,
 			'usage'           => $total_usage,
 			'pending'         => $pending,
+			'plan'            => $plan,
 			'error'           => '',
 		);
+	}
+
+	/**
+	 * Self-review: verify the real system state after a mutating tool ran.
+	 * Anti-hallucination guard — claims are only trusted when verified against
+	 * WordPress state. Returns null for tools with nothing meaningful to verify.
+	 *
+	 * @param string $name   Tool name.
+	 * @param array  $args   Tool args.
+	 * @param array  $result Tool result.
+	 * @return array|null {ok: bool, checks: array}
+	 */
+	private function self_review( $name, array $args, array $result ) {
+		if ( empty( $result['success'] ) ) {
+			return array(
+				'ok'     => false,
+				'checks' => array(
+					array( 'name' => 'tool_result', 'ok' => false, 'detail' => isset( $result['error'] ) ? (string) $result['error'] : 'failed' ),
+				),
+			);
+		}
+
+		$checks = array();
+		$verify = function ( $check_name, $ok, $detail = '' ) use ( &$checks ) {
+			$checks[] = array(
+				'name'   => $check_name,
+				'ok'     => (bool) $ok,
+				'detail' => (string) $detail,
+			);
+		};
+
+		$post_tools = array( 'create_page', 'update_page', 'create_post', 'update_post', 'create_design_section', 'create_elementor_section', 'set_content_status' );
+		if ( in_array( $name, $post_tools, true ) ) {
+			$post_id = 0;
+			if ( isset( $result['data']['post_id'] ) ) {
+				$post_id = (int) $result['data']['post_id'];
+			} elseif ( isset( $args['post_id'] ) ) {
+				$post_id = (int) $args['post_id'];
+			}
+			$verify( 'post_exists', $post_id > 0 && null !== get_post( $post_id ), 'post #' . $post_id );
+			if ( $post_id > 0 ) {
+				$post = get_post( $post_id );
+				if ( $post ) {
+					if ( isset( $args['title'] ) ) {
+						$verify( 'title_saved', $post->post_title === (string) $args['title'] || '' === (string) $args['title'], $post->post_title );
+					}
+					$verify( 'content_saved', null !== $post->post_content, mb_strlen( (string) $post->post_content ) . ' chars' );
+					if ( isset( $args['content'] ) && 'replace' === ( $args['content_mode'] ?? 'replace' ) && ( 'update_page' === $name || 'update_post' === $name ) ) {
+						$verify( 'content_matches', false !== strpos( (string) $post->post_content, mb_substr( wp_strip_all_tags( (string) $args['content'] ), 0, 24 ) ) || '' === trim( wp_strip_all_tags( (string) $args['content'] ) ), 'content compare' );
+					}
+					// Block structure validity (balanced Gutenberg comments).
+					if ( false !== strpos( (string) $post->post_content, '<!-- wp:' ) ) {
+						$opens = preg_match_all( '/<!-- wp:[^>]*?(?<!\/)-->/s', (string) $post->post_content );
+						$closes = preg_match_all( '/<!-- \/wp:/', (string) $post->post_content );
+						$self_closing = preg_match_all( '/<!-- wp:[^>]*?\/-->/s', (string) $post->post_content );
+						$verify( 'block_structure_valid', ( $opens - $self_closing ) === $closes, sprintf( '%d open / %d close', $opens - $self_closing, $closes ) );
+					}
+				}
+			}
+			if ( 'create_elementor_section' === $name && $post_id > 0 ) {
+				$raw = get_post_meta( $post_id, '_elementor_data', true );
+				$decoded = json_decode( (string) $raw, true );
+				$verify( 'elementor_data_valid', is_array( $decoded ), is_array( $decoded ) ? count( $decoded ) . ' elements' : 'invalid JSON' );
+			}
+		}
+
+		if ( 'update_custom_css' === $name ) {
+			$css = $this->plugin ? '' : '';
+			$css = function_exists( 'wp_get_custom_css' ) ? wp_get_custom_css() : '';
+			$needle = isset( $args['css'] ) ? mb_substr( trim( (string) $args['css'] ), 0, 16 ) : '';
+			$verify( 'css_saved', '' === $needle || false !== strpos( $css, $needle ) || 'replace' === ( $args['mode'] ?? '' ), mb_strlen( $css ) . ' chars' );
+		}
+
+		if ( 0 === strpos( $name, 'woo_product_' ) && function_exists( 'wc_get_product' ) ) {
+			$pid = isset( $result['data']['product_id'] ) ? (int) $result['data']['product_id'] : (int) ( $args['product_id'] ?? 0 );
+			$product = $pid ? wc_get_product( $pid ) : false;
+			$verify( 'product_exists', (bool) $product, 'product #' . $pid );
+			if ( $product && isset( $args['price'] ) ) {
+				$verify( 'price_saved', (string) $product->get_regular_price() === (string) $args['price'] || (float) $product->get_regular_price() === (float) $args['price'], $product->get_regular_price() );
+			}
+		}
+
+		if ( 'users_manage_role' === $name && isset( $args['user_id'] ) ) {
+			$user = get_userdata( (int) $args['user_id'] );
+			$roles = $user ? (array) $user->roles : array();
+			$expect = ( $args['action'] ?? 'add' ) === 'remove' ? ! in_array( $args['role'] ?? '', $roles, true ) : in_array( $args['role'] ?? '', $roles, true );
+			$verify( 'role_applied', $expect, implode( ',', $roles ) );
+		}
+
+		if ( in_array( $name, array( 'create_menu', 'add_menu_item' ), true ) ) {
+			$menu_id = isset( $result['data']['menu_id'] ) ? (int) $result['data']['menu_id'] : (int) ( $args['menu_id'] ?? 0 );
+			$verify( 'menu_exists', $menu_id > 0 && ! is_wp_error( wp_get_nav_menu_object( $menu_id ) ), 'menu #' . $menu_id );
+		}
+
+		if ( ! $checks ) {
+			return null; // Nothing meaningful to verify for this tool.
+		}
+
+		$ok = true;
+		foreach ( $checks as $c ) {
+			if ( empty( $c['ok'] ) ) {
+				$ok = false;
+				break;
+			}
+		}
+		return array(
+			'ok'     => $ok,
+			'checks' => $checks,
+		);
+	}
+
+	/**
+	 * Call the model with streaming when enabled/supported, else standard.
+	 *
+	 * @param array    $messages  Messages.
+	 * @param array    $tools     Tools.
+	 * @param callable $on_event  Event emitter or null.
+	 * @return array|\WP_Error
+	 */
+	private function call_model( array $messages, array $tools, $on_event ) {
+		$caps = $this->client->detect_capabilities();
+
+		// Models without tool calling: use the safe JSON-command protocol and
+		// strip tool schemas entirely (they would error on some providers).
+		if ( empty( $caps['tool_calling'] ) && $tools ) {
+			$tools = array();
+			$messages = $this->inject_legacy_protocol_prompt( $messages );
+		}
+
+		$use_stream = (int) Settings::get( 'streaming' ) === 1
+			&& ! empty( $caps['streaming'] )
+			&& ( $tools ? ! empty( $caps['streaming_tools'] ) : true )
+			&& is_callable( $on_event );
+
+		if ( $use_stream ) {
+			$resp = $this->client->chat_stream(
+				$messages,
+				$tools,
+				array(),
+				function ( $type, $data ) use ( $on_event ) {
+					call_user_func( $on_event, $type, $data );
+				}
+			);
+			if ( ! is_wp_error( $resp ) ) {
+				return $resp;
+			}
+			// Fall back to standard call on stream failures.
+			if ( 'aiwc_stream_unsupported' !== $resp->get_error_code() ) {
+				call_user_func( $on_event, 'status', array( 'stream_fallback' => true, 'error' => $resp->get_error_code() ) );
+			}
+		}
+
+		return $this->client->chat( $messages, $tools );
+	}
+
+	/**
+	 * For models without native tool calling: instruct a strict JSON protocol
+	 * and strip tool schemas. The protocol output is parsed safely (json_decode
+	 * only — never evaluated).
+	 *
+	 * @param array $messages Messages.
+	 * @return array
+	 */
+	private function inject_legacy_protocol_prompt( array $messages ) {
+		$note = "\n\nIMPORTANT: This model has no native tool calling. To use a tool, reply with ONLY one fenced block:\n"
+			. "```aiwc-tool\n{\"tool\": \"tool_name\", \"args\": { ... }}\n```\n"
+			. "Use one block per turn. After the tool result is returned, continue. For the final answer, reply normally without the block.";
+		foreach ( $messages as $i => $msg ) {
+			if ( 'system' === $msg['role'] ) {
+				$messages[ $i ]['content'] .= $note;
+				break;
+			}
+		}
+		return $messages;
+	}
+
+	/**
+	 * Extract a legacy-protocol tool call from assistant text.
+	 *
+	 * @param string $content Assistant content.
+	 * @return array|null {name, args} or null.
+	 */
+	public static function extract_legacy_tool_call( $content ) {
+		if ( preg_match( '/```aiwc-tool\s*(\{.*?\})\s*```/s', (string) $content, $m ) ) {
+			$decoded = json_decode( $m[1], true );
+			if ( is_array( $decoded ) && ! empty( $decoded['tool'] ) ) {
+				return array(
+					'name' => sanitize_text_field( (string) $decoded['tool'] ),
+					'args' => isset( $decoded['args'] ) && is_array( $decoded['args'] ) ? $decoded['args'] : array(),
+				);
+			}
+		}
+		return null;
 	}
 
 	/**

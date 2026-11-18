@@ -119,6 +119,54 @@ add_action(
 				'permission_callback' => '__return_true',
 			)
 		);
+
+		// TEMPORARY debug route: exercise chat_stream internals and report Throwables.
+		register_rest_route(
+			'aiwc-test/v1',
+			'/debug-stream',
+			array(
+				'methods'             => 'GET',
+				'callback'            => function () {
+					$out = array();
+					try {
+						$plugin = function_exists( 'aiwc' ) ? aiwc() : null;
+						$out['plugin'] = $plugin ? get_class( $plugin ) : 'no aiwc()';
+						if ( ! $plugin ) {
+							return $out;
+						}
+						$client = $plugin->get( 'client' );
+						$out['client'] = get_class( $client );
+						ob_start();
+						try {
+							$events = array();
+							$resp   = $client->chat_stream(
+								array(
+									array( 'role' => 'user', 'content' => 'Say STREAM-OK' ),
+								),
+								array(),
+								array(),
+								function ( $type, $data ) use ( &$events ) {
+									$events[] = $type;
+								}
+							);
+							if ( is_wp_error( $resp ) ) {
+								$out['chat_stream'] = array( 'wp_error' => $resp->get_error_code() . ': ' . $resp->get_error_message(), 'events' => $events );
+							} else {
+								$out['chat_stream'] = array( 'ok' => true, 'finish' => $resp['choices'][0]['finish_reason'] ?? null, 'events' => $events, 'content' => mb_substr( (string) ( $resp['choices'][0]['message']['content'] ?? '' ), 0, 40 ), 'tool_calls' => count( $resp['choices'][0]['message']['tool_calls'] ?? array() ) );
+							}
+						} catch ( \Throwable $e ) {
+							$out['chat_stream_error'] = get_class( $e ) . ': ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine();
+						}
+						$out['ob'] = ob_get_length();
+						ob_end_clean();
+					} catch ( \Throwable $e ) {
+						$out['fatal'] = get_class( $e ) . ': ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine();
+					}
+					return $out;
+				},
+				'permission_callback' => '__return_true',
+			)
+		);
 	}
 );
 

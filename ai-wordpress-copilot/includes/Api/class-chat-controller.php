@@ -88,6 +88,16 @@ class Chat_Controller extends Base_Controller {
 
 		register_rest_route(
 			Api::NS,
+			'/chat/stream',
+			array(
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'chat_stream' ),
+				'permission_callback' => array( $this, 'can_manage' ),
+			)
+		);
+
+		register_rest_route(
+			Api::NS,
 			'/chat/cancel',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -254,6 +264,102 @@ class Chat_Controller extends Base_Controller {
 		}
 
 		return $this->respond( $result );
+	}
+
+	/**
+	 * POST /chat/stream — run the agent with live SSE events.
+	 *
+	 * Event stream (text/event-stream):
+	 *   event: start  data: {conversation_id}
+	 *   event: delta  data: {"text":"..."}
+	 *   event: plan|step|review|tool_call|tool_args|usage|status  data: {...}
+	 *   event: done   data: {full result incl. message/steps/plan}
+	 *   event: error  data: {"message":"...","code":"..."}
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return void|array
+	 */
+	public function chat_stream( \WP_REST_Request $request ) {
+		if ( ! Settings::is_configured() ) {
+			return $this->error(
+				'aiwc_not_configured',
+				__( 'API connection is not configured. Please configure it in Settings → API Connection.', 'ai-wordpress-copilot' ),
+				400
+			);
+		}
+
+		// Per-user rate limit (shared counter with /chat).
+		$rl_key   = 'aiwc_rl_' . get_current_user_id();
+		$hits     = (int) get_transient( $rl_key );
+		$rl_limit = max( 1, (int) apply_filters( 'aiwc_chat_rate_limit', 15 ) );
+		if ( $hits >= $rl_limit ) {
+			return $this->error( 'aiwc_rate_limited', __( 'Too many requests. Please wait a moment.', 'ai-wordpress-copilot' ), 429 );
+		}
+		set_transient( $rl_key, $hits + 1, MINUTE_IN_SECONDS );
+
+		$message = trim( (string) $request['message'] );
+		$conv_id = (int) $request['conversation_id'];
+
+		if ( '' === $message ) {
+			return $this->error( 'aiwc_empty', __( 'Message is empty.', 'ai-wordpress-copilot' ), 400 );
+		}
+		if ( strlen( $message ) > 10000 ) {
+			return $this->error( 'aiwc_too_long', __( 'Message is too long (max 10000 characters).', 'ai-wordpress-copilot' ), 400 );
+		}
+
+		// Take over the response: emit SSE directly and suppress the REST body.
+		add_filter(
+			'rest_pre_serve_request',
+			function () {
+				return true;
+			},
+			999
+		);
+
+		nocache_headers();
+		header( 'Content-Type: text/event-stream; charset=utf-8' );
+		header( 'X-Accel-Buffering: no' );
+		header( 'Cache-Control: no-cache, no-transform' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions -- streaming to the HTTP client.
+		ignore_user_abort( true );
+
+		$emit = function ( $event, $data ) {
+			$payload = is_string( $data ) ? $data : wp_json_encode( $data );
+			echo 'event: ' . $event . "\n";
+			echo 'data: ' . $payload . "\n\n";
+			if ( ob_get_level() ) {
+				@ob_flush(); // phpcs:ignore Generic.PHP.NoSilencedErrors
+			}
+			flush();
+		};
+
+		$emit( 'start', array( 'conversation_id' => $conv_id ) );
+
+		$result = $this->plugin->get( 'agent' )->run(
+			$conv_id,
+			$message,
+			function ( $type, $data ) use ( $emit ) {
+				$map = array(
+					'delta'     => 'delta',
+					'tool_call' => 'tool_call',
+					'tool_args' => 'tool_args',
+					'usage'     => 'usage',
+					'step'      => 'step',
+					'plan'      => 'plan',
+					'review'    => 'review',
+					'status'    => 'status',
+				);
+				$emit( isset( $map[ $type ] ) ? $map[ $type ] : 'status', is_string( $data ) && 'delta' === $type ? array( 'text' => $data ) : $data );
+			}
+		);
+
+		if ( ! empty( $result['error'] ) && empty( $result['message'] ) ) {
+			$emit( 'error', array( 'message' => $result['error'], 'code' => 'aiwc_run_failed' ) );
+			return;
+		}
+
+		$emit( 'done', $result );
+		return;
 	}
 
 	/**
