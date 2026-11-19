@@ -53,9 +53,11 @@ class Admin {
 		$pages = array(
 			'aiwc-chat'      => __( 'AI Chat', 'ai-wordpress-copilot' ),
 			'aiwc-tools'     => __( 'AI Tools', 'ai-wordpress-copilot' ),
+			'aiwc-builder'   => __( 'Website Builder', 'ai-wordpress-copilot' ),
 			'aiwc-design'    => __( 'Site Design', 'ai-wordpress-copilot' ),
 			'aiwc-seo'       => __( 'SEO', 'ai-wordpress-copilot' ),
 			'aiwc-content'   => __( 'Content', 'ai-wordpress-copilot' ),
+			'aiwc-reports'   => __( 'Reports', 'ai-wordpress-copilot' ),
 			'aiwc-logs'      => __( 'Activity Log', 'ai-wordpress-copilot' ),
 			'aiwc-memory'    => __( 'AI Memory', 'ai-wordpress-copilot' ),
 			'aiwc-api'       => __( 'API Connection', 'ai-wordpress-copilot' ),

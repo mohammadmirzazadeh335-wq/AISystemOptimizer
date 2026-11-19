@@ -89,6 +89,17 @@ class Design_Engine {
 		// Apply design system tokens to the environment so the page matches.
 		Design_System::apply( $design );
 
+		// Tag the page so the Website Builder section can list designed pages.
+		update_post_meta(
+			(int) $post_id,
+			'_aiwc_built',
+			array(
+				'builder'  => $builder,
+				'built_at' => current_time( 'mysql' ),
+				'sections' => count( $specs ),
+			)
+		);
+
 		return array(
 			'post_id'  => (int) $post_id,
 			'url'      => get_permalink( (int) $post_id ),

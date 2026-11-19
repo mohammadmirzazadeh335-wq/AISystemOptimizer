@@ -10,9 +10,11 @@
     dashboard: renderDashboard,
     chat: function (c) { global.AIWCChat.render(c); },
     tools: renderTools,
+    builder: renderBuilder,
     design: renderDesign,
     seo: renderSeo,
     content: renderContent,
+    reports: renderReports,
     logs: renderLogs,
     memory: renderMemory,
     settings: renderSettings,
@@ -23,9 +25,11 @@
     dashboard: 'dashboard',
     chat: 'chat',
     tools: 'tools',
+    builder: 'builder',
     design: 'design',
     seo: 'seo',
     content: 'content',
+    reports: 'reports',
     logs: 'logs',
     memory: 'memory_title',
     settings: 'settings',
@@ -36,9 +40,11 @@
     ['dashboard', 'dashicons-dashboard', 'dashboard'],
     ['chat', 'dashicons-format-chat', 'chat'],
     ['tools', 'dashicons-admin-tools', 'tools'],
+    ['builder', 'dashicons-layout', 'builder'],
     ['design', 'dashicons-art', 'design'],
     ['seo', 'dashicons-chart-area', 'seo'],
     ['content', 'dashicons-admin-post', 'content'],
+    ['reports', 'dashicons-chart-bar', 'reports'],
     ['logs', 'dashicons-list-view', 'logs'],
     ['memory', 'dashicons-migrate', 'memory_title'],
     ['api', 'dashicons-plugins-checked', 'api'],
@@ -627,9 +633,130 @@
     load();
   }
 
+  /* ================= Website Builder ================= */
+  function renderBuilder(c) {
+    c.innerHTML = '<div class="aiwc-card"><div class="aiwc-empty">…</div></div>';
+    Promise.all([
+      A.api('builder/design-system'),
+      A.api('builder/components'),
+      A.api('builder/pages'),
+      A.api('builder/status')
+    ]).then(function (r) {
+      var ds = r[0], comps = r[1], pages = r[2], status = r[3];
+      var sys = ds.system || {};
+      var colors = sys.colors || {};
+      var colorFields = Object.keys(colors).map(function (k) {
+        return '<div class="aiwc-field"><label>' + A.esc(k) + '</label>' +
+          '<input type="color" data-ds-color="' + A.esc(k) + '" value="' + A.esc(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(colors[k]) ? colors[k] : '#1e3a5f') + '">' +
+          '<input type="text" data-ds-color-text="' + A.esc(k) + '" value="' + A.esc(colors[k]) + '"></div>';
+      }).join('');
+
+      var compHtml = (comps.items || []).map(function (comp) {
+        return '<div class="aiwc-list-item"><div><strong>' + A.esc(comp.name || comp) + '</strong></div>' +
+          '<button class="aiwc-btn sm danger" data-del-comp="' + A.esc(comp.name || comp) + '">' + A.esc(A.t('delete')) + '</button></div>';
+      }).join('') || '<div class="aiwc-empty">' + A.esc(A.t('no_data')) + '</div>';
+
+      var pagesHtml = (pages.items || []).map(function (p) {
+        return '<div class="aiwc-list-item"><div><strong>' + A.esc(p.title) + '</strong>' +
+          '<div class="hint">' + A.esc(p.builder) + ' · ' + A.esc(p.status) + ' · ' + A.esc(p.built_at || p.modified) + '</div></div>' +
+          '<div><a class="aiwc-btn sm" href="' + A.esc(p.url) + '" target="_blank" rel="noopener">' + A.esc(A.t('view')) + '</a> ' +
+          '<a class="aiwc-btn sm" href="' + A.esc(p.edit_url || '#') + '" target="_blank" rel="noopener">' + A.esc(A.t('edit')) + '</a></div></div>';
+      }).join('') || '<div class="aiwc-empty">' + A.esc(A.t('no_data')) + '</div>';
+
+      c.innerHTML = '<div class="aiwc-grid cols-2">' +
+        '<div class="aiwc-card"><h2>' + A.esc(A.t('design_system')) + '</h2>' +
+        '<div class="hint">' + A.esc((ds.detected && ds.detected.source) || '') + '</div>' +
+        '<div class="aiwc-grid cols-2">' + colorFields + '</div>' +
+        '<div class="aiwc-field"><label>' + A.esc(A.t('font')) + '</label><input type="text" id="ds-font" value="' + A.esc((sys.fonts && (sys.fonts.body || sys.fonts.sans)) || '') + '"></div>' +
+        '<div class="aiwc-field"><label>' + A.esc(A.t('radius_label')) + '</label><input type="number" id="ds-radius" value="' + A.esc(sys.radius || 8) + '"></div>' +
+        '<button class="aiwc-btn primary" id="ds-save">' + A.esc(A.t('save')) + '</button></div>' +
+        '<div class="aiwc-card"><h2>' + A.esc(A.t('components')) + '</h2>' + compHtml + '</div>' +
+        '<div class="aiwc-card"><h2>' + A.esc(A.t('designed_pages')) + '</h2>' + pagesHtml + '</div>' +
+        '<div class="aiwc-card"><h2>' + A.esc(A.t('builder')) + '</h2>' +
+        '<div class="hint">Elementor: ' + A.esc(status.elementor || '-') + ' · Gutenberg: ' + A.esc(status.gutenberg || '-') + ' · ' + A.esc(status.preferred_builder || '') + '</div></div>' +
+        '</div>';
+
+      c.querySelectorAll('[data-ds-color]').forEach(function (input) {
+        input.addEventListener('input', function () {
+          var t = c.querySelector('[data-ds-color-text="' + input.dataset.dsColor + '"]');
+          if (t) t.value = input.value;
+        });
+      });
+      c.querySelectorAll('[data-del-comp]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          A.api('builder/components', { method: 'POST', body: { action: 'delete', name: btn.dataset.delComp } })
+            .then(function () { A.toast(A.t('saved')); renderBuilder(c); })
+            .catch(function (e) { A.toast(e.message, true); });
+        });
+      });
+      var dsSave = document.getElementById('ds-save');
+      if (dsSave) dsSave.addEventListener('click', function () {
+        var colors2 = {};
+        c.querySelectorAll('[data-ds-color-text]').forEach(function (t) {
+          colors2[t.dataset.dsColorText] = t.value;
+        });
+        var body = { colors: colors2, radius: parseInt((document.getElementById('ds-radius') || {}).value || 8, 10) };
+        var font = (document.getElementById('ds-font') || {}).value;
+        if (font) body.fonts = { body: font };
+        A.api('builder/design-system', { method: 'POST', body: body })
+          .then(function () { A.toast(A.t('saved')); })
+          .catch(function (e) { A.toast(e.message, true); });
+      });
+    }).catch(function (err) {
+      c.innerHTML = '<div class="aiwc-card"><div class="aiwc-empty">' + A.esc(err.message) + '</div></div>';
+    });
+  }
+
+  /* ================= Reports ================= */
+  function renderReports(c) {
+    c.innerHTML = '<div class="aiwc-card"><div class="aiwc-empty">…</div></div>';
+    A.api('reports/summary').then(function (s) {
+      var ops = s.operations || {};
+      var tok = s.tokens || {};
+      var seo = s.seo || {};
+      var byTool = (s.by_tool || []).map(function (r) {
+        return '<div class="aiwc-list-item"><span>' + A.esc(r.tool_name) + '</span><strong>' + A.esc(r.c) + '</strong></div>';
+      }).join('');
+      var seoIssues = Object.keys(seo.issues || {}).map(function (k) {
+        return '<div class="aiwc-list-item"><span>' + A.esc(k) + '</span><strong>' + A.esc(seo.issues[k]) + '</strong></div>';
+      }).join('') || '<div class="aiwc-empty">' + A.esc(A.t('no_data')) + '</div>';
+      var jobs = (s.jobs || []).map(function (j) {
+        return '<div class="aiwc-list-item"><span>#' + A.esc(j.id) + ' ' + A.esc(j.type) + '</span><span class="aiwc-tag ' + A.esc(j.status) + '">' + A.esc(j.status) + '</span></div>';
+      }).join('') || '<div class="aiwc-empty">' + A.esc(A.t('no_data')) + '</div>';
+      var changes = (s.recent_changes || []).map(function (r) {
+        return '<div class="aiwc-list-item"><span>' + A.esc(r.tool || '-') + ' — ' + A.esc(r.summary || '') + '</span><span class="aiwc-tag ' + A.esc(r.status) + '">' + A.esc(r.status) + '</span></div>';
+      }).join('') || '<div class="aiwc-empty">' + A.esc(A.t('no_data')) + '</div>';
+      var snaps = (s.recent_snapshots || []).map(function (r) {
+        return '<div class="aiwc-list-item"><span>#' + A.esc(r.id) + ' ' + A.esc(r.object_type) + '/' + A.esc(r.object_id) + '</span><span>' + A.esc(r.created_at) + '</span></div>';
+      }).join('') || '<div class="aiwc-empty">' + A.esc(A.t('no_data')) + '</div>';
+
+      c.innerHTML = '<div class="aiwc-grid cols-2">' +
+        '<div class="aiwc-card"><h2>' + A.esc(A.t('operations')) + '</h2>' +
+        '<div class="aiwc-stats"><div><b>' + A.esc(ops.total || 0) + '</b><span>' + A.esc(A.t('total')) + '</span></div>' +
+        '<div><b class="ok">' + A.esc(ops.success || 0) + '</b><span>' + A.esc(A.t('success')) + '</span></div>' +
+        '<div><b class="bad">' + A.esc(ops.failed || 0) + '</b><span>' + A.esc(A.t('failed')) + '</span></div></div>' +
+        '<h3>' + A.esc(A.t('tools')) + '</h3>' + byTool + '</div>' +
+        '<div class="aiwc-card"><h2>' + A.esc(A.t('token_usage')) + '</h2>' +
+        '<div class="aiwc-stats"><div><b>' + A.esc(tok.total || 0) + '</b><span>' + A.esc(A.t('tokens_used')) + '</span></div>' +
+        '<div><b>' + A.esc(tok.conversation_count || 0) + '</b><span>' + A.esc(A.t('chat')) + '</span></div></div></div>' +
+        '<div class="aiwc-card"><h2>' + A.esc(A.t('seo_issues')) + '</h2>' +
+        '<div class="hint">' + A.esc(A.t('score')) + ': ' + A.esc(seo.average_score == null ? '-' : seo.average_score) + ' · ' + A.esc(seo.total_items || 0) + ' ' + A.esc(A.t('content')) + '</div>' + seoIssues + '</div>' +
+        '<div class="aiwc-card"><h2>' + A.esc(A.t('jobs')) + '</h2>' + jobs + '</div>' +
+        '<div class="aiwc-card"><h2>' + A.esc(A.t('recent_changes')) + '</h2>' + changes + '<h3>' + A.esc(A.t('snapshots')) + '</h3>' + snaps + '</div>' +
+        '</div>';
+    }).catch(function (err) {
+      c.innerHTML = '<div class="aiwc-card"><div class="aiwc-empty">' + A.esc(err.message) + '</div></div>';
+    });
+  }
+
   /* ================= Settings ================= */
   function renderSettings(c) {
-    A.api('settings').then(function (s) {
+    Promise.all([
+      A.api('settings'),
+      A.api('tools').catch(function () { return { items: [] }; })
+    ]).then(function (res) {
+      var s = res[0];
+      var toolsData = res[1];
       var ranges = [
         ['analysis_strictness', A.t('strictness_label'), 1, 5],
         ['creativity', A.t('creativity_label'), 1, 5],
@@ -646,6 +773,10 @@
         '<div class="aiwc-card"><h2>' + A.esc(A.t('settings')) + '</h2>' +
         '<div class="aiwc-field"><label>' + A.esc(A.t('max_tokens_label')) + '</label><input type="number" id="s-max-tokens" value="' + (s.max_output_tokens || 2048) + '"></div>' +
         '<div class="aiwc-field"><label>' + A.esc(A.t('timeout_label')) + '</label><input type="number" id="s-timeout" value="' + (s.timeout || 60) + '"></div>' +
+        '<div class="aiwc-field"><label>' + A.esc(A.t('retry_label')) + '</label><input type="number" id="s-retries" min="0" max="5" value="' + (s.max_retries != null ? s.max_retries : 2) + '"></div>' +
+        '<div class="aiwc-field"><label><input type="checkbox" id="s-streaming"' + (s.streaming ? ' checked' : '') + '> ' + A.esc(A.t('streaming_label')) + '</label>' +
+        '<input type="number" id="s-stream-timeout" value="' + (s.stream_timeout || 120) + '" title="stream timeout"></div>' +
+        '<div class="aiwc-field"><label>' + A.esc(A.t('system_prompt_label')) + '</label><textarea id="s-system-prompt" rows="4">' + A.esc(s.system_prompt || '') + '</textarea></div>' +
         '<div class="aiwc-field"><label>' + A.esc(A.t('temperature_label')) + ' (' + A.esc(A.t('creativity_label')) + ' — sampling)</label><div class="aiwc-range-row">' +
         '<input type="range" min="0" max="2" step="0.1" value="' + (s.temperature || 0.7) + '" data-range="temperature"><span class="aiwc-range-val">' + (s.temperature || 0.7) + '</span></div>' +
         '<div class="hint">' + A.esc(A.t('strictness_label')) + ' ≠ Temperature — این دو مستقل مدیریت می‌شوند.</div></div>' +
@@ -661,6 +792,13 @@
         }).join('') + '</select></div>' +
         '<button class="aiwc-btn primary" id="s-save">' + A.esc(A.t('save')) + '</button>' +
         '</div>' +
+        '<div class="aiwc-card"><h2>' + A.esc(A.t('tool_permissions')) + '</h2><div id="s-tool-perms">' +
+        (toolsData.items || []).map(function (t) {
+          return '<div class="aiwc-list-item"><span>' + A.esc(t.name) + (t.risk ? ' <span class="aiwc-tag ' + A.esc(t.risk) + '">' + A.esc(t.risk) + '</span>' : '') + '</span>' +
+            '<button class="aiwc-btn sm' + (t.enabled === false ? '' : ' primary') + '" data-tool-toggle="' + A.esc(t.name) + '" data-enabled="' + (t.enabled === false ? '0' : '1') + '">' +
+            A.esc(t.enabled === false ? A.t('disabled') : A.t('enabled')) + '</button></div>';
+        }).join('') +
+        '</div></div>' +
         '<div class="aiwc-card"><h2>' + A.esc(A.t('execution_mode_label')) + '</h2>' +
         '<div class="aiwc-issue low"><strong>1. ' + A.esc(A.t('mode_1')) + '</strong><div class="fix">ابزارهای تغییردهنده در مدل نمایش داده نمی‌شوند.</div></div>' +
         '<div class="aiwc-issue low"><strong>2. ' + A.esc(A.t('mode_2')) + '</strong><div class="fix">هر تغییر در صف تأیید شما قرار می‌گیرد.</div></div>' +
@@ -678,6 +816,10 @@
         var body = {
           max_output_tokens: parseInt(document.getElementById('s-max-tokens').value, 10),
           timeout: parseInt(document.getElementById('s-timeout').value, 10),
+          max_retries: parseInt(document.getElementById('s-retries').value, 10),
+          streaming: document.getElementById('s-streaming').checked ? 1 : 0,
+          stream_timeout: parseInt(document.getElementById('s-stream-timeout').value, 10),
+          system_prompt: document.getElementById('s-system-prompt').value,
           max_steps: parseInt(document.getElementById('s-max-steps').value, 10),
           max_tools_per_request: parseInt(document.getElementById('s-max-tools').value, 10),
           context_token_budget: parseInt(document.getElementById('s-budget').value, 10),
@@ -690,6 +832,20 @@
         A.api('settings', { method: 'POST', body: body }).then(function () {
           A.toast(A.t('saved'));
         }).catch(function (err) { A.toast(err.message, true); });
+      });
+
+      c.querySelectorAll('[data-tool-toggle]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var next = btn.dataset.enabled === '1' ? false : true;
+          A.api('tools/' + encodeURIComponent(btn.dataset.toolToggle), { method: 'POST', body: { enabled: next } })
+            .then(function () {
+              btn.dataset.enabled = next ? '1' : '0';
+              btn.textContent = next ? A.t('enabled') : A.t('disabled');
+              btn.classList.toggle('primary', next);
+              A.toast(A.t('saved'));
+            })
+            .catch(function (err) { A.toast(err.message, true); });
+        });
       });
     }).catch(function (err) {
       c.innerHTML = '<div class="aiwc-card"><div class="aiwc-empty">' + A.esc(err.message) + '</div></div>';

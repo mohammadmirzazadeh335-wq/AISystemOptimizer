@@ -51,6 +51,8 @@ class Api {
 			new Memory_Controller( $plugin ),
 			new Jobs_Controller( $plugin ),
 			new Links_Controller( $plugin ),
+			new Builder_Controller( $plugin ),
+			new Reports_Controller( $plugin ),
 		);
 	}
 
