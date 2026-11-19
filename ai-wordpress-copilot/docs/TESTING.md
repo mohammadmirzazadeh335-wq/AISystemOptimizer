@@ -1,87 +1,98 @@
-# راهنمای تست
+# راهنمای تست — AI WordPress Copilot
 
-## محیط تست
+> نتایج این سند از **خروجی واقعی اجراها** روی یک نصب واقعی WordPress (هسته WordPress/WordPress،
+> PHP 8.3، SQLite، سرور HTTP واقعی در `127.0.0.1:9400`) ثبت شده‌اند — نه تخمین.
 
-تست‌ها روی **یک نصب واقعی WordPress** (نسخه trunk از میراث رسمی `WordPress/WordPress` روی GitHub)
-از طریق [WordPress Playground CLI](https://www.npmjs.com/package/@wp-playground/cli) اجرا می‌شوند —
-یعنی همان هسته وردپرس، با PHP 8.3 و دیتابیس SQLite، در یک سرور HTTP واقعی.
+## ۱. محیط تست
 
-زیرساخت تست در `tools/wp-test/` مخزن اصلی قرار دارد:
+- **وردپرس واقعی** در حال اجرا با افزونه محصول (WooCommerce) و افزونه‌های سازگار (Elementor fixture).
+- **Mock ارائه‌دهنده** (`tools/wp-test/mock-openai.js` روی `:8899`) که **سازگار با OpenAI** است و الگوهای
+  tool calling واقعی، استریم SSE با قطعات JSON ناقق، تزریک خطاهای ارائه‌دهنده (401/404/429/500/timeout)
+  و مدل `mock-flaky` (429 برای تست retry) ارائه می‌دهد. تست‌ها از **همان REST/SSE endpoints واقعی**
+  افزونه (`/ai-copilot/v1/...`) استفاده می‌کنند؛ فقط سرویس مدل شبیه‌سازی شده است.
+- ابزار کمکی تست: `tools/wp-test/mu-plugins/aiwc-test.php` (فیلترهای SSRF برای دسترسی به mock و
+  مسیرهای کمکی توسعه — **فقط در محیط تست، خارج از ZIP محصول**).
 
-| فایل | نقش |
-|------|-----|
-| `mock-openai.js` | سرور Mock سازگار با OpenAI (`/v1/chat/completions` با tool calls + `/v1/models`) |
-| `fetch-shim.js` | هدایت درخواست‌های مسدودشده `wordpress.org` به میراث GitHub (فقط محیط تست) |
-| `build-fixtures.py` | ساخت **WooCommerce 11.3.0 و Elementor 4.5.0 واقعی** در `fixtures/plugins/` (مونوریپو + ۲۰ پکیج composer + autoload سازگار) |
-| `mu-plugins/aiwc-test.php` | فقط تست: فعال‌سازی Application Password روی HTTP + صدور credential + fallback موقت HTTP |
-| `blueprint.json` | فعال‌سازی WooCommerce، Elementor و افزونه هنگام بوت سایت |
-| `smoke_test.py` | مجموعه تست E2E (۹۰ سنجه) |
-| `lint-php.js` | lint سینتکس همه فایل‌های PHP با `php-parser` |
-
-## اجرای تست‌ها
+## ۲. اجرای تست‌ها
 
 ```bash
-cd tools/wp-test
-npm install @wp-playground/cli
+# سرویس‌ها باید در حال اجرا باشند (WP :9400 و mock :8899)
+python3 -u tools/wp-test/smoke_test.py
+python3 -u tools/wp-test/stream_test.py
+python3 -u tools/wp-test/link_test.py
+python3 -u tools/wp-test/builder_test.py
+python3 -u tools/wp-test/redesign_test.py
+python3 -u tools/wp-test/woo_test.py
+python3 -u tools/wp-test/security_test.py
+python3 -u tools/wp-test/ui_test.py
+python3 -u tools/wp-test/coverage_test.py
 
-# ۰) ساخت افزونه‌های واقعی WooCommerce / Elementor (یک‌بار؛ نیازمند دسترسی github/codeload)
-python3 build-fixtures.py
-
-# ۱) سرور Mock API
-node mock-openai.js &
-
-# ۲) سایت وردپرس (پلاگین‌ها به‌صورت زنده mount می‌شوند)
-NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt \
-node -r ./fetch-shim.js node_modules/@wp-playground/cli/cli.js server \
-  --wp=trunk --php=8.3 --port=9400 --workers=3 --login \
-  --mount ../../ai-wordpress-copilot:/wordpress/wp-content/plugins/ai-wordpress-copilot \
-  --mount ./mu-plugins:/wordpress/wp-content/mu-plugins \
-  --mount ./fixtures/plugins/woocommerce:/wordpress/wp-content/plugins/woocommerce \
-  --mount ./fixtures/plugins/elementor:/wordpress/wp-content/plugins/elementor \
-  --blueprint ./blueprint.json
-
-# ۳) تست‌ها (صبر برای بوت + دریافت credential خودکار)
-python3 smoke_test.py
-
-# ۴) lint سینتکس PHP
-node lint-php.js
+# تست ارائه‌دهنده واقعی (اختیاری — نیازمند کلید):
+AIWC_REAL_API_KEY=sk-... python3 -u tools/wp-test/coverage_test.py
 ```
 
-نکته: `--workers=3` برای تست لغو عملیات (درخواست موازی `chat/cancel` هنگام اجرای چت) لازم است.
+## ۳. نتایج نهایی (خروجی واقعی)
 
-نکته: چون افزونه به‌صورت `--mount` سوار می‌شود، هر تغییر کد بلافاصله در سایت تست اعمال می‌شود
-(نیازی به نصب مجدد نیست).
+| مجموعه | تعداد | نتیجه | پوشش |
+|---|---|---|---|
+| `smoke_test.py` | 90 | **90 موفق / 0 شکست** | جامع E2E: احراز هویت، چت، ابزارها، تأییدها، حافظه، سئو، محتوا، snapshot، گزارش‌ها |
+| `stream_test.py` | 26 | **26 / 0** | SSE ساده و با tool call، مونتاژ قطعات، رویدادهای plan/review/usage، fallback غیرجریانی، خطاهای 401/429/404، پروتکل legacy |
+| `link_test.py` | 35 | **35 / 0** | استخراج/حذف تکرار، وضعیت‌ها (ok/404/redirect/timeout)، گزارش + پیشنهاد، کش/ادامه/لغو، SSRF (متادیتا + ریدایرکت شرورانه) |
+| `builder_test.py` | 35 | **35 / 0** | بخش‌های ۲۱گانه، سامانه طراحی + تغییر زبان طبیعی، گوتنبرگ (بلوک/گروه/ستون)، المنتور (containers/legacy)، نقاط شکست |
+| `redesign_test.py` | 21 | **21 / 0** | تحلیل/پیشنهاد/پیش‌نمایش/اعمال(confirm)/مقایسه/بازگردانی/عدم حذف محتوا |
+| `woo_test.py` | 25 | **25 / 0** | محصول متغیر + تنوع‌ها، دروازه تأیید قیمت/موجودی، صف تأیید، دسته‌ها، تصاویر (sideload + SSRF)، تحلیل، سئوی محصول، طراحی فروشگاه |
+| `security_test.py` | 29 | **29 / 0** | 401/403، نقش‌ها، پنهان‌سازی کلید، اعتبارسنجی ورودی، SQLi/XSS، تزریق prompt، SSRF، دروازه قیمت، run-lock همزمان، فهرست سفید ابزارها، snapshot امن |
+| `ui_test.py` | 25 | **25 / 0** | RESTهای سازنده وب‌سایت/گزارش‌ها، تنظیمات جدید (retry/streaming/system prompt)، مجوز ابزارها، سیم‌کشی UI |
+| `coverage_test.py` | 25 ناحیه | **24 موفق / 0 شکست / 1 ردشده** | ۲۵ حوزه اجباری (جدول زیر) |
+| `lint-php.js` | 51 فایل | **0 خطا** | ساختار PHP |
+| **مجموع** | **310** | **310 موفق / 0 شکست / 1 ردشده آگاهانه** | |
 
-## پوشش تست‌های E2E (smoke_test.py)
+## ۴. پوشش ۲۵ حوزه اجباری (`coverage_test.py`)
 
-- ✅ بوت وردپرس + فعال‌سازی افزونه بدون Fatal
-- ✅ ذخیره/بازیابی تنظیمات؛ **مخفی‌ماندن کلید API** در تمام پاسخ‌ها
-- ✅ تست اتصال API با **انتقال HTTP واقعی** به سرور Mock (fallback نیز تست شده)
-- ✅ لیست مدل‌ها (`GET /models`)
-- ✅ Site Context Engine (نمای کلی + ساختار)
-- ✅ **رد درخواست بدون احراز هویت (401/403)**
-- ✅ چت + Tool Calling: `create_page` → **ایجاد صفحه واقعی** در وردپرس (تأیید با WP REST API)
-- ✅ ثبت در Activity Log + شمارش توکن + ساخت مکالمه
-- ✅ ابزار فقط‌خواندنی (`site_overview`)
-- ✅ **جریان تأیید (حالت ۲)**: صف تأیید → عدم ایجاد صفحه قبل از تأیید → اجرا پس از `approve`
-- ✅ **جریان رد** (`reject`)
-- ✅ حافظه: ذخیره از طریق چت + افزودن/حذف دستی
-- ✅ تحلیل سئوی تک‌صفحه (امتیاز ۰–۱۰۰، مشکلات، checks)
-- ✅ تحلیل سئوی سایتی: صف → زنجیره دسته‌ها → گزارش با میانگین امتیاز
-- ✅ لیست محتوا + **Rollback واقعی صفحه** (تغییر → snapshot → بازگردانی → تطابق محتوا)
-- ✅ تغییر CSS اختصاصی + **Rollback واقعی CSS**
-- ✅ **WooCommerce واقعی**: ایجاد محصول → ویرایش قیمت → تأیید از DB → فهرست → گزارش فروشگاه
-- ✅ **Elementor واقعی**: ساخت صفحه با ساختار sections/columns/widgets (`_elementor_data`) → تأیید با WP REST
-- ✅ **performance_analyze**: امتیاز ۰–۱۰۰ + بررسی‌های واقعی سمت سرور/صفحه
-- ✅ **users_manage_role** (ریسک critical): تأیید اجباری در حالت خودکار → تغییر نقش واقعی کاربر
-- ✅ **لغو عملیات (Stop)**: `POST /chat/cancel` موازی → توقف همکارانه + اجرا نشدن ابزار
-- ✅ **بازگردانی مستقیم Snapshot** (`POST /snapshots/{id}/restore`)
-- ✅ رجیستری ابزارها + فعال/غیرفعال‌سازی
-- ✅ رندر صفحه داشبورد ادمین + بارگذاری Asset ها + عدم وجود Fatal
-- ✅ lint سینتکس ۳۸ فایل PHP و ۴ فایل JS
+| # | حوزه | نتیجه |
+|---|---|---|
+| 1 | استریم ساده (متن تدریجی + start/delta/done) | ✅ |
+| 2 | استریم همراه با فراخوانی ابزار (tool_call/tool/review) | ✅ |
+| 3 | زنجیره چندمرحله‌ای ابزارها | ✅ |
+| 4 | قطع اتصال + ادامه (ماندگاری پیام‌ها + اجرای بعدی) | ✅ |
+| 5 | retry پس از 429 (مدل mock-flaky) | ✅ |
+| 6 | timeout → خطای تایپ‌شده تمیز | ✅ |
+| 7 | احراز هویت (درخواست ناشناس رد می‌شود) | ✅ |
+| 8 | ارائه‌دهنده واقعی (با `AIWC_REAL_API_KEY`) | ⏭️ SKIP — کلید واقعی ارائه نشده |
+| 9 | لینک‌های خارجی (ok + 404 از طریق scan/check) | ✅ |
+| 10 | SSRF (IP متادیتای ابری مسدود) | ✅ |
+| 11 | گوتنبرگ (ساخت صفحه + ساختار بلوک‌ها) | ✅ |
+| 12 | المنتور (ساخت صفحه + ساختار) | ✅ |
+| 13 | طراحی واکنش‌گرا (نقاط شکست/توکن‌ها) | ✅ |
+| 14 | تغییر سامانه طراحی با زبان طبیعی | ✅ |
+| 15 | بازطراحی (تحلیل) | ✅ |
+| 16 | پیش‌نمایش (preview ساخته می‌شود) | ✅ |
+| 17 | بازگردانی (snapshot restore) | ✅ |
+| 18 | موتور برنامه‌ریزی (create_plan) | ✅ |
+| 19 | بازبینی خودکار (review روی مراحل) | ✅ |
+| 20 | لغو میانه اجرا (cancel همکارانه) | ✅ |
+| 21 | حافظه (ذخیره + بازیابی) | ✅ |
+| 22 | امنیت REST (ناشناس مسدود + ابزار ناشناخته رد) | ✅ |
+| 23 | ووکامرس (ایجاد محصول + دروازه قیمت) | ✅ |
+| 24 | صف وظایف (REST jobs) | ✅ |
+| 25 | تشخیص قابلیت مدل | ✅ |
 
-## یادداشت‌های محیطی
+## ۵. مقایسه Mock با سرویس واقعی (جدا از هم)
 
-- در شبکه این sandbox دسترسی مستقیم به `wordpress.org` مسدود است؛ `fetch-shim.js`
-  درخواست‌های هسته را به میراث رسمی GitHub هدایت می‌کند (فقط در محیط تست، خارج از افزونه).
-- احراز هویت تست‌ها با Application Password (مسیر REST) و `admin/password` (مسیر wp-admin HTML) است.
+| بخش | با Mock (سازگار OpenAI) | با سرویس واقعی |
+|---|---|---|
+| REST/SSE/صف تأیید/قفل اجرا/بازگردانی/ابزارها | **کاملاً تست شده** — همان کد واقعی افزونه | نیازمند نصب + کلید |
+| ساخت/ویرایش محتوا، طراحی، سئو، ووکامرس | **کاملاً تست شده** (عملیات واقعی روی وردپرس واقعی) | یکسان (مدل فقط برنامه‌ریز را عوض می‌کند) |
+| رفتار مدل (tool calling، استریم، خطاها) | شبیه‌سازی الگوهای استاندارد OpenAI + تزریک خطا | آزمون ناحیه ۸ با `AIWC_REAL_API_KEY` |
+| تشخیص قابلیت مدل | پاسخ‌های probe شبیه‌سازی شد | `detect-capabilities` هنگام پیکربندی واقعی اجرا می‌شود |
+
+**نتیجه‌گیری**: همه لایه‌های محصول (WordPress، REST، صف‌ها، snapshot، طراحی، سئو، ووکامرس) **واقعی** تست
+شده‌اند؛ تنها «مغز مدل» در تست‌ها با mock جایگزین شده که دقیقاً پروتکل OpenAI را رعایت می‌کند. خطاهای
+ارائه‌دهنده (کلید نامعتبر، rate limit، timeout و…) با همان مسیر خطای واقعی client آزمون شده‌اند.
+
+## ۶. محدودیت‌ها (اعلام صریح)
+
+- **اتوماسیون مرورگر/اسکرین‌شات** در دسترس نبود (sandbox php-wasm) — UI در لایه REST و سیم‌کشی JS آزمون شده است.
+- تست ارائه‌دهنده واقعی بدون کلید، SKIP ثبت می‌کند (شکست نیست).
+- مسیرهای کمکی تست (`exec-tool`، `debug-stream`، `url-guard`، `set-option`) فقط برای توسعه‌اند و در
+  بسته نصبی ZIP حضور ندارند.

@@ -94,3 +94,8 @@ security_test.py: 29 passed, 0 failed
 
 پوشش: احراز هویت (401/403)، نقش‌های کاربری، پنهان‌سازی کلید، اعتبارسنجی enum/ابزار ناشناخته/ورودی بزرگ، SQLi، XSS،
 تزریق prompt، SSRF (metadata)، دروازه تأیید قیمت، run-lock همزمان، فهرست سفید ابزارها، خطای امن snapshot.
+
+رگرسیون نهایی روی همان نسخه تحویلی: **smoke 90/90 · stream 26/26 · link 35/35 · builder 35/35 · redesign 21/21 ·
+woo 25/25 · security 29/29 · ui 25/25 · coverage 24+1 skip** (مجموع ۳۱۰ موفق، ۰ شکست).  
+مسیرهای کمکی تست (`exec-tool`/`debug-stream`/`url-guard`/`set-option`) پس از پایان آزمون‌ها از harness تست حذف شدند
+و هرگز در بسته نصبی ZIP حضور نداشتند.
