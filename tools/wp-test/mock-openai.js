@@ -130,6 +130,7 @@ function toolCall(id, name, args) {
 
 let mockLegacy = false; // when true, tool calls are returned as ```aiwc-tool fenced content
 let mockTools = [];     // tools offered in the current request (for probes)
+let flakyCount = 0;     // mock-flaky: first request 429, then success
 
 function respondTo(res, messages) {
   const probeText = lastUserText(messages);
@@ -166,6 +167,20 @@ function respondTo(res, messages) {
   }
 
   const text = lastUserText(messages);
+
+  // --- Planning engine (PHASE 11) ---
+  if (/(plan the task|create a plan|execution plan|برنامه اجرا|یک برنامه)/i.test(text)) {
+    return completion(res, {
+      role: 'assistant',
+      content: null,
+      tool_calls: [
+        toolCall('call_plan_1', 'create_plan', {
+          summary: 'Build and verify the requested site changes',
+          steps: ['Inspect current state', 'Apply the change', 'Verify with read tools', 'Report results'],
+        }),
+      ],
+    });
+  }
 
   // --- Website Builder patterns (PHASE 5) ---
   if (/(رنگ اصلی|set design color|update design system|طراحی را.*رنگ)/i.test(text)) {
@@ -397,15 +412,23 @@ function respondTo(res, messages) {
     });
   }
 
+  if (/(what did you remember|یادت هست)/i.test(text)) {
+    return completion(res, {
+      role: 'assistant',
+      content: null,
+      tool_calls: [toolCall('call_mem_2', 'memory_list', {})],
+    });
+  }
   if (/(remember|یاد بگیر|به خاطر بسپار)/i.test(text)) {
+    const memValue = text.replace(/^.*?(remember that|remember|به خاطر بسپار)\s*/i, '').trim() || text.trim();
     return completion(res, {
       role: 'assistant',
       content: null,
       tool_calls: [
         toolCall('call_mem_1', 'memory_save', {
           category: 'brand',
-          key: 'primary_color',
-          value: 'سرمه‌ای',
+          key: 'launch_code',
+          value: memValue,
         }),
       ],
     });
@@ -479,6 +502,11 @@ const server = http.createServer((req, res) => {
       if (body.model === 'mock-404') return json(res, 404, { error: { message: 'The model `x` does not exist', code: 'model_not_found' } });
       if (body.model === 'mock-429') return json(res, 429, { error: { message: 'Rate limit exceeded', type: 'rate_limit_exceeded' } });
       if (body.model === 'mock-500') return json(res, 500, { error: { message: 'The server had an error' } });
+      if (body.model === 'mock-flaky') {
+        // First request fails with 429 (exercise client retry), the rest succeed.
+        flakyCount += 1;
+        if (flakyCount === 1) return json(res, 429, { error: { message: 'Rate limit exceeded', type: 'rate_limit_exceeded' } });
+      }
       const messages = Array.isArray(body.messages) ? body.messages : [];
       mockLegacy = !Array.isArray(body.tools) || body.tools.length === 0;
       mockTools = Array.isArray(body.tools) ? body.tools : [];
