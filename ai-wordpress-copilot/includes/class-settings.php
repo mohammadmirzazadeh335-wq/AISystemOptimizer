@@ -242,7 +242,8 @@ class Settings {
 			$all['api_key']       = '';
 			$all['api_key_set']   = false;
 		} else {
-			$all['api_key']       = self::mask_key( $key );
+			// Never expose any part of the key through REST/HTML — only the flag.
+			$all['api_key']       = '';
 			$all['api_key_set']   = true;
 		}
 		return $all;
