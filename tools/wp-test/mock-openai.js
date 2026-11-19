@@ -497,6 +497,33 @@ const server = http.createServer((req, res) => {
       } catch (e) {
         return json(res, 400, { error: { message: 'invalid JSON' } });
       }
+      // Strict JSON-Schema validation of function tools (mirrors real
+      // providers: "properties" must be an object, never []).
+      if (Array.isArray(body.tools)) {
+        for (const t of body.tools) {
+          const fn = t && t.function;
+          const p = fn && fn.parameters;
+          const props = p && p.properties;
+          const bad =
+            !fn ||
+            !p ||
+            typeof p !== 'object' ||
+            Array.isArray(p) ||
+            (p.type !== undefined && p.type !== 'object') ||
+            (props !== undefined && (typeof props !== 'object' || props === null || Array.isArray(props)));
+          if (bad) {
+            return json(res, 400, {
+              error: {
+                message:
+                  "Invalid schema for function '" +
+                  ((fn && fn.name) || '?') +
+                  "': [] is not of type 'object'",
+                type: 'invalid_request_error',
+              },
+            });
+          }
+        }
+      }
       // Error-injection via model name (for testing the provider error layer).
       if (body.model === 'mock-401') return json(res, 401, { error: { message: 'Incorrect API key provided', type: 'invalid_request_error' } });
       if (body.model === 'mock-404') return json(res, 404, { error: { message: 'The model `x` does not exist', code: 'model_not_found' } });

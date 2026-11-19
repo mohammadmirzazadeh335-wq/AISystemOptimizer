@@ -208,17 +208,19 @@ class Agent {
 			'function' => array(
 				'name'        => 'create_plan',
 				'description' => 'Record a concise execution plan (list of steps) before performing a complex multi-step task. Call this FIRST for requests like building/redesigning a site or page.',
-				'parameters'  => array(
-					'type'       => 'object',
-					'properties' => array(
-						'summary' => array( 'type' => 'string', 'description' => 'One-line summary of the goal.' ),
-						'steps'   => array(
-							'type'        => 'array',
-							'description' => 'Ordered, concrete steps.',
-							'items'       => array( 'type' => 'string' ),
+				'parameters'  => Tool_Registry::normalize_parameters(
+					array(
+						'type'       => 'object',
+						'properties' => array(
+							'summary' => array( 'type' => 'string', 'description' => 'One-line summary of the goal.' ),
+							'steps'   => array(
+								'type'        => 'array',
+								'description' => 'Ordered, concrete steps.',
+								'items'       => array( 'type' => 'string' ),
+							),
 						),
-					),
-					'required'   => array( 'summary', 'steps' ),
+						'required'   => array( 'summary', 'steps' ),
+					)
 				),
 			),
 		);

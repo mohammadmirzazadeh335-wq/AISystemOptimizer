@@ -701,7 +701,11 @@ class OpenAI_Client {
 					'function' => array(
 						'name'        => 'ping',
 						'description' => 'Ping.',
-						'parameters'  => array( 'type' => 'object', 'properties' => array() ),
+						'parameters'  => array(
+							'type'                 => 'object',
+							'properties'           => (object) array(),
+							'additionalProperties' => false,
+						),
 					),
 				),
 			),

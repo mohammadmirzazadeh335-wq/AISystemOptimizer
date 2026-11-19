@@ -48,6 +48,56 @@ class Tool_Registry {
 	}
 
 	/**
+	 * Normalize a tool parameter schema for strict JSON-Schema validators.
+	 *
+	 * PHP encodes an empty array as [] — invalid for a schema "properties"
+	 * (must be an object). Providers reject such payloads with errors like
+	 * "[] is not of type 'object'". No-input tools get the canonical shape:
+	 * {"type":"object","properties":{},"additionalProperties":false}.
+	 *
+	 * @param mixed $parameters Raw registered parameters.
+	 * @return array Schema safe to send to an OpenAI-compatible provider.
+	 */
+	public static function normalize_parameters( $parameters ) {
+		if ( ! is_array( $parameters ) || empty( $parameters ) ) {
+			return array(
+				'type'                 => 'object',
+				'properties'           => (object) array(),
+				'additionalProperties' => false,
+			);
+		}
+		return self::fix_empty_properties( $parameters );
+	}
+
+	/**
+	 * Recursively replace empty "properties" maps with real JSON objects.
+	 *
+	 * @param array $schema Schema fragment.
+	 * @return array
+	 */
+	private static function fix_empty_properties( $schema ) {
+		if ( ! is_array( $schema ) ) {
+			return $schema;
+		}
+		if ( isset( $schema['properties'] ) && is_array( $schema['properties'] ) ) {
+			if ( array() === $schema['properties'] ) {
+				$schema['properties'] = (object) array();
+				if ( ! isset( $schema['additionalProperties'] ) ) {
+					$schema['additionalProperties'] = false;
+				}
+			} else {
+				foreach ( $schema['properties'] as $key => $child ) {
+					$schema['properties'][ $key ] = self::fix_empty_properties( $child );
+				}
+			}
+		}
+		if ( isset( $schema['items'] ) && is_array( $schema['items'] ) ) {
+			$schema['items'] = self::fix_empty_properties( $schema['items'] );
+		}
+		return $schema;
+	}
+
+	/**
 	 * All tool definitions (metadata only, no closures).
 	 *
 	 * @return array[]
@@ -58,7 +108,7 @@ class Tool_Registry {
 			$out[] = array(
 				'name'              => $name,
 				'description'       => $tool['description'],
-				'parameters'        => $tool['parameters'],
+				'parameters'        => self::normalize_parameters( $tool['parameters'] ),
 				'risk'              => $tool['risk'],
 				'capability'        => $tool['capability'],
 				'needs_confirmation' => $tool['needs_confirmation'],
@@ -131,7 +181,7 @@ class Tool_Registry {
 				'function'    => array(
 					'name'        => $name,
 					'description' => $tool['description'],
-					'parameters'  => $tool['parameters'],
+					'parameters'  => self::normalize_parameters( $tool['parameters'] ),
 				),
 			);
 		}
